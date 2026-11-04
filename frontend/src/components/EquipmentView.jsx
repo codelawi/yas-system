@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, App, Button, Card, Col, Empty, Popconfirm, Row, Tag, Typography } from 'antd'
-import { ApartmentOutlined, DeleteOutlined, DownOutlined, EditOutlined, FilePdfOutlined, FileWordOutlined, PlusOutlined, PrinterOutlined, UpOutlined, WarningOutlined } from '@ant-design/icons'
+import { ApartmentOutlined, DeleteOutlined, InboxOutlined, DownOutlined, EditOutlined, FilePdfOutlined, FileWordOutlined, PlusOutlined, PrinterOutlined, UpOutlined, WarningOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api, { equipmentUrl, errorKey } from '../api'
 import { useLang } from '../i18n'
@@ -16,6 +16,7 @@ import { useLargeDelete } from '../largeDelete'
 import MaintenanceCard from './MaintenanceCard'
 import CustodyCard from './CustodyCard'
 import IssuesCard, { ReportProblemModal } from './IssuesCard'
+import EquipmentPhoto from './EquipmentPhoto'
 
 /** Full equipment page, shared by the dashboard and the phone scan page. */
 const HISTORY_OPEN_KEY = 'history_open'
@@ -125,6 +126,9 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
     </div>
   )
 
+  // On phones the photo comes first, above the details
+  const photo = <EquipmentPhoto equipment={equipment} onChanged={(photo_url) => onChange({ ...equipment, photo_url })} />
+
   const accessoriesCard = !isAccessory && (
     <Card
       title={
@@ -182,6 +186,14 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
           </Typography.Title>
           {equipment.row_no != null && <Tag title={t('row_no_long')}>{t('row_no')} {equipment.row_no}</Tag>}
           {equipment.category && <Tag color="blue">{equipment.category}</Tag>}
+          {(equipment.boxes || []).map((b) => (
+            <Link key={b.id} to={mobile ? `/box/${encodeURIComponent(b.number)}` : `/boxes/${b.id}`}>
+              <Tag color="purple" icon={<InboxOutlined />} style={{ cursor: 'pointer' }}>
+                {t('box')} {b.number}
+                {b.name && ` · ${b.name}`}
+              </Tag>
+            </Link>
+          ))}
         </div>
         {!mobile && actions}
       </div>
@@ -206,6 +218,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={16}>
+          {mobile && photo}
           <Card title={t('details')}>
             <FieldList fields={equipment.fields} />
             <div className="meta">
@@ -231,6 +244,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
           {mobile && <div style={{ marginTop: 16 }}>{actions}</div>}
         </Col>
         <Col xs={24} lg={8}>
+          {!mobile && photo}
           {!mobile && (
             <Card title={t('qr_code')} style={{ marginBottom: 16 }}>
               {qrPointsToLocalhost(settings) && <Alert type="warning" showIcon title={t('localhost_warning')} style={{ marginBottom: 12 }} />}

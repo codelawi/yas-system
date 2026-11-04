@@ -105,12 +105,13 @@ class DangerZoneController extends Controller
         return $count;
     }
 
-    /** Word files and damage photos whose records are gone. */
+    /** Word files, damage photos and equipment photos whose records are gone. */
     private function deleteOrphanFiles(): void
     {
         $keep = [
             'imports' => Import::pluck('stored_path')->filter()->all(),
             'issues' => IssueReport::pluck('photo_path')->filter()->all(),
+            'equipment_photos' => Equipment::withTrashed()->pluck('photo_path')->filter()->all(),
         ];
         foreach ($keep as $folder => $used) {
             foreach (array_diff(Storage::files($folder), $used) as $file) {

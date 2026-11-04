@@ -1480,3 +1480,88 @@ h5,
 .danger-row:last-child {
   border-bottom: none;
 }
+
+/* Boxes */
+.box-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.box-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding-inline-end: 6px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.box-item:hover {
+  border-color: #1d4ed8;
+  background: #f5f8ff;
+}
+
+.box-item-accessory {
+  margin-inline-start: 24px;
+}
+
+.box-item-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  color: inherit;
+}
+
+.box-item-photo {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #f3f4f6;
+}
+
+.box-item-nophoto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-size: 22px;
+}
+
+.box-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.box-item-text .serial {
+  color: #1d4ed8;
+  font-size: 13px;
+}
+
+.box-item-extra {
+  font-size: 12px;
+}
+
+.equipment-photo {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+/* Box labels: only the QR code, centred */
+.box-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  overflow: hidden;
+  box-sizing: border-box;
+}

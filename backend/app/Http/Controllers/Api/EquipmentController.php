@@ -141,6 +141,8 @@ class EquipmentController extends Controller
             ActivityLog::record($equipment, 'created', ['added' => $equipment->fieldList()]);
             if ($parent) {
                 ActivityLog::record($parent, 'accessory_added', ['accessory' => $equipment->only(['id', 'serial_number', 'name'])]);
+                // An accessory goes wherever its main equipment is
+                $equipment->boxes()->attach($parent->boxes()->pluck('boxes.id')->all());
             }
 
             return $equipment;
@@ -454,7 +456,7 @@ class EquipmentController extends Controller
 
     private function detail(Equipment $equipment): array
     {
-        $equipment->load(['fields', 'import', 'creator:id,name', 'updater:id,name', 'parent:id,serial_number,name,category', 'accessories.fields']);
+        $equipment->load(['fields', 'import', 'creator:id,name', 'updater:id,name', 'parent:id,serial_number,name,category', 'accessories.fields', 'boxes']);
 
         return [
             'id' => $equipment->id,
@@ -470,6 +472,8 @@ class EquipmentController extends Controller
                 'fields' => $a->fieldList(),
             ])->all(),
             'fields' => $equipment->fieldList(),
+            'photo_url' => $equipment->photoUrl(),
+            'boxes' => $equipment->boxes->map(fn ($box) => $box->only(['id', 'number', 'name']))->all(),
             'import' => $equipment->import ? [
                 'id' => $equipment->import->id,
                 'original_name' => $equipment->import->original_name,
