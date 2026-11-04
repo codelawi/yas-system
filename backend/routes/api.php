@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CustodyController;
 use App\Http\Controllers\Api\CustodyFormController;
 use App\Http\Controllers\Api\DangerZoneController;
 use App\Http\Controllers\Api\EquipmentController;
+use App\Http\Controllers\Api\EquipmentGroupController;
 use App\Http\Controllers\Api\EquipmentPhotoController;
 use App\Http\Controllers\Api\FieldController;
 use App\Http\Controllers\Api\ImportController;
@@ -27,6 +28,9 @@ Route::get('/stats', [EquipmentController::class, 'stats']);
 Route::get('/equipment', [EquipmentController::class, 'index']);
 Route::get('/equipment/labels', [EquipmentController::class, 'labels']);
 Route::get('/equipment/categories', [EquipmentController::class, 'categories']);
+Route::get('/equipment/group-summary', [EquipmentController::class, 'groupSummary']);
+Route::get('/groups', [EquipmentGroupController::class, 'index']);
+Route::get('/groups/{group}', [EquipmentGroupController::class, 'show'])->whereNumber('group');
 Route::get('/equipment/keys', [EquipmentController::class, 'keys']);
 Route::get('/equipment/values', [EquipmentController::class, 'values']);
 Route::get('/equipment/serial/{serial}', [EquipmentController::class, 'bySerial'])->where('serial', '.*');
@@ -68,11 +72,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/equipment/{equipment}/photo', [EquipmentPhotoController::class, 'store']);
     Route::delete('/equipment/{equipment}/photo', [EquipmentPhotoController::class, 'destroy']);
 
+    Route::post('/groups', [EquipmentGroupController::class, 'store']);
+    Route::put('/groups/{group}', [EquipmentGroupController::class, 'update']);
+    Route::delete('/groups/{group}', [EquipmentGroupController::class, 'destroy']);
+    Route::post('/groups/assign', [EquipmentGroupController::class, 'assign']);
+    Route::get('/groups/suggest', [EquipmentGroupController::class, 'suggest']);
+    Route::post('/groups/apply', [EquipmentGroupController::class, 'apply']);
+
     Route::post('/boxes', [BoxController::class, 'store']);
     Route::put('/boxes/{box}', [BoxController::class, 'update']);
     Route::delete('/boxes/{box}', [BoxController::class, 'destroy']);
     Route::post('/boxes/{box}/equipment', [BoxController::class, 'attach']);
     Route::delete('/boxes/{box}/equipment/{equipment}', [BoxController::class, 'detach']);
+    Route::post('/boxes/{box}/equipment/remove', [BoxController::class, 'detachMany']);
 
     Route::post('/equipment/{equipment}/maintenance', [MaintenanceController::class, 'store']);
     Route::post('/equipment/{equipment}/maintenance-records', [MaintenanceController::class, 'storeRecord']);

@@ -6,6 +6,7 @@ import enUS from 'antd/locale/en_US'
 import {
   AppstoreOutlined,
   AuditOutlined,
+  ClusterOutlined,
   CameraOutlined,
   DashboardOutlined,
   FileWordOutlined,
@@ -41,6 +42,7 @@ import ScanLabelPage from './pages/ScanLabelPage'
 import { PrintCustodyForm, PrintList, PrintSheet } from './pages/PrintPages'
 import { CustodyFormPage, CustodyFormsPage } from './pages/CustodyFormsPage'
 import { BoxDetail, BoxesPage, ScanBoxPage } from './pages/BoxPages'
+import { GroupDetail, GroupsPage } from './pages/GroupPages'
 import BoxLabelsPrint from './pages/BoxLabelsPrint'
 
 // Latin letters and digits come from Inter, Arabic letters from IBM Plex Sans Arabic
@@ -87,6 +89,7 @@ function Shell() {
   const items = [
     { key: '/', icon: <DashboardOutlined />, label: <Link to="/">{t('dashboard')}</Link> },
     { key: '/equipment', icon: <AppstoreOutlined />, label: <Link to="/equipment">{t('equipment')}</Link> },
+    { key: '/groups', icon: <ClusterOutlined />, label: <Link to="/groups">{t('groups')}</Link> },
     { key: '/boxes', icon: <InboxOutlined />, label: <Link to="/boxes">{t('boxes')}</Link> },
     { key: '/import', icon: <FileWordOutlined />, label: <Link to="/import">{t('import')}</Link> },
     { key: '/custody', icon: <UserSwitchOutlined />, label: <Link to="/custody">{t('custodies')}</Link> },
@@ -153,6 +156,8 @@ function Shell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/equipment" element={<EquipmentList />} />
             <Route path="/equipment/:id" element={<EquipmentDetail />} />
+            <Route path="/groups" element={<GroupsPage />} />
+            <Route path="/groups/:id" element={<GroupDetail />} />
             <Route path="/boxes" element={<BoxesPage />} />
             <Route path="/boxes/:id" element={<BoxDetail />} />
             <Route path="/import" element={<ImportPage />} />

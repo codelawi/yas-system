@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use App\Models\Custody;
 use App\Models\Equipment;
 use App\Models\EquipmentField;
+use App\Models\EquipmentGroup;
 use App\Models\Import;
 use App\Models\IssueReport;
 use App\Models\MaintenanceSchedule;
@@ -42,10 +43,26 @@ class EquipmentController extends Controller
             'row_no' => $e->row_no,
             'category' => $e->category,
             'parent' => $e->parent?->only(['id', 'serial_number', 'name']),
+            'group' => $e->group?->only(['id', 'name']),
             'accessories_count' => $e->accessories_count,
             'fields' => $e->fieldList(),
             'updated_at' => $e->updated_at,
         ]);
+    }
+
+    /**
+     * Groups with how many of their equipment match the list's search / filters,
+     * for the grouped list (the equipment itself comes from index with `group_id`).
+     */
+    public function groupSummary(Request $request)
+    {
+        $matching = $this->listQuery($request)->reorder()->select('equipment.id');
+
+        return EquipmentGroup::withCount(['equipment as count' => fn ($q) => $q->whereIn('equipment.id', $matching)])
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->filter(fn (EquipmentGroup $g) => $g->count > 0)
+            ->values();
     }
 
     /** The equipment list with its search, filters and sorting (shared by the list and the Excel export). */
@@ -54,7 +71,7 @@ class EquipmentController extends Controller
         $q = trim((string) $request->query('q', ''));
 
         $query = Equipment::query()
-            ->with(['fields', 'parent:id,serial_number,name'])
+            ->with(['fields', 'parent:id,serial_number,name', 'group:id,name'])
             ->withCount('accessories')
             ->when($q !== '', function ($query) use ($q) {
                 $like = '%'.str_replace(['%', '_'], ['\%', '\_'], $q).'%';
@@ -62,12 +79,17 @@ class EquipmentController extends Controller
                     ->where('serial_number', 'like', $like)
                     ->orWhere('name', 'like', $like)
                     ->orWhere('category', 'like', $like)
+                    ->orWhereHas('group', fn ($g) => $g->where('name', 'like', $like))
                     ->orWhereHas('fields', fn ($f) => $f->where('value', 'like', $like)->orWhere('key', 'like', $like)));
             })
             ->when($request->filled('category'), fn ($query) => $request->query('category') === '__none__'
                 ? $query->whereNull('category')
                 : $query->where('category', $request->query('category')))
             ->when($request->filled('import_id'), fn ($query) => $query->where('import_id', $request->query('import_id')))
+            ->when($request->filled('group_id'), fn ($query) => $query->where('group_id', $request->query('group_id')))
+            // Grouped list: what is not in a group (accessories of grouped equipment show inside their group)
+            ->when($request->boolean('ungrouped'), fn ($query) => $query->whereNull('group_id')
+                ->where(fn ($w) => $w->whereNull('parent_id')->orWhereHas('parent', fn ($p) => $p->whereNull('group_id'))))
             ->tap(fn ($query) => $this->applyFieldFilters($query, $request))
             ->when($request->query('type') === 'main', fn ($query) => $query->whereNull('parent_id'))
             ->when($request->query('type') === 'accessory', fn ($query) => $query->whereNotNull('parent_id'));
@@ -90,13 +112,13 @@ class EquipmentController extends Controller
 
         // Field columns, most used first
         $keys = $items->flatMap(fn (Equipment $e) => $e->fields->pluck('key'))->countBy()->sortDesc()->keys()->all();
-        $header = array_merge(['ت', 'الرقم التسلسلي', 'الاسم', 'التصنيف', 'تابع لـ (ملحق)', 'عدد الملحقات'], $keys, ['تاريخ الإضافة', 'آخر تحديث']);
+        $header = array_merge(['ت', 'الرقم التسلسلي', 'الاسم', 'المجموعة', 'التصنيف', 'تابع لـ (ملحق)', 'عدد الملحقات'], $keys, ['تاريخ الإضافة', 'آخر تحديث']);
 
         $rows = $items->map(function (Equipment $e) use ($keys) {
             $values = $e->fields->pluck('value', 'key');
 
             return array_merge(
-                [$e->row_no, $e->serial_number, $this->displayName($e), $e->category, $e->parent?->serial_number, $e->accessories_count ?: null],
+                [$e->row_no, $e->serial_number, $this->displayName($e), $e->group?->name, $e->category, $e->parent?->serial_number, $e->accessories_count ?: null],
                 array_map(fn ($k) => $values[$k] ?? null, $keys),
                 [$e->created_at?->format('Y-m-d H:i'), $e->updated_at?->format('Y-m-d H:i')],
             );
@@ -134,11 +156,18 @@ class EquipmentController extends Controller
                 'name' => $data['name'] ?? null,
                 'row_no' => $data['row_no'] ?? null,
                 'category' => ($data['category'] ?? null) ?: $parent?->category,
+                // Accessories stay with their main equipment and are never grouped
+                'group_id' => $parent ? null : ($data['group_id'] ?? null),
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
             ]);
             $equipment->syncFields($data['fields'] ?? []);
             ActivityLog::record($equipment, 'created', ['added' => $equipment->fieldList()]);
+            if ($equipment->group_id) {
+                ActivityLog::record($equipment, 'group_changed', ['summary' => '→ '.$equipment->group->name]);
+            } else {
+                EquipmentGroup::joinByName($equipment);
+            }
             if ($parent) {
                 ActivityLog::record($parent, 'accessory_added', ['accessory' => $equipment->only(['id', 'serial_number', 'name'])]);
                 // An accessory goes wherever its main equipment is
@@ -167,6 +196,12 @@ class EquipmentController extends Controller
                 'category' => array_key_exists('category', $data) ? $data['category'] : $equipment->category,
                 'updated_by' => $request->user()->id,
             ]);
+            if (array_key_exists('group_id', $data) && ! $equipment->parent_id && (int) $data['group_id'] !== (int) $equipment->group_id) {
+                $old = $equipment->group?->name;
+                $equipment->update(['group_id' => $data['group_id']]);
+                $equipment->unsetRelation('group');
+                ActivityLog::record($equipment, 'group_changed', ['summary' => $equipment->group ? '→ '.$equipment->group->name : '✕ '.$old]);
+            }
             $equipment->syncFields($data['fields'] ?? []);
 
             $changes = FieldDiff::make($before, $equipment->fieldList(), $extraBefore, $equipment->only(['serial_number', 'name', 'row_no', 'category']));
@@ -456,7 +491,7 @@ class EquipmentController extends Controller
 
     private function detail(Equipment $equipment): array
     {
-        $equipment->load(['fields', 'import', 'creator:id,name', 'updater:id,name', 'parent:id,serial_number,name,category', 'accessories.fields', 'boxes']);
+        $equipment->load(['fields', 'import', 'creator:id,name', 'updater:id,name', 'parent:id,serial_number,name,category', 'accessories.fields', 'boxes', 'group:id,name']);
 
         return [
             'id' => $equipment->id,
@@ -465,6 +500,7 @@ class EquipmentController extends Controller
             'row_no' => $equipment->row_no,
             'category' => $equipment->category,
             'parent' => $equipment->parent?->only(['id', 'serial_number', 'name', 'category']),
+            'group' => $equipment->group?->only(['id', 'name']),
             'accessories' => $equipment->accessories->map(fn (Equipment $a) => [
                 'id' => $a->id,
                 'serial_number' => $a->serial_number,
@@ -498,6 +534,7 @@ class EquipmentController extends Controller
             'category' => ['nullable', 'string', 'max:191'],
             // Only on create, and only under a main equipment (accessories have one level)
             'parent_id' => [$equipment ? 'prohibited' : 'nullable', 'integer', Rule::exists('equipment', 'id')->whereNull('parent_id')->whereNull('deleted_at')],
+            'group_id' => ['nullable', 'integer', 'exists:equipment_groups,id'],
             'fields' => ['array', 'max:500'],
             'fields.*.key' => ['required', 'string', 'max:255'],
             'fields.*.value' => ['nullable', 'string', 'max:10000'],

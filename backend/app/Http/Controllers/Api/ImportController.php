@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Equipment;
+use App\Models\EquipmentGroup;
 use App\Models\Import;
 use App\Models\Setting;
 use App\Services\WordTableParser;
@@ -96,6 +97,8 @@ class ImportController extends Controller
     {
         $data = $request->validate([
             'category' => ['nullable', 'string', 'max:191'],
+            // Group chosen for everything in this import (new and overwritten main equipment)
+            'group_id' => ['nullable', 'integer', 'exists:equipment_groups,id'],
             // Columns whose values are accessory serial numbers
             'accessory_keys' => ['array'],
             'accessory_keys.*' => ['string', 'max:255'],
@@ -120,7 +123,9 @@ class ImportController extends Controller
         $accessoryCount = 0;
         $accessoryKeys = array_flip($data['accessory_keys'] ?? []);
 
-        DB::transaction(function () use ($data, $userId, $accessoryKeys, &$counts, &$errors, &$accessoryCount) {
+        $group = isset($data['group_id']) ? EquipmentGroup::find($data['group_id']) : null;
+
+        DB::transaction(function () use ($data, $userId, $accessoryKeys, $group, &$counts, &$errors, &$accessoryCount) {
             $handled = [];
             foreach ($data['items'] as $i => $item) {
                 $importId = $item['import_id'];
@@ -179,18 +184,29 @@ class ImportController extends Controller
                     $equipment->syncFields($fields);
                     $changes = FieldDiff::make($before, $equipment->fieldList(), $extraBefore, $equipment->only(['category']));
                     ActivityLog::record($equipment, 'imported', ($changes ?? []) + ['overwrite' => true], $userId);
+                    if ($group && $equipment->parent_id === null && (int) $equipment->group_id !== $group->id) {
+                        $equipment->update(['group_id' => $group->id]);
+                        ActivityLog::record($equipment, 'group_changed', ['summary' => '→ '.$group->name], $userId);
+                    }
                     $counts[$importId]['updated']++;
                 } else {
                     $equipment = Equipment::create([
                         'serial_number' => $serial,
                         'row_no' => $item['row_no'] ?? null,
                         'category' => $category,
+                        'group_id' => $group?->id,
                         'import_id' => $importId,
                         'created_by' => $userId,
                         'updated_by' => $userId,
                     ]);
                     $equipment->syncFields($fields);
                     ActivityLog::record($equipment, 'imported', ['added' => $equipment->fieldList()], $userId);
+                    if ($group) {
+                        ActivityLog::record($equipment, 'group_changed', ['summary' => '→ '.$group->name], $userId);
+                    } else {
+                        // A new unit joins the group of its kind (same name), if there is one
+                        EquipmentGroup::joinByName($equipment);
+                    }
                     $counts[$importId]['created']++;
                 }
 

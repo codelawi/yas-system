@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { App, AutoComplete, Form, Input, Modal, Segmented, Typography } from 'antd'
 import api, { errorKey } from '../api'
 import { useLang } from '../i18n'
+import GroupSelect from './GroupSelect'
 
-/** Set / remove one field, or set the category, on many equipment at once. */
+/** Set / remove one field, set the category, or set the group, on many equipment at once. */
 export default function BulkEditModal({ ids, open, onClose, onDone }) {
   const { t } = useLang()
   const { message } = App.useApp()
@@ -23,8 +24,14 @@ export default function BulkEditModal({ ids, open, onClose, onDone }) {
     const v = await form.validateFields()
     setSaving(true)
     try {
-      const { data } = await api.post('/equipment/bulk-update', { ids, action, ...v })
-      message.success(t('bulk_done', { n: data.updated }))
+      if (action === 'group') {
+        // Accessories are skipped: they stay with their main equipment
+        const { data } = await api.post('/groups/assign', { ids, group_id: v.group_id ?? null })
+        message.success(t('bulk_done', { n: data.changed }))
+      } else {
+        const { data } = await api.post('/equipment/bulk-update', { ids, action, ...v })
+        message.success(t('bulk_done', { n: data.updated }))
+      }
       form.resetFields()
       onDone()
     } catch (e) {
@@ -36,9 +43,16 @@ export default function BulkEditModal({ ids, open, onClose, onDone }) {
 
   return (
     <Modal open={open} title={t('bulk_edit', { n: ids.length })} okText={t('save')} cancelText={t('cancel')} onOk={save} onCancel={onClose} confirmLoading={saving} forceRender>
-      <Segmented block value={action} onChange={setAction} options={['set', 'remove', 'category'].map((a) => ({ value: a, label: t(`bulk_${a}`) }))} style={{ marginBottom: 16 }} />
+      <Segmented block value={action} onChange={setAction} options={['set', 'remove', 'category', 'group'].map((a) => ({ value: a, label: t(`bulk_${a}`) }))} style={{ marginBottom: 16 }} />
       <Form form={form} layout="vertical">
-        {action !== 'category' ? (
+        {action === 'group' ? (
+          <>
+            <Form.Item name="group_id" label={t('group')}>
+              <GroupSelect />
+            </Form.Item>
+            <Typography.Text type="secondary">{t('bulk_help_group')}</Typography.Text>
+          </>
+        ) : action !== 'category' ? (
           <>
             <Form.Item name="key" label={t('key')} rules={[{ required: true, whitespace: true, message: t('key') }]}>
               <AutoComplete options={keys.map((k) => ({ value: k }))} filterOption />

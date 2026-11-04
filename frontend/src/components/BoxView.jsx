@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { App, Button, Card, Col, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Tag, Typography } from 'antd'
-import { AppstoreAddOutlined, DeleteOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
+import { App, Button, Card, Col, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Tag, Typography } from 'antd'
+import { AppstoreAddOutlined, ClusterOutlined, DeleteOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
 import api, { boxUrl, errorKey } from '../api'
 import { useLang } from '../i18n'
 import { useAuth } from '../auth'
 import { qrPointsToLocalhost, useSettings } from '../settings'
 import QrCode from './QrCode'
 import EquipmentForm from './EquipmentForm'
+import EquipmentPicker from './EquipmentPicker'
+import GroupSelect from './GroupSelect'
 
 /** "12.5 كغ" */
 export function formatWeight(weight, t) {
@@ -71,56 +73,21 @@ export function BoxForm({ open, box, onClose, onSaved }) {
   )
 }
 
-/** Search and choose existing equipment to put in a box. */
-function EquipmentPicker({ open, box, onClose, onAdded }) {
+/** Put every unit of one or more groups (with their accessories) in the box. */
+function AddGroupsModal({ open, box, onClose, onAdded }) {
   const { t } = useLang()
   const { message } = App.useApp()
-  const [options, setOptions] = useState([])
-  const [selected, setSelected] = useState([])
-  const [searching, setSearching] = useState(false)
+  const [groupIds, setGroupIds] = useState([])
   const [saving, setSaving] = useState(false)
-  const timer = useRef(null)
-  const inBox = new Set(box.equipment.map((e) => e.id))
-
-  const search = (q) => {
-    clearTimeout(timer.current)
-    timer.current = setTimeout(async () => {
-      setSearching(true)
-      try {
-        const { data } = await api.get('/equipment', { params: { q, per_page: 30 } })
-        setOptions(
-          data.data.map((e) => ({
-            value: e.id,
-            disabled: inBox.has(e.id),
-            label: (
-              <span>
-                {e.display_name && `${e.display_name} · `}
-                <span className="serial">{e.serial_number}</span>
-                {e.parent && <Typography.Text type="secondary"> ↳ {e.parent.serial_number}</Typography.Text>}
-                {e.accessories_count > 0 && <Typography.Text type="secondary"> (+{t('n_accessories', { n: e.accessories_count })})</Typography.Text>}
-                {inBox.has(e.id) && <Tag style={{ marginInlineStart: 6 }}>{t('already_in_box')}</Tag>}
-              </span>
-            ),
-          })),
-        )
-      } finally {
-        setSearching(false)
-      }
-    }, 300)
-  }
 
   useEffect(() => {
-    if (!open) return
-    setSelected([])
-    search('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (open) setGroupIds([])
   }, [open])
 
   const add = async () => {
-    if (!selected.length) return
     setSaving(true)
     try {
-      const { data } = await api.post(`/boxes/${box.id}/equipment`, { ids: selected.map((s) => s.value) })
+      const { data } = await api.post(`/boxes/${box.id}/equipment`, { group_ids: groupIds })
       message.success(t('added_to_box', { n: data.added }))
       onAdded(data.box)
     } catch (e) {
@@ -133,36 +100,31 @@ function EquipmentPicker({ open, box, onClose, onAdded }) {
   return (
     <Modal
       open={open}
-      title={t('choose_existing')}
+      title={t('add_group_to_box')}
       okText={t('add')}
       cancelText={t('cancel')}
       onOk={add}
-      okButtonProps={{ disabled: !selected.length }}
+      okButtonProps={{ disabled: !groupIds?.length }}
       onCancel={onClose}
       confirmLoading={saving}
-      width={640}
       destroyOnHidden
     >
-      <Typography.Paragraph type="secondary">{t('choose_existing_hint')}</Typography.Paragraph>
-      <Select
-        mode="multiple"
-        size="large"
-        style={{ width: '100%' }}
-        placeholder={t('search')}
-        value={selected}
-        onChange={setSelected}
-        options={options}
-        // Keep the chosen items' labels while the search results change
-        labelInValue
-        showSearch
-        filterOption={false}
-        onSearch={search}
-        loading={searching}
-        notFoundContent={searching ? null : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />}
-        autoFocus
-      />
+      <Typography.Paragraph type="secondary">{t('add_group_to_box_hint')}</Typography.Paragraph>
+      <GroupSelect mode="multiple" size="large" value={groupIds} onChange={(v) => setGroupIds(v || [])} placeholder={t('groups')} style={{ width: '100%' }} />
     </Modal>
   )
+}
+
+/** The box's contents split by group, in the order they come (main equipment followed by its accessories). */
+function bySection(items) {
+  const sections = new Map()
+  for (const eq of items) {
+    const key = eq.group ? eq.group.id : 'none'
+    if (!sections.has(key)) sections.set(key, { group: eq.group, items: [] })
+    sections.get(key).items.push(eq)
+  }
+  // Equipment without a group comes last
+  return [...sections.values()].sort((a, b) => (a.group ? 0 : 1) - (b.group ? 0 : 1))
 }
 
 /** Box page, shared by the dashboard (/boxes/:id) and the phone scan page (/box/:number). */
@@ -174,6 +136,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
   const [editing, setEditing] = useState(false)
   const [picking, setPicking] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [addingGroups, setAddingGroups] = useState(false)
   const url = boxUrl(settings, box.number)
   const size = mobile ? 'large' : 'middle'
   const linkTo = (eq) => (mobile ? `/eq/${encodeURIComponent(eq.serial_number)}` : `/equipment/${eq.id}`)
@@ -202,6 +165,17 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
     }
   }
 
+  // A whole group out of the box (its units bring their accessories with them)
+  const takeOutGroup = async (section) => {
+    if (!(await requirePin())) return
+    try {
+      const { data } = await api.post(`/boxes/${box.id}/equipment/remove`, { ids: section.items.filter((e) => !e.parent).map((e) => e.id) })
+      onChange(data)
+    } catch (e) {
+      message.error(t(errorKey(e) || 'error'))
+    }
+  }
+
   // A new equipment made from the box goes straight into it
   const created = async (eq) => {
     setCreating(false)
@@ -220,6 +194,9 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
       </Button>
       <Button icon={<AppstoreAddOutlined />} onClick={withPin(setPicking)} size={size}>
         {t('choose_existing')}
+      </Button>
+      <Button icon={<ClusterOutlined />} onClick={withPin(setAddingGroups)} size={size}>
+        {t('add_group_to_box')}
       </Button>
     </>
   )
@@ -241,6 +218,10 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
       </Popconfirm>
     </div>
   )
+
+  const sections = bySection(box.equipment)
+  // Headings only help when something in the box belongs to a group
+  const showSections = sections.some((sec) => sec.group)
 
   return (
     <div className="page">
@@ -264,35 +245,61 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
           <Card title={`${t('box_contents')} (${box.equipment.length})`} extra={!mobile && <div className="page-actions">{addButtons}</div>}>
             {mobile && <div className="page-actions" style={{ marginBottom: 12 }}>{addButtons}</div>}
             {box.equipment.length ? (
-              <div className="box-items">
-                {box.equipment.map((eq) => (
-                  <div key={eq.id} className={`box-item${eq.parent ? ' box-item-accessory' : ''}`}>
-                    <Link to={linkTo(eq)} className="box-item-link">
-                      {eq.photo_url ? (
-                        <img src={eq.photo_url} alt="" className="box-item-photo" loading="lazy" />
-                      ) : (
-                        <span className="box-item-photo box-item-nophoto">
-                          <PictureOutlined />
-                        </span>
-                      )}
-                      <span className="box-item-text">
-                        <span className="accessory-name">{eq.display_name || eq.serial_number}</span>
-                        <span className="serial">{eq.serial_number}</span>
-                        {eq.parent && (
-                          <Typography.Text type="secondary" className="box-item-extra">
-                            ↳ {t('accessory_of')} {eq.parent.serial_number}
-                          </Typography.Text>
+              <div className="box-sections">
+                {sections.map((section) => (
+                  <div key={section.group ? section.group.id : 'none'} className="box-section">
+                    {showSections && (
+                      <div className="box-section-head">
+                        <ClusterOutlined />
+                        <span className="box-section-name">{section.group ? section.group.name : t('no_group')}</span>
+                        <Tag>{t('n_items', { n: section.items.length })}</Tag>
+                        <div style={{ flex: 1 }} />
+                        {section.group && (
+                          <Popconfirm
+                            title={t('take_out_group_confirm', { name: section.group.name })}
+                            okText={t('take_out')}
+                            cancelText={t('cancel')}
+                            onConfirm={() => takeOutGroup(section)}
+                          >
+                            <Button type="text" size="small" danger icon={<DeleteOutlined />}>
+                              {!mobile && t('take_out_group')}
+                            </Button>
+                          </Popconfirm>
                         )}
-                      </span>
-                    </Link>
-                    <Popconfirm
-                      title={eq.parent ? t('take_out_confirm') : t('take_out_confirm_main')}
-                      okText={t('take_out')}
-                      cancelText={t('cancel')}
-                      onConfirm={() => takeOut(eq)}
-                    >
-                      <Button type="text" size="small" danger icon={<DeleteOutlined />} title={t('take_out')} />
-                    </Popconfirm>
+                      </div>
+                    )}
+                    <div className="box-items">
+                      {section.items.map((eq) => (
+                        <div key={eq.id} className={`box-item${eq.parent ? ' box-item-accessory' : ''}`}>
+                          <Link to={linkTo(eq)} className="box-item-link">
+                            {eq.photo_url ? (
+                              <img src={eq.photo_url} alt="" className="box-item-photo" loading="lazy" />
+                            ) : (
+                              <span className="box-item-photo box-item-nophoto">
+                                <PictureOutlined />
+                              </span>
+                            )}
+                            <span className="box-item-text">
+                              <span className="accessory-name">{eq.display_name || eq.serial_number}</span>
+                              <span className="serial">{eq.serial_number}</span>
+                              {eq.parent && (
+                                <Typography.Text type="secondary" className="box-item-extra">
+                                  ↳ {t('accessory_of')} {eq.parent.serial_number}
+                                </Typography.Text>
+                              )}
+                            </span>
+                          </Link>
+                          <Popconfirm
+                            title={eq.parent ? t('take_out_confirm') : t('take_out_confirm_main')}
+                            okText={t('take_out')}
+                            cancelText={t('cancel')}
+                            onConfirm={() => takeOut(eq)}
+                          >
+                            <Button type="text" size="small" danger icon={<DeleteOutlined />} title={t('take_out')} />
+                          </Popconfirm>
+                        </div>
+                        ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -328,10 +335,24 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
       />
       <EquipmentPicker
         open={picking}
-        box={box}
+        title={t('choose_existing')}
+        hint={t('choose_existing_hint')}
+        exclude={box.equipment.map((e) => e.id)}
+        excludedLabel={t('already_in_box')}
         onClose={() => setPicking(false)}
-        onAdded={(data) => {
+        onSubmit={async (ids) => {
+          const { data } = await api.post(`/boxes/${box.id}/equipment`, { ids })
+          message.success(t('added_to_box', { n: data.added }))
           setPicking(false)
+          onChange(data.box)
+        }}
+      />
+      <AddGroupsModal
+        open={addingGroups}
+        box={box}
+        onClose={() => setAddingGroups(false)}
+        onAdded={(data) => {
+          setAddingGroups(false)
           onChange(data)
         }}
       />

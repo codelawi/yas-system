@@ -14,7 +14,7 @@ class Equipment extends Model
 
     protected $table = 'equipment';
 
-    protected $fillable = ['parent_id', 'serial_number', 'name', 'row_no', 'category', 'photo_path', 'import_id', 'created_by', 'updated_by'];
+    protected $fillable = ['parent_id', 'group_id', 'serial_number', 'name', 'row_no', 'category', 'photo_path', 'import_id', 'created_by', 'updated_by'];
 
     protected $hidden = ['photo_path'];
 
@@ -51,6 +51,11 @@ class Equipment extends Model
     public function issues(): HasMany
     {
         return $this->hasMany(IssueReport::class)->latest('id');
+    }
+
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(EquipmentGroup::class, 'group_id');
     }
 
     public function boxes(): BelongsToMany

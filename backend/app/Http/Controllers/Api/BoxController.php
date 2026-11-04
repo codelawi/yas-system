@@ -81,17 +81,23 @@ class BoxController extends Controller
         return response()->noContent();
     }
 
-    /** Puts equipment in the box; main equipment bring their accessories. */
+    /**
+     * Puts equipment in the box (`ids`), or every unit of whole groups (`group_ids`);
+     * main equipment bring their accessories.
+     */
     public function attach(Request $request, Box $box)
     {
         $data = $request->validate([
-            'ids' => ['required', 'array', 'max:1000'],
+            'ids' => ['required_without:group_ids', 'array', 'max:1000'],
             'ids.*' => ['integer'],
+            'group_ids' => ['required_without:ids', 'array', 'max:100'],
+            'group_ids.*' => ['integer', 'exists:equipment_groups,id'],
         ]);
 
         $added = DB::transaction(function () use ($box, $data) {
             $already = $box->equipment()->pluck('equipment.id')->all();
-            $added = $this->withAccessories(Equipment::whereIn('id', $data['ids'])->get())
+            $chosen = Equipment::whereIn('id', $data['ids'] ?? [])->orWhereIn('group_id', $data['group_ids'] ?? [])->get();
+            $added = $this->withAccessories($chosen)
                 ->reject(fn (Equipment $e) => in_array($e->id, $already));
 
             $box->equipment()->attach($added->pluck('id')->all());
@@ -109,9 +115,26 @@ class BoxController extends Controller
     /** Takes one equipment out of the box (a main equipment takes its accessories with it). */
     public function detach(Box $box, Equipment $equipment)
     {
+        return $this->takeOut($box, new Collection([$equipment]));
+    }
+
+    /** Takes several equipment out of the box at once (e.g. a whole group). */
+    public function detachMany(Request $request, Box $box)
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'max:1000'],
+            'ids.*' => ['integer'],
+        ]);
+
+        return $this->takeOut($box, Equipment::whereIn('id', $data['ids'])->get());
+    }
+
+    /** @param  Collection<int, Equipment>  $equipment */
+    private function takeOut(Box $box, Collection $equipment): array
+    {
         DB::transaction(function () use ($box, $equipment) {
             $inBox = $box->equipment()->pluck('equipment.id')->all();
-            $removed = $this->withAccessories(new Collection([$equipment]))
+            $removed = $this->withAccessories($equipment)
                 ->filter(fn (Equipment $e) => in_array($e->id, $inBox));
 
             $box->equipment()->detach($removed->pluck('id')->all());
@@ -167,7 +190,7 @@ class BoxController extends Controller
 
     private function detail(Box $box): array
     {
-        $box->load(['equipment.fields', 'equipment.parent:id,serial_number,name']);
+        $box->load(['equipment.fields', 'equipment.group:id,name', 'equipment.parent:id,serial_number,name,group_id', 'equipment.parent.group:id,name']);
 
         return [
             'id' => $box->id,
@@ -182,6 +205,8 @@ class BoxController extends Controller
                 'display_name' => EquipmentController::displayName($e),
                 'category' => $e->category,
                 'parent' => $e->parent?->only(['id', 'serial_number', 'name']),
+                // Accessories show under their main equipment's group
+                'group' => ($e->parent ? $e->parent->group : $e->group)?->only(['id', 'name']),
                 'photo_url' => $e->photoUrl(),
             ])->all(),
         ];
