@@ -352,7 +352,8 @@ export function GroupDetail() {
                     </span>
                   )}
                   <span className="box-item-text">
-                    <span className="serial accessory-name">{eq.serial_number}</span>
+                    <span className="box-item-name">{eq.display_name || eq.serial_number}</span>
+                    <span className="box-item-serial serial">{eq.serial_number}</span>
                     <Typography.Text type="secondary" className="box-item-extra">
                       {[eq.row_no != null && `${t('row_no')} ${eq.row_no}`, eq.category, eq.accessories_count > 0 && t('accessories_n', { n: eq.accessories_count })]
                         .filter(Boolean)

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { App, Button, Card, Col, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Tag, Typography } from 'antd'
-import { AppstoreAddOutlined, ClusterOutlined, DeleteOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
+import { Alert, App, Button, Card, Col, Dropdown, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Tag, Typography } from 'antd'
+import { AppstoreAddOutlined, ClusterOutlined, DeleteOutlined, DownOutlined, MinusCircleOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
 import api, { boxUrl, errorKey } from '../api'
 import { useLang } from '../i18n'
 import { useAuth } from '../auth'
@@ -132,8 +132,10 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
   const { t } = useLang()
   const { requirePin } = useAuth()
   const { settings } = useSettings()
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const [editing, setEditing] = useState(false)
+  // "Take out" mode: the remove buttons only show while taking things out, so the list stays clean
+  const [managing, setManaging] = useState(false)
   const [picking, setPicking] = useState(false)
   const [creating, setCreating] = useState(false)
   const [addingGroups, setAddingGroups] = useState(false)
@@ -187,36 +189,41 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
     }
   }
 
-  const addButtons = (
-    <>
-      <Button type="primary" icon={<PlusOutlined />} onClick={withPin(setCreating)} size={size}>
-        {t('new_equipment_in_box')}
-      </Button>
-      <Button icon={<AppstoreAddOutlined />} onClick={withPin(setPicking)} size={size}>
-        {t('choose_existing')}
-      </Button>
-      <Button icon={<ClusterOutlined />} onClick={withPin(setAddingGroups)} size={size}>
-        {t('add_group_to_box')}
-      </Button>
-    </>
-  )
+  // Everything you can do with the box, in one menu (it used to take a lot of room on phones)
+  const menuItems = [
+    { key: 'new', icon: <PlusOutlined />, label: t('new_equipment_in_box') },
+    { key: 'pick', icon: <AppstoreAddOutlined />, label: t('choose_existing') },
+    { key: 'group', icon: <ClusterOutlined />, label: t('add_group_to_box') },
+    ...(box.equipment.length ? [{ key: 'manage', icon: <MinusCircleOutlined />, label: t('take_out_items') }] : []),
+    { type: 'divider' },
+    { key: 'edit', icon: <EditOutlined />, label: t('edit_box') },
+    ...(mobile ? [] : [{ key: 'print', icon: <PrinterOutlined />, label: t('print_label') }]),
+    { type: 'divider' },
+    { key: 'delete', icon: <DeleteOutlined />, label: t('delete_box'), danger: true },
+  ]
+
+  const onMenu = async ({ key }) => {
+    if (key === 'print') return window.open(`/boxes/labels?ids=${box.id}`, '_blank')
+    if (key === 'delete') {
+      return modal.confirm({
+        title: t('delete_box_confirm'),
+        okText: t('delete'),
+        okButtonProps: { danger: true },
+        cancelText: t('cancel'),
+        onOk: remove,
+      })
+    }
+    if (!(await requirePin())) return
+    const open = { new: setCreating, pick: setPicking, group: setAddingGroups, manage: setManaging, edit: setEditing }[key]
+    open?.(true)
+  }
 
   const actions = (
-    <div className="page-actions">
-      <Button icon={<EditOutlined />} onClick={withPin(setEditing)} size={size}>
-        {t('edit')}
+    <Dropdown menu={{ items: menuItems, onClick: onMenu }} trigger={['click']} placement={mobile ? 'bottom' : 'bottomRight'}>
+      <Button type="primary" size={size} block={mobile}>
+        {t('actions')} <DownOutlined />
       </Button>
-      {!mobile && (
-        <Button icon={<PrinterOutlined />} onClick={() => window.open(`/boxes/labels?ids=${box.id}`, '_blank')}>
-          {t('print_label')}
-        </Button>
-      )}
-      <Popconfirm title={t('delete_box_confirm')} okText={t('delete')} cancelText={t('cancel')} okButtonProps={{ danger: true }} onConfirm={remove}>
-        <Button danger icon={<DeleteOutlined />} size={size}>
-          {t('delete')}
-        </Button>
-      </Popconfirm>
-    </div>
+    </Dropdown>
   )
 
   const sections = bySection(box.equipment)
@@ -239,11 +246,24 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
         </div>
         {!mobile && actions}
       </div>
+      {mobile && <div style={{ marginBottom: 16 }}>{actions}</div>}
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={16}>
-          <Card title={`${t('box_contents')} (${box.equipment.length})`} extra={!mobile && <div className="page-actions">{addButtons}</div>}>
-            {mobile && <div className="page-actions" style={{ marginBottom: 12 }}>{addButtons}</div>}
+          <Card title={`${t('box_contents')} (${box.equipment.length})`}>
+            {managing && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 12 }}
+                title={t('take_out_items_hint')}
+                action={
+                  <Button size="small" type="primary" onClick={() => setManaging(false)}>
+                    {t('done')}
+                  </Button>
+                }
+              />
+            )}
             {box.equipment.length ? (
               <div className="box-sections">
                 {sections.map((section) => (
@@ -254,15 +274,15 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
                         <span className="box-section-name">{section.group ? section.group.name : t('no_group')}</span>
                         <Tag>{t('n_items', { n: section.items.length })}</Tag>
                         <div style={{ flex: 1 }} />
-                        {section.group && (
+                        {managing && section.group && (
                           <Popconfirm
                             title={t('take_out_group_confirm', { name: section.group.name })}
                             okText={t('take_out')}
                             cancelText={t('cancel')}
                             onConfirm={() => takeOutGroup(section)}
                           >
-                            <Button type="text" size="small" danger icon={<DeleteOutlined />}>
-                              {!mobile && t('take_out_group')}
+                            <Button size="small" danger icon={<MinusCircleOutlined />}>
+                              {t('take_out_group')}
                             </Button>
                           </Popconfirm>
                         )}
@@ -280,8 +300,8 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
                               </span>
                             )}
                             <span className="box-item-text">
-                              <span className="accessory-name">{eq.display_name || eq.serial_number}</span>
-                              <span className="serial">{eq.serial_number}</span>
+                              <span className="box-item-name">{eq.display_name || eq.serial_number}</span>
+                              <span className="box-item-serial serial">{eq.serial_number}</span>
                               {eq.parent && (
                                 <Typography.Text type="secondary" className="box-item-extra">
                                   ↳ {t('accessory_of')} {eq.parent.serial_number}
@@ -289,16 +309,18 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
                               )}
                             </span>
                           </Link>
-                          <Popconfirm
-                            title={eq.parent ? t('take_out_confirm') : t('take_out_confirm_main')}
-                            okText={t('take_out')}
-                            cancelText={t('cancel')}
-                            onConfirm={() => takeOut(eq)}
-                          >
-                            <Button type="text" size="small" danger icon={<DeleteOutlined />} title={t('take_out')} />
-                          </Popconfirm>
+                          {managing && (
+                            <Popconfirm
+                              title={eq.parent ? t('take_out_confirm') : t('take_out_confirm_main')}
+                              okText={t('take_out')}
+                              cancelText={t('cancel')}
+                              onConfirm={() => takeOut(eq)}
+                            >
+                              <Button type="text" danger icon={<MinusCircleOutlined />} title={t('take_out')} />
+                            </Popconfirm>
+                          )}
                         </div>
-                        ))}
+                      ))}
                     </div>
                   </div>
                 ))}
