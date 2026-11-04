@@ -84,6 +84,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/boxes/{box}', [BoxController::class, 'destroy']);
     Route::post('/boxes/{box}/equipment', [BoxController::class, 'attach']);
     Route::delete('/boxes/{box}/equipment/{equipment}', [BoxController::class, 'detach']);
+    Route::post('/boxes/{box}/equipment/remove', [BoxController::class, 'detachMany']);
 
     Route::post('/equipment/{equipment}/maintenance', [MaintenanceController::class, 'store']);
     Route::post('/equipment/{equipment}/maintenance-records', [MaintenanceController::class, 'storeRecord']);

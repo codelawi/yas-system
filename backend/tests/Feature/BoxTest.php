@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\ActivityLog;
 use App\Models\Box;
 use App\Models\Equipment;
+use App\Models\EquipmentGroup;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -135,5 +136,26 @@ class BoxTest extends TestCase
         $this->deleteJson("/api/equipment/{$equipment->id}/photo")->assertOk()->assertJsonPath('photo_url', null);
         $this->assertNull($equipment->fresh()->photo_path);
         $this->get("/api/equipment/{$equipment->id}/photo")->assertNotFound();
+    }
+
+    public function test_a_whole_group_can_be_put_in_and_taken_out_of_a_box(): void
+    {
+        $this->signIn();
+        $box = Box::create(['number' => '1']);
+        $group = EquipmentGroup::create(['name' => 'وحدة الفتح والقص']);
+        $first = Equipment::create(['serial_number' => 'G-1', 'group_id' => $group->id]);
+        Equipment::create(['serial_number' => 'G-2', 'group_id' => $group->id]);
+        Equipment::create(['serial_number' => 'G-1-A', 'parent_id' => $first->id]);
+        Equipment::create(['serial_number' => 'OTHER']);
+
+        $this->postJson("/api/boxes/{$box->id}/equipment", ['group_ids' => [$group->id]])->assertOk()
+            ->assertJsonPath('added', 3)
+            ->assertJsonPath('box.equipment.0.group.name', 'وحدة الفتح والقص')
+            // The accessory shows under its main equipment's group
+            ->assertJsonPath('box.equipment.1.serial_number', 'G-1-A')
+            ->assertJsonPath('box.equipment.1.group.id', $group->id);
+
+        $ids = $group->equipment()->pluck('id')->all();
+        $this->postJson("/api/boxes/{$box->id}/equipment/remove", ['ids' => $ids])->assertOk()->assertJsonCount(0, 'equipment');
     }
 }
