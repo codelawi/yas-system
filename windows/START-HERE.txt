@@ -1,0 +1,181 @@
+﻿EQUIPMENT REPOSITORY - SETUP DAY GUIDE
+======================================
+Situation: one laptop runs the system. It gets its network from PHONE HOTSPOTS
+(no router, the IP changes every time). The QR codes will contain the laptop's
+NAME  http://repo.local  so they keep working on any hotspot.
+
+Do the parts IN ORDER. Do NOT print labels before PART 3 passes.
+
+Files in this folder:
+  START-HERE.txt        this guide
+  setup.bat             installs the system (safe to run again, never deletes data)
+  hotspot-setup.ps1     network: laptop name "repo", firewall, no sleep, QR address
+  apache-vhost.conf     tells Apache where the system is
+  backup.bat            backup now
+  schedule-backup.bat   daily automatic backup at 14:00
+  update.bat            for a future new version (backs up first)
+  find-php.bat          helper used by the other scripts
+
+
+PART 0 - BEFORE YOU LEAVE (on the Mac)
+--------------------------------------
+[ ] Copy to the USB stick:  the folder "backend"  and the folder "windows"
+[ ] Take the laptop charger (the laptop must stay plugged in)
+[ ] Optional test today: connect the Mac to your phone hotspot and open
+    http://MacBook-Pro.local:8080  on that phone and on a 2nd phone.
+    If both open the system, the same idea will work tomorrow.
+
+
+PART 1 - INSTALL THE SYSTEM (about 30 minutes)
+----------------------------------------------
+1.  Plug in the laptop. Laragon must be installed in C:\laragon.
+
+2.  Check PHP: open Laragon > Terminal and type
+        php -v          (must be 8.3 or newer - you have 8.5)
+        php -m          (the list must contain: pdo_mysql  mbstring  zip  fileinfo  openssl)
+
+3.  Copy from the USB stick:
+        backend  ->  C:\laragon\www\repo           (C:\laragon\www\repo\public must exist)
+        windows  ->  C:\laragon\www\repo\windows
+
+4.  PHP settings: Laragon menu > PHP > php.ini - find and set:
+        upload_max_filesize = 50M
+        post_max_size = 200M
+        max_file_uploads = 100
+        memory_limit = 512M
+    These lines must NOT start with ;
+        extension=pdo_mysql   extension=mbstring   extension=zip   extension=fileinfo
+    Save.
+
+5.  Apache: copy  C:\laragon\www\repo\windows\apache-vhost.conf  to
+        C:\laragon\etc\apache2\sites-enabled\00-repo.conf
+
+6.  Laragon: click "Start All". Apache and MySQL must turn green.
+    (Apache red = port 80 is used by another program, e.g. IIS or Skype - close it.)
+
+7.  Double-click  C:\laragon\www\repo\windows\setup.bat
+      - First time it opens .env in Notepad. Check these lines:
+            APP_ENV=production
+            DB_DATABASE=equipment_repo
+            DB_USERNAME=root
+            DB_PASSWORD=
+        Save, close Notepad, double-click setup.bat AGAIN.
+      - It creates the database, the tables, the first admin and a first backup.
+      - The end must say "Done".
+
+8.  Open  http://localhost  in the browser.
+      - Click "إدخال الرمز" (Enter PIN) > 1234
+      - Users page: CHANGE the admin PIN, add a PIN for each person.
+
+9.  Laragon menu > Preferences > General:
+        [x] Run Laragon when Windows starts
+        [x] Start All automatically
+
+
+PART 2 - NETWORK (about 15 minutes)
+-----------------------------------
+10. Connect the laptop to a phone hotspot (Wi-Fi).
+
+11. Start menu > type PowerShell > right-click > Run as administrator:
+        cd C:\laragon\www\repo\windows
+        powershell -ExecutionPolicy Bypass -File .\hotspot-setup.ps1
+    - Type YES when it asks to rename the laptop to "repo".
+    - It asks for a restart: restart the laptop.
+
+12. After the restart: wait for Laragon (green), connect to the hotspot again,
+    and run the SAME two commands again (as administrator).
+    Every line must be [OK]. It sets the QR address to  http://repo.local
+
+13. In the system: "الشبكة" (Network) page - the box at the top must be GREEN.
+
+
+PART 3 - PHONE TEST (must pass BEFORE printing)
+-----------------------------------------------
+On each phone open:  http://repo.local     The system must open every time.
+
+[ ] a) The phone that SHARES the hotspot - iPhone
+[ ] b) The phone that SHARES the hotspot - Android
+[ ] c) Another phone CONNECTED to the same hotspot
+[ ] d) Share the hotspot from a DIFFERENT phone, connect the laptop to it,
+       open http://repo.local again on the phones
+
+All ticked?  -> go to PART 4 with  http://repo.local
+An Android fails? -> use PLAN B below, and decide NOW (not after printing).
+
+PLAN B - the laptop is the hotspot (fixed address 192.168.137.1)
+  - Windows Settings > Network & internet > Mobile hotspot > On
+    (choose a name and password; "Share over: Wi-Fi")
+    Windows wants some connection to switch it on: if it refuses, first connect
+    the laptop to any phone hotspot, then turn Mobile hotspot on.
+  - The phones connect to the LAPTOP's Wi-Fi.
+  - Laragon > Terminal:
+        cd C:\laragon\www\repo
+        php artisan repo:qr-address http://192.168.137.1
+  - Repeat the phone tests with  http://192.168.137.1
+
+
+PART 4 - KEEP THE DATA SAFE
+---------------------------
+14. Plug in a USB stick that STAYS in the laptop (or another drive).
+    System > "الإعدادات" (Settings) > Backups:
+      - Backup folder: e.g.  E:\RepoBackups   (the USB stick's letter) > Save
+      - Click "Back up now" - it must appear in the list.
+
+15. Double-click  windows\schedule-backup.bat   (daily backup at 14:00).
+    The system also makes a backup by itself once a day while it is used.
+
+16. Once a week: Settings > Backups > download the newest backup and keep it
+    somewhere else (another PC, email, cloud). One laptop = one place to lose.
+
+
+PART 5 - PRINT
+--------------
+17. "استيراد من Word" (Import): upload the real Word files > "عرض الجداول وتخصيصها"
+    to check each table (serial, ت, accessories) > Apply > Save.
+
+18. "رموز QR" (QR codes) page:
+      - Label design: set the size of your labels > Save
+      - Select ONE item > "طباعة المحدد" (Print selected)
+      - Print dialog: the label printer, margins None, scale 100%
+19. Scan that label with the camera on 2 phones. It opens the item? Then:
+20. Print all labels ("طباعة كل النتائج" or select and print).
+
+After the first print the QR address is LOCKED: changing it later shows how many
+labels would break and needs a typed confirmation.
+
+
+EVERY DAY AFTER THAT
+--------------------
+- Turn on the laptop (plugged in) > Laragon starts by itself > connect to any phone
+  hotspot > phones scan the labels.
+- A label does not open? In the system tap "مسح ملصق" (Scan label) and take a
+  photo of it - works with any label.
+- Check the QR address:   php artisan repo:qr-address   (in C:\laragon\www\repo)
+
+
+RULES THAT PROTECT THE DATA
+---------------------------
+- NEVER delete  C:\laragon\data  (the database lives there).
+- NEVER run  migrate:fresh / migrate:refresh / migrate:reset / db:wipe
+  (they are blocked anyway while .env says APP_ENV=production).
+- NEVER rename the laptop again after printing (the name is in the QR codes).
+- New version of the system: copy the new files over C:\laragon\www\repo but
+  KEEP the file .env and the folder storage, then run  windows\update.bat
+- Restore a backup (the current data is backed up first, nothing is lost):
+      cd C:\laragon\www\repo
+      php artisan repo:restore
+- New laptop one day: install Laragon, PART 1 + PART 2 (same name "repo"), then
+      php artisan repo:restore <the newest backup .zip>
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+Problem                               Fix
+Apache will not start (red)           Port 80 is used: close IIS / Skype / other web server
+setup.bat: "Database step failed"     Laragon > Start All (MySQL green), run setup.bat again
+setup.bat: PHP not found / too old    Laragon > Terminal > php -v ; check C:\laragon\bin\php
+http://localhost shows another site   Check step 5 (00-repo.conf), Laragon > Reload Apache
+Phone: page does not open             Same hotspot? Run hotspot-setup.ps1 again (firewall)
+Phone: repo.local fails, IP works     That phone does not support .local - PLAN B
+Network page box is red               The laptop name changed or no network - rerun step 12
+Upload of Word file fails             Step 4 (php.ini sizes), then Laragon > Reload Apache
