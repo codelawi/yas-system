@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { App, Button, Input, Popconfirm, Segmented, Table, Tag, Typography } from 'antd'
-import { ApartmentOutlined, DeleteOutlined, EditOutlined, FileExcelOutlined, FilePdfOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
+import { App, Button, Input, Popconfirm, Segmented, Spin, Table, Tag, Typography } from 'antd'
+import { ApartmentOutlined, ClusterOutlined, DeleteOutlined, ExportOutlined, EditOutlined, FileExcelOutlined, FilePdfOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api, { errorKey } from '../api'
 import { useLang } from '../i18n'
@@ -22,6 +22,42 @@ function parseFilters(params) {
   return Array.isArray(filters) ? filters : []
 }
 
+/** The units of one group in the grouped list, with the list's search / filters. */
+function GroupRows({ group, listParams, columns, selected, setSelected, reloadKey }) {
+  const { t } = useLang()
+  const [rows, setRows] = useState(null)
+  const paramsKey = JSON.stringify(listParams)
+
+  useEffect(() => {
+    api.get('/equipment', { params: { ...JSON.parse(paramsKey), group_id: group.id, per_page: 200 } }).then(({ data }) => setRows(data))
+  }, [group.id, paramsKey, reloadKey])
+
+  if (!rows) return <Spin size="small" />
+  const ids = rows.data.map((r) => r.id)
+
+  return (
+    <>
+      <Table
+        rowKey="id"
+        size="small"
+        columns={columns}
+        dataSource={rows.data}
+        pagination={false}
+        showHeader={false}
+        // Shares the selection with the main list
+        rowSelection={{
+          selectedRowKeys: selected.filter((id) => ids.includes(id)),
+          onChange: (keys) => setSelected([...selected.filter((id) => !ids.includes(id)), ...keys]),
+        }}
+        scroll={{ x: 'max-content' }}
+      />
+      {rows.total > rows.data.length && (
+        <Link to={`/groups/${group.id}`}>{t('group_show_all', { n: rows.total })}</Link>
+      )}
+    </>
+  )
+}
+
 export default function EquipmentList() {
   const { t } = useLang()
   const { requirePin } = useAuth()
@@ -36,6 +72,9 @@ export default function EquipmentList() {
   const { message } = App.useApp()
   const [formOpen, setFormOpen] = useState(false)
   const [search, setSearch] = useState(params.get('q') || '')
+  const [groups, setGroups] = useState([])
+  const [expanded, setExpanded] = useState([])
+  const [reloadKey, setReloadKey] = useState(0)
 
   const page = Number(params.get('page') || 1)
   const perPage = Number(params.get('per_page') || 20)
@@ -46,6 +85,8 @@ export default function EquipmentList() {
   const type = params.get('type') || 'all'
   const sort = params.get('sort') || undefined
   const dir = params.get('dir') || undefined
+  // Grouped list: each group is one row that opens to its units (accessories are never grouped)
+  const grouped = params.get('view') !== 'flat' && type !== 'accessory'
 
   const setParam = (patch) => {
     const next = new URLSearchParams(params)
@@ -58,11 +99,18 @@ export default function EquipmentList() {
 
   const load = useCallback(() => {
     setLoading(true)
-    api
-      .get('/equipment', { params: { page, per_page: perPage, q, filters: filtersParam || undefined, import_id: importId, type, sort, dir } })
-      .then(({ data }) => setData(data))
+    const listQuery = { q, filters: filtersParam || undefined, import_id: importId, type, sort, dir }
+    setReloadKey((k) => k + 1)
+    Promise.all([
+      api.get('/equipment', { params: { ...listQuery, page, per_page: perPage, ungrouped: grouped ? 1 : undefined } }),
+      grouped ? api.get('/equipment/group-summary', { params: listQuery }) : Promise.resolve({ data: [] }),
+    ])
+      .then(([list, summary]) => {
+        setData(list.data)
+        setGroups(summary.data)
+      })
       .finally(() => setLoading(false))
-  }, [page, perPage, q, filtersParam, importId, type, sort, dir])
+  }, [page, perPage, q, filtersParam, importId, type, sort, dir, grouped])
 
   const sortOrder = (key) => (sort === key ? (dir === 'asc' ? 'ascend' : 'descend') : null)
 
@@ -119,6 +167,8 @@ export default function EquipmentList() {
     add()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when arriving with ?add=1
   }, [])
+
+  const toggleGroup = (key) => setExpanded(expanded.includes(key) ? expanded.filter((k) => k !== key) : [...expanded, key])
 
   const columns = [
     {
@@ -184,6 +234,28 @@ export default function EquipmentList() {
     { title: t('updated_at'), dataIndex: 'updated_at', render: (v) => dayjs(v).format('YYYY-MM-DD'), responsive: ['lg'], width: 120 },
   ]
 
+  // A group row: its name (click to open its units) and how many match, spanning the other columns
+  const groupColumns = columns.map((col, i) => ({
+    ...col,
+    onCell: (r) => (r.isGroup ? { colSpan: i === 1 ? columns.length - 1 : i === 0 ? 1 : 0 } : {}),
+    render: (v, r, index) => {
+      if (!r.isGroup) return col.render ? col.render(v, r, index) : v
+      if (i === 0) return <ClusterOutlined className="group-row-icon" />
+      return (
+        <span className="group-row">
+          <a className="list-big list-title" onClick={() => toggleGroup(`g${r.id}`)}>
+            {r.name}
+          </a>
+          <Tag color="cyan">{t('n_items', { n: r.count })}</Tag>
+          <Link to={`/groups/${r.id}`} title={t('open_group')}>
+            <ExportOutlined />
+          </Link>
+        </span>
+      )
+    },
+  }))
+  const rows = grouped && page === 1 ? [...groups.map((g) => ({ ...g, isGroup: true })), ...data.data] : data.data
+
   return (
     <div className="page">
       <div className="page-head">
@@ -238,6 +310,15 @@ export default function EquipmentList() {
           style={{ maxWidth: 420 }}
         />
         <Segmented
+          value={grouped ? 'grouped' : 'flat'}
+          disabled={type === 'accessory'}
+          onChange={(v) => setParam({ view: v === 'flat' ? 'flat' : null, page: null })}
+          options={[
+            { value: 'grouped', label: t('view_grouped') },
+            { value: 'flat', label: t('view_flat') },
+          ]}
+        />
+        <Segmented
           value={type}
           onChange={(v) => setParam({ type: v === 'all' ? null : v, page: null })}
           options={['all', 'main', 'accessory'].map((v) => ({ value: v, label: t(`type_${v}`) }))}
@@ -266,12 +347,30 @@ export default function EquipmentList() {
       </div>
 
       <Table
-        rowKey="id"
+        rowKey={(r) => (r.isGroup ? `g${r.id}` : r.id)}
         loading={loading}
-        columns={columns}
-        dataSource={data.data}
-        rowSelection={{ selectedRowKeys: selected, onChange: setSelected, preserveSelectedRowKeys: true }}
-        onRow={(r) => ({ onDoubleClick: () => navigate(`/equipment/${r.id}`) })}
+        columns={grouped ? groupColumns : columns}
+        dataSource={rows}
+        rowSelection={{
+          selectedRowKeys: selected,
+          onChange: (keys) => setSelected(keys.filter((k) => typeof k === 'number')),
+          preserveSelectedRowKeys: true,
+          getCheckboxProps: (r) => ({ disabled: !!r.isGroup }),
+        }}
+        rowClassName={(r) => (r.isGroup ? 'group-row-line' : '')}
+        expandable={
+          grouped
+            ? {
+                expandedRowKeys: expanded,
+                onExpandedRowsChange: (keys) => setExpanded(keys),
+                rowExpandable: (r) => !!r.isGroup,
+                expandedRowRender: (r) => (
+                  <GroupRows group={r} listParams={listParams} columns={columns} selected={selected} setSelected={setSelected} reloadKey={reloadKey} />
+                ),
+              }
+            : undefined
+        }
+        onRow={(r) => ({ onDoubleClick: () => (r.isGroup ? navigate(`/groups/${r.id}`) : navigate(`/equipment/${r.id}`)) })}
         onChange={(_, __, sorter, extra) => {
           if (extra.action !== 'sort') return
           const order = sorter.order
@@ -283,7 +382,7 @@ export default function EquipmentList() {
           total: data.total,
           showSizeChanger: true,
           pageSizeOptions: [20, 50, 100, 200],
-          showTotal: (total) => `${total}`,
+          showTotal: (total) => (grouped && groups.length ? `${total} + ${t('groups_n', { n: groups.length })}` : `${total}`),
           onChange: (p, size) => setParam({ page: p > 1 ? p : null, per_page: size !== 20 ? size : null }),
         }}
         scroll={{ x: 'max-content' }}

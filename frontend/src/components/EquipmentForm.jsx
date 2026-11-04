@@ -3,12 +3,13 @@ import { Alert, App, AutoComplete, Form, Input, InputNumber, Modal } from 'antd'
 import api, { errorKey } from '../api'
 import { useLang } from '../i18n'
 import FieldEditor, { cleanFields } from './FieldEditor'
+import GroupSelect from './GroupSelect'
 
 /**
  * Create (no `equipment`) or edit an equipment in a modal.
- * Pass `parent` to create an accessory of that equipment.
+ * Pass `parent` to create an accessory of that equipment, or `group` to create one in that group.
  */
-export default function EquipmentForm({ open, equipment, parent, onClose, onSaved }) {
+export default function EquipmentForm({ open, equipment, parent, group, onClose, onSaved }) {
   const { t } = useLang()
   const { message } = App.useApp()
   const [form] = Form.useForm()
@@ -23,10 +24,11 @@ export default function EquipmentForm({ open, equipment, parent, onClose, onSave
       name: equipment?.name || '',
       row_no: equipment?.row_no ?? null,
       category: equipment?.category || '',
+      group_id: equipment?.group?.id ?? group?.id ?? null,
     })
     setFields(equipment?.fields?.length ? equipment.fields : [{ key: '', value: '' }])
     if (equipment) api.get('/equipment/categories').then(({ data }) => setCategories(data))
-  }, [open, equipment, form])
+  }, [open, equipment, group, form])
 
   const save = async () => {
     const values = await form.validateFields()
@@ -34,6 +36,7 @@ export default function EquipmentForm({ open, equipment, parent, onClose, onSave
     try {
       const payload = { ...values, row_no: values.row_no ?? null, name: values.name || null, category: values.category || null, fields: cleanFields(fields) }
       if (!equipment && parent) payload.parent_id = parent.id
+      if ('group_id' in values) payload.group_id = values.group_id ?? null
       const { data } = equipment
         ? await api.put(`/equipment/${equipment.id}`, payload)
         : await api.post('/equipment', payload)
@@ -77,6 +80,12 @@ export default function EquipmentForm({ open, equipment, parent, onClose, onSave
           <Form.Item name="row_no" label={t('row_no_long')}>
             <InputNumber min={0} precision={0} style={{ width: '100%' }} />
           </Form.Item>
+          {/* Accessories stay with their main equipment and have no group */}
+          {!parent && !equipment?.parent && (
+            <Form.Item name="group_id" label={t('group')}>
+              <GroupSelect />
+            </Form.Item>
+          )}
           {/* Category is only shown when editing; new accessories take their main equipment's category */}
           {equipment && (
             <Form.Item name="category" label={t('category')}>

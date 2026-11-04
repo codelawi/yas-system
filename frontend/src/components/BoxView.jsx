@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { App, Button, Card, Col, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Tag, Typography } from 'antd'
+import { App, Button, Card, Col, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Tag, Typography } from 'antd'
 import { AppstoreAddOutlined, DeleteOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
 import api, { boxUrl, errorKey } from '../api'
 import { useLang } from '../i18n'
@@ -8,6 +8,7 @@ import { useAuth } from '../auth'
 import { qrPointsToLocalhost, useSettings } from '../settings'
 import QrCode from './QrCode'
 import EquipmentForm from './EquipmentForm'
+import EquipmentPicker from './EquipmentPicker'
 
 /** "12.5 كغ" */
 export function formatWeight(weight, t) {
@@ -67,100 +68,6 @@ export function BoxForm({ open, box, onClose, onSaved }) {
           <InputNumber min={0} step={0.1} style={{ width: '100%' }} />
         </Form.Item>
       </Form>
-    </Modal>
-  )
-}
-
-/** Search and choose existing equipment to put in a box. */
-function EquipmentPicker({ open, box, onClose, onAdded }) {
-  const { t } = useLang()
-  const { message } = App.useApp()
-  const [options, setOptions] = useState([])
-  const [selected, setSelected] = useState([])
-  const [searching, setSearching] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const timer = useRef(null)
-  const inBox = new Set(box.equipment.map((e) => e.id))
-
-  const search = (q) => {
-    clearTimeout(timer.current)
-    timer.current = setTimeout(async () => {
-      setSearching(true)
-      try {
-        const { data } = await api.get('/equipment', { params: { q, per_page: 30 } })
-        setOptions(
-          data.data.map((e) => ({
-            value: e.id,
-            disabled: inBox.has(e.id),
-            label: (
-              <span>
-                {e.display_name && `${e.display_name} · `}
-                <span className="serial">{e.serial_number}</span>
-                {e.parent && <Typography.Text type="secondary"> ↳ {e.parent.serial_number}</Typography.Text>}
-                {e.accessories_count > 0 && <Typography.Text type="secondary"> (+{t('n_accessories', { n: e.accessories_count })})</Typography.Text>}
-                {inBox.has(e.id) && <Tag style={{ marginInlineStart: 6 }}>{t('already_in_box')}</Tag>}
-              </span>
-            ),
-          })),
-        )
-      } finally {
-        setSearching(false)
-      }
-    }, 300)
-  }
-
-  useEffect(() => {
-    if (!open) return
-    setSelected([])
-    search('')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
-
-  const add = async () => {
-    if (!selected.length) return
-    setSaving(true)
-    try {
-      const { data } = await api.post(`/boxes/${box.id}/equipment`, { ids: selected.map((s) => s.value) })
-      message.success(t('added_to_box', { n: data.added }))
-      onAdded(data.box)
-    } catch (e) {
-      message.error(t(errorKey(e) || 'error'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal
-      open={open}
-      title={t('choose_existing')}
-      okText={t('add')}
-      cancelText={t('cancel')}
-      onOk={add}
-      okButtonProps={{ disabled: !selected.length }}
-      onCancel={onClose}
-      confirmLoading={saving}
-      width={640}
-      destroyOnHidden
-    >
-      <Typography.Paragraph type="secondary">{t('choose_existing_hint')}</Typography.Paragraph>
-      <Select
-        mode="multiple"
-        size="large"
-        style={{ width: '100%' }}
-        placeholder={t('search')}
-        value={selected}
-        onChange={setSelected}
-        options={options}
-        // Keep the chosen items' labels while the search results change
-        labelInValue
-        showSearch
-        filterOption={false}
-        onSearch={search}
-        loading={searching}
-        notFoundContent={searching ? null : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />}
-        autoFocus
-      />
     </Modal>
   )
 }
@@ -328,11 +235,16 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
       />
       <EquipmentPicker
         open={picking}
-        box={box}
+        title={t('choose_existing')}
+        hint={t('choose_existing_hint')}
+        exclude={box.equipment.map((e) => e.id)}
+        excludedLabel={t('already_in_box')}
         onClose={() => setPicking(false)}
-        onAdded={(data) => {
+        onSubmit={async (ids) => {
+          const { data } = await api.post(`/boxes/${box.id}/equipment`, { ids })
+          message.success(t('added_to_box', { n: data.added }))
           setPicking(false)
-          onChange(data)
+          onChange(data.box)
         }}
       />
       <EquipmentForm open={creating} onClose={() => setCreating(false)} onSaved={created} />

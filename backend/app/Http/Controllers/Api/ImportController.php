@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Equipment;
+use App\Models\EquipmentGroup;
 use App\Models\Import;
 use App\Models\Setting;
 use App\Services\WordTableParser;
@@ -191,6 +192,8 @@ class ImportController extends Controller
                     ]);
                     $equipment->syncFields($fields);
                     ActivityLog::record($equipment, 'imported', ['added' => $equipment->fieldList()], $userId);
+                    // A new unit joins the group of its kind (same name), if there is one
+                    EquipmentGroup::joinByName($equipment);
                     $counts[$importId]['created']++;
                 }
 

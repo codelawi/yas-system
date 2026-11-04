@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, App, Button, Card, Col, Empty, Popconfirm, Row, Tag, Typography } from 'antd'
-import { ApartmentOutlined, DeleteOutlined, InboxOutlined, DownOutlined, EditOutlined, FilePdfOutlined, FileWordOutlined, PlusOutlined, PrinterOutlined, UpOutlined, WarningOutlined } from '@ant-design/icons'
+import { ApartmentOutlined, ClusterOutlined, DeleteOutlined, InboxOutlined, DownOutlined, EditOutlined, FilePdfOutlined, FileWordOutlined, PlusOutlined, PrinterOutlined, UpOutlined, WarningOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api, { equipmentUrl, errorKey } from '../api'
 import { useLang } from '../i18n'
@@ -186,6 +186,18 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
           </Typography.Title>
           {equipment.row_no != null && <Tag title={t('row_no_long')}>{t('row_no')} {equipment.row_no}</Tag>}
           {equipment.category && <Tag color="blue">{equipment.category}</Tag>}
+          {equipment.group &&
+            (mobile ? (
+              <Tag color="cyan" icon={<ClusterOutlined />}>
+                {equipment.group.name}
+              </Tag>
+            ) : (
+              <Link to={`/groups/${equipment.group.id}`}>
+                <Tag color="cyan" icon={<ClusterOutlined />} style={{ cursor: 'pointer' }}>
+                  {equipment.group.name}
+                </Tag>
+              </Link>
+            ))}
           {(equipment.boxes || []).map((b) => (
             <Link key={b.id} to={mobile ? `/box/${encodeURIComponent(b.number)}` : `/boxes/${b.id}`}>
               <Tag color="purple" icon={<InboxOutlined />} style={{ cursor: 'pointer' }}>

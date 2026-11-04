@@ -9,7 +9,7 @@ import { useLang } from '../i18n'
 import { useAuth } from '../auth'
 import { ACTION_COLORS, Changes } from '../components/HistoryTimeline'
 
-const ACTIONS = ['created', 'imported', 'updated', 'deleted', 'accessory_added', 'accessory_removed', 'custody_out', 'custody_in', 'maintenance_done', 'issue_reported', 'issue_closed', 'box_added', 'box_removed', 'photo_changed', 'photo_removed']
+const ACTIONS = ['created', 'imported', 'updated', 'deleted', 'accessory_added', 'accessory_removed', 'custody_out', 'custody_in', 'maintenance_done', 'issue_reported', 'issue_closed', 'box_added', 'box_removed', 'photo_changed', 'photo_removed', 'group_changed']
 
 /** Every change in the system. Only after entering a PIN. */
 export default function HistoryPage() {
