@@ -140,7 +140,6 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
   const [creating, setCreating] = useState(false)
   const [addingGroups, setAddingGroups] = useState(false)
   const url = boxUrl(settings, box.number)
-  const size = mobile ? 'large' : 'middle'
   const linkTo = (eq) => (mobile ? `/eq/${encodeURIComponent(eq.serial_number)}` : `/equipment/${eq.id}`)
   const withPin = (open) => async () => {
     if (await requirePin()) open(true)
@@ -219,8 +218,9 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
   }
 
   const actions = (
-    <Dropdown menu={{ items: menuItems, onClick: onMenu }} trigger={['click']} placement={mobile ? 'bottom' : 'bottomRight'}>
-      <Button type="primary" size={size} block={mobile}>
+    // Kept inside the screen even at its corner
+    <Dropdown menu={{ items: menuItems, onClick: onMenu }} trigger={['click']} placement="bottom">
+      <Button type="primary">
         {t('actions')} <DownOutlined />
       </Button>
     </Dropdown>
@@ -232,7 +232,8 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
 
   return (
     <div className="page">
-      <div className="page-head">
+      {/* Title and the one Actions button on the same line (the button sits at the end: left in Arabic) */}
+      <div className="page-head box-head">
         <div>
           <Typography.Text type="secondary">
             <InboxOutlined /> {t('box')}
@@ -244,9 +245,8 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
           <Tag>{t('n_items', { n: box.equipment.length })}</Tag>
           {formatWeight(box.weight, t) && <Tag color="gold">{formatWeight(box.weight, t)}</Tag>}
         </div>
-        {!mobile && actions}
+        {actions}
       </div>
-      {mobile && <div style={{ marginBottom: 16 }}>{actions}</div>}
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={16}>
@@ -329,7 +329,6 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('box_empty')} />
             )}
           </Card>
-          {mobile && <div style={{ marginTop: 16 }}>{actions}</div>}
         </Col>
         {!mobile && (
           <Col xs={24} lg={8}>

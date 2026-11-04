@@ -1619,3 +1619,17 @@ h5,
   font-size: 12px;
   color: #6b7280;
 }
+
+/* Box page header: never wraps the Actions button under the title */
+.box-head {
+  flex-wrap: nowrap;
+}
+
+.box-head > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.box-head .ant-btn {
+  flex: none;
+}
