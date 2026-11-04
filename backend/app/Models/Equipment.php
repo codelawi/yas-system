@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -13,7 +14,9 @@ class Equipment extends Model
 
     protected $table = 'equipment';
 
-    protected $fillable = ['parent_id', 'serial_number', 'name', 'row_no', 'category', 'import_id', 'created_by', 'updated_by'];
+    protected $fillable = ['parent_id', 'serial_number', 'name', 'row_no', 'category', 'photo_path', 'import_id', 'created_by', 'updated_by'];
+
+    protected $hidden = ['photo_path'];
 
     public function fields(): HasMany
     {
@@ -48,6 +51,17 @@ class Equipment extends Model
     public function issues(): HasMany
     {
         return $this->hasMany(IssueReport::class)->latest('id');
+    }
+
+    public function boxes(): BelongsToMany
+    {
+        return $this->belongsToMany(Box::class)->withTimestamps()->orderBy('number');
+    }
+
+    /** Link to the equipment's photo; changes with every new photo so phones don't show a cached old one. */
+    public function photoUrl(): ?string
+    {
+        return $this->photo_path ? '/api/equipment/'.$this->id.'/photo?v='.substr(md5($this->photo_path), 0, 8) : null;
     }
 
     public function isAccessory(): bool

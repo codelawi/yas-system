@@ -3,7 +3,7 @@ import { Empty, Tag, Timeline, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { useLang } from '../i18n'
 
-export const ACTION_COLORS = { created: 'green', imported: 'blue', updated: 'orange', deleted: 'red', accessory_added: 'purple', accessory_removed: 'gray', custody_out: 'cyan', custody_in: 'geekblue', maintenance_done: 'gold', issue_reported: 'volcano', issue_closed: 'lime' }
+export const ACTION_COLORS = { created: 'green', imported: 'blue', updated: 'orange', deleted: 'red', accessory_added: 'purple', accessory_removed: 'gray', custody_out: 'cyan', custody_in: 'geekblue', maintenance_done: 'gold', issue_reported: 'volcano', issue_closed: 'lime', box_added: 'purple', box_removed: 'gray', photo_changed: 'blue', photo_removed: 'gray' }
 
 export function Changes({ changes, t }) {
   if (!changes) return null

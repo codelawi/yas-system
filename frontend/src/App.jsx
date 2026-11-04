@@ -11,6 +11,7 @@ import {
   FileWordOutlined,
   GlobalOutlined,
   HistoryOutlined,
+  InboxOutlined,
   LockOutlined,
   MenuOutlined,
   QrcodeOutlined,
@@ -39,6 +40,8 @@ import LabelsPrint from './pages/LabelsPrint'
 import ScanLabelPage from './pages/ScanLabelPage'
 import { PrintCustodyForm, PrintList, PrintSheet } from './pages/PrintPages'
 import { CustodyFormPage, CustodyFormsPage } from './pages/CustodyFormsPage'
+import { BoxDetail, BoxesPage, ScanBoxPage } from './pages/BoxPages'
+import BoxLabelsPrint from './pages/BoxLabelsPrint'
 
 // Latin letters and digits come from Inter, Arabic letters from IBM Plex Sans Arabic
 const FONT = '"Inter Variable", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif'
@@ -57,7 +60,9 @@ export default function App() {
             <Routes>
               {/* Opened by phones scanning a QR code */}
               <Route path="/eq/:serial" element={<ScanPage />} />
+              <Route path="/box/:number" element={<ScanBoxPage />} />
               <Route path="/labels" element={<LabelsPrint />} />
+              <Route path="/boxes/labels" element={<BoxLabelsPrint />} />
               <Route path="/scan" element={<ScanLabelPage />} />
               <Route path="/print/equipment/:id" element={<PrintSheet />} />
               <Route path="/print/list" element={<PrintList />} />
@@ -82,6 +87,7 @@ function Shell() {
   const items = [
     { key: '/', icon: <DashboardOutlined />, label: <Link to="/">{t('dashboard')}</Link> },
     { key: '/equipment', icon: <AppstoreOutlined />, label: <Link to="/equipment">{t('equipment')}</Link> },
+    { key: '/boxes', icon: <InboxOutlined />, label: <Link to="/boxes">{t('boxes')}</Link> },
     { key: '/import', icon: <FileWordOutlined />, label: <Link to="/import">{t('import')}</Link> },
     { key: '/custody', icon: <UserSwitchOutlined />, label: <Link to="/custody">{t('custodies')}</Link> },
     { key: '/stocktakes', icon: <AuditOutlined />, label: <Link to="/stocktakes">{t('stocktake')}</Link> },
@@ -147,6 +153,8 @@ function Shell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/equipment" element={<EquipmentList />} />
             <Route path="/equipment/:id" element={<EquipmentDetail />} />
+            <Route path="/boxes" element={<BoxesPage />} />
+            <Route path="/boxes/:id" element={<BoxDetail />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/qr" element={<QrPage />} />
             <Route path="/history" element={<HistoryPage />} />

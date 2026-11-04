@@ -43,4 +43,10 @@ export function equipmentUrl(settings, serial) {
   return `${base}/eq/${encodeURIComponent(serial)}`
 }
 
+/** Link printed inside the QR code on a box label. */
+export function boxUrl(settings, number) {
+  const base = (settings?.base_url || window.location.origin).replace(/\/+$/, '')
+  return `${base}/box/${encodeURIComponent(number)}`
+}
+
 export default api

@@ -3,10 +3,12 @@
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BackupController;
+use App\Http\Controllers\Api\BoxController;
 use App\Http\Controllers\Api\CustodyController;
 use App\Http\Controllers\Api\CustodyFormController;
 use App\Http\Controllers\Api\DangerZoneController;
 use App\Http\Controllers\Api\EquipmentController;
+use App\Http\Controllers\Api\EquipmentPhotoController;
 use App\Http\Controllers\Api\FieldController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\IssueController;
@@ -32,6 +34,13 @@ Route::get('/equipment/{equipment}', [EquipmentController::class, 'show'])->wher
 Route::get('/imports', [ImportController::class, 'index']);
 Route::get('/imports/{import}/download', [ImportController::class, 'download']);
 Route::get('/network', [NetworkController::class, 'index']);
+Route::get('/equipment/{equipment}/photo', [EquipmentPhotoController::class, 'show'])->whereNumber('equipment');
+
+// Boxes: a box label opens /box/<number> on any phone
+Route::get('/boxes', [BoxController::class, 'index']);
+Route::get('/boxes/labels', [BoxController::class, 'labels']);
+Route::get('/boxes/number/{number}', [BoxController::class, 'byNumber'])->where('number', '.*');
+Route::get('/boxes/{box}', [BoxController::class, 'show'])->whereNumber('box');
 
 // Maintenance dates and damage reports are visible to everyone; anyone can report a problem
 Route::get('/equipment/{equipment}/maintenance', [MaintenanceController::class, 'index'])->whereNumber('equipment');
@@ -56,6 +65,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/equipment/bulk-update', [FieldController::class, 'bulkUpdate']);
     Route::put('/equipment/{equipment}', [EquipmentController::class, 'update']);
     Route::delete('/equipment/{equipment}', [EquipmentController::class, 'destroy']);
+    Route::post('/equipment/{equipment}/photo', [EquipmentPhotoController::class, 'store']);
+    Route::delete('/equipment/{equipment}/photo', [EquipmentPhotoController::class, 'destroy']);
+
+    Route::post('/boxes', [BoxController::class, 'store']);
+    Route::put('/boxes/{box}', [BoxController::class, 'update']);
+    Route::delete('/boxes/{box}', [BoxController::class, 'destroy']);
+    Route::post('/boxes/{box}/equipment', [BoxController::class, 'attach']);
+    Route::delete('/boxes/{box}/equipment/{equipment}', [BoxController::class, 'detach']);
 
     Route::post('/equipment/{equipment}/maintenance', [MaintenanceController::class, 'store']);
     Route::post('/equipment/{equipment}/maintenance-records', [MaintenanceController::class, 'storeRecord']);
