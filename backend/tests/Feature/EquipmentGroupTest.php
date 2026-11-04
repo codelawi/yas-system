@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Equipment;
 use App\Models\EquipmentGroup;
+use App\Models\Import;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -111,5 +112,24 @@ class EquipmentGroupTest extends TestCase
         $this->putJson("/api/equipment/{$equipment->id}", ['serial_number' => 'E-1', 'group_id' => $group->id])->assertOk()->assertJsonPath('group.name', 'مضخات');
         $this->putJson("/api/equipment/{$equipment->id}", ['serial_number' => 'E-1'])->assertOk()->assertJsonPath('group.name', 'مضخات');
         $this->putJson("/api/equipment/{$equipment->id}", ['serial_number' => 'E-1', 'group_id' => null])->assertOk()->assertJsonPath('group', null);
+    }
+
+    public function test_import_puts_new_and_overwritten_equipment_in_the_chosen_group(): void
+    {
+        $this->signIn();
+        $group = EquipmentGroup::create(['name' => 'وحدة الفتح والقص']);
+        $existing = Equipment::create(['serial_number' => 'W-2']);
+        $import = Import::create(['original_name' => 'a.docx', 'stored_path' => 'imports/a.docx']);
+
+        $this->postJson('/api/imports/commit', [
+            'group_id' => $group->id,
+            'items' => [
+                ['import_id' => $import->id, 'action' => 'create', 'serial' => 'W-1', 'fields' => [['key' => 'الاسم', 'value' => 'مولد']]],
+                ['import_id' => $import->id, 'action' => 'overwrite', 'serial' => 'W-2', 'fields' => []],
+            ],
+        ])->assertOk();
+
+        $this->assertSame($group->id, Equipment::where('serial_number', 'W-1')->value('group_id'));
+        $this->assertSame($group->id, $existing->fresh()->group_id);
     }
 }

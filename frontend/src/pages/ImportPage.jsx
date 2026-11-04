@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { App, AutoComplete, Button, Card, Col, Input, Modal, Result, Row, Select, Spin, Steps, Table, Tag, Typography, Upload } from 'antd'
 import { ApartmentOutlined, EditOutlined, EyeOutlined, FileWordOutlined, InboxOutlined, UnlockOutlined } from '@ant-design/icons'
 import api, { errorKey } from '../api'
@@ -8,6 +8,7 @@ import { useAuth } from '../auth'
 import FieldList from '../components/FieldList'
 import FieldEditor, { cleanFields } from '../components/FieldEditor'
 import TableMapper from '../components/TableMapper'
+import GroupSelect from '../components/GroupSelect'
 import { accessoryCandidates, activeAccessoryKeys, applyAccessoryKeys, buildItems, initialMapping } from '../importMapping'
 
 const ACC_KEYS_STORE = 'repo_accessory_keys'
@@ -39,6 +40,9 @@ export default function ImportPage() {
   const [checking, setChecking] = useState(false)
   const checked = useRef(new Set())
   const [category, setCategory] = useState('')
+  // Opened from a group page as /import?group=<id>: everything imported goes into that group
+  const [params] = useSearchParams()
+  const [groupId, setGroupId] = useState(() => Number(params.get('group')) || null)
   const [categories, setCategories] = useState([])
   const [mapperFor, setMapperFor] = useState(null)
   const [editRow, setEditRow] = useState(null)
@@ -142,6 +146,7 @@ export default function ImportPage() {
       }
       const { data } = await api.post('/imports/commit', {
         category: category || null,
+        group_id: groupId,
         items: rows.map((r) => ({
           import_id: r.import_id,
           action: r.action,
@@ -326,6 +331,7 @@ export default function ImportPage() {
               {checking && <Spin size="small" />}
               <div style={{ flex: 1 }} />
               <AutoComplete value={category} onChange={setCategory} options={categories.map((c) => ({ value: c }))} placeholder={t('import_category')} filterOption allowClear style={{ minWidth: 260 }} />
+              <GroupSelect value={groupId} onChange={setGroupId} placeholder={t('import_group')} style={{ minWidth: 260 }} />
               {counts.exists > 0 && (
                 <>
                   <Button onClick={() => setExistingAction('overwrite')}>{t('overwrite_all')}</Button>

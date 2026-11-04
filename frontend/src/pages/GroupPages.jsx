@@ -6,6 +6,7 @@ import {
   ClusterOutlined,
   DeleteOutlined,
   EditOutlined,
+  FileWordOutlined,
   MergeCellsOutlined,
   PictureOutlined,
   PlusOutlined,
@@ -331,6 +332,9 @@ export function GroupDetail() {
             </Button>
             <Button icon={<AppstoreAddOutlined />} onClick={withPin(setPicking)}>
               {t('choose_existing')}
+            </Button>
+            <Button icon={<FileWordOutlined />} onClick={() => navigate(`/import?group=${group.id}`)}>
+              {t('import_into_group')}
             </Button>
           </div>
         }
