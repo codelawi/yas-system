@@ -232,18 +232,24 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
   )
 
   const sections = bySection(box.equipment)
-  // Headings only help when something in the box belongs to a group
-  const showSections = sections.some((sec) => sec.group)
+  // Headings only help when something in the box belongs to a group (and are left off the printed sheet)
+  const showSections = !printMode && sections.some((sec) => sec.group)
 
   return (
     <div className="page">
       {/* Title and the one Actions button on the same line (the button sits at the end: left in Arabic) */}
-      <div className="page-head box-head">
+      <div className={`page-head box-head${printMode ? ' box-head-print' : ''}`}>
         <div>
           <Typography.Title level={mobile ? 2 : 3} style={{ margin: 0 }}>
-            <InboxOutlined className="box-title-icon" /> {t('box')} {box.number}
+            {!printMode && <InboxOutlined className="box-title-icon" />} {t('box')} {box.number}
           </Typography.Title>
           {box.name && <div className="box-subtitle">{box.name}</div>}
+          {/* The printed sheet carries the box QR, so a phone can open the box from it */}
+          {printMode && (
+            <div className="box-print-qr">
+              <QrCode value={url} size={1} style={{ width: '38mm', height: '38mm' }} />
+            </div>
+          )}
         </div>
         {!printMode && actions}
       </div>
@@ -257,7 +263,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
           title={printMode ? undefined : t('edit_box')}
         >
           <span className="box-stat-label">
-            <DashboardOutlined /> {t('weight')}
+            {!printMode && <DashboardOutlined />} {t('weight')}
           </span>
           {box.weight != null ? (
             <span className="box-stat-value">
@@ -270,7 +276,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
         </button>
         <div className="box-stat">
           <span className="box-stat-label">
-            <AppstoreOutlined /> {t('box_contents')}
+            {!printMode && <AppstoreOutlined />} {t('box_contents')}
           </span>
           <span className="box-stat-value">
             {box.equipment.length}
@@ -281,7 +287,8 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={printMode ? 24 : 16}>
-          <Card title={`${t('box_contents')} (${box.equipment.length})`}>
+          {/* No frame around the contents on the printed sheet */}
+          <Card title={`${t('box_contents')} (${box.equipment.length})`} variant={printMode ? 'borderless' : undefined} className={printMode ? 'box-contents-print' : undefined}>
             {managing && (
               <Alert
                 type="warning"
@@ -326,9 +333,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
                             {eq.photo_url ? (
                               <img src={eq.photo_url} alt="" className="box-item-photo" loading="lazy" />
                             ) : (
-                              <span className="box-item-photo box-item-nophoto">
-                                <PictureOutlined />
-                              </span>
+                              <span className="box-item-photo box-item-nophoto">{!printMode && <PictureOutlined />}</span>
                             )}
                             <span className="box-item-text">
                               <span className="box-item-name">{eq.display_name || eq.serial_number}</span>

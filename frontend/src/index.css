@@ -1767,6 +1767,41 @@ h5,
   cursor: default;
 }
 
+/* Printed sheet: the box title large and centred, with its QR under it */
+.box-head-print {
+  justify-content: center;
+  text-align: center;
+  margin-bottom: 8mm;
+}
+
+.box-head-print h2.ant-typography,
+.box-head-print h3.ant-typography {
+  font-size: 34pt;
+  line-height: 1.2;
+}
+
+.box-head-print .box-subtitle {
+  margin-top: 2mm;
+  font-size: 16pt;
+}
+
+.box-print-qr {
+  display: flex;
+  justify-content: center;
+  margin-top: 4mm;
+}
+
+/* Printed sheet: contents without the card frame */
+.box-contents-print > .ant-card-head {
+  min-height: 0;
+  padding: 0 0 3mm;
+  border-bottom: none;
+}
+
+.box-contents-print > .ant-card-body {
+  padding: 0;
+}
+
 .br-sheet .box-item,
 .br-sheet .box-section-head,
 .br-sheet .box-stats {
