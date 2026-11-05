@@ -204,6 +204,8 @@ class BoxController extends Controller
                 'serial_number' => $e->serial_number,
                 'display_name' => EquipmentController::displayName($e),
                 'summary' => EquipmentController::summaryFields($e),
+                // Every detail, for the printed box sheet
+                'fields' => collect($e->fieldList())->filter(fn (array $f) => trim((string) $f['value']) !== '')->values()->all(),
                 'category' => $e->category,
                 'parent' => $e->parent?->only(['id', 'serial_number', 'name']),
                 // Accessories show under their main equipment's group

@@ -1731,3 +1731,413 @@ h5,
   font-weight: 500;
   color: #9ca3af;
 }
+
+/* ───────── Box sheet (A4 print) ───────── */
+.br-page {
+  min-height: 100vh;
+  padding: 24px 12px 48px;
+  background: #e5e7eb;
+  --br-navy: #0f2a5f;
+  --br-blue: #1d4ed8;
+  --br-amber: #d97706;
+  --br-ink: #111827;
+  --br-muted: #6b7280;
+  --br-line: #e2e8f0;
+}
+
+.br-toolbar {
+  display: flex;
+  justify-content: space-between;
+  max-width: 210mm;
+  margin: 0 auto 16px;
+}
+
+.br-sheet {
+  width: 210mm;
+  max-width: 100%;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 12mm;
+  box-sizing: border-box;
+  background: #fff;
+  color: var(--br-ink);
+  font-family: 'IBM Plex Sans Arabic', 'Inter Variable', Tahoma, sans-serif;
+  font-size: 10pt;
+  line-height: 1.5;
+  box-shadow: 0 10px 40px rgb(15 23 42 / 18%);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* Header: title on one side, QR on the other, a two-colour rule underneath */
+.br-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8mm;
+  padding-bottom: 5mm;
+  border-bottom: 1.2mm solid var(--br-navy);
+  box-shadow: 0 1.2mm 0 0 var(--br-amber);
+  margin-bottom: 7mm;
+}
+
+.br-company {
+  font-size: 9pt;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--br-blue);
+}
+
+.br-title {
+  margin: 1mm 0;
+  font-size: 22pt;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--br-navy);
+}
+
+.br-date {
+  font-size: 8.5pt;
+  color: var(--br-muted);
+}
+
+.br-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1mm;
+  padding: 2mm;
+  border: 0.3mm solid var(--br-line);
+  border-radius: 3mm;
+  font-size: 7pt;
+  color: var(--br-muted);
+}
+
+/* Hero: the box number in a dark block, then name and figures */
+.br-hero {
+  display: flex;
+  align-items: stretch;
+  gap: 6mm;
+  margin-bottom: 8mm;
+}
+
+.br-boxno {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 34mm;
+  padding: 4mm 5mm;
+  border-radius: 4mm;
+  background: linear-gradient(160deg, var(--br-navy), var(--br-blue));
+  color: #fff;
+  text-align: center;
+}
+
+.br-boxno .anticon {
+  font-size: 14pt;
+  opacity: 0.8;
+}
+
+.br-boxno-label {
+  font-size: 9pt;
+  opacity: 0.85;
+}
+
+.br-boxno-value {
+  font-size: 34pt;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.br-hero-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3mm;
+}
+
+.br-boxname {
+  font-size: 15pt;
+  font-weight: 600;
+}
+
+.br-stats {
+  display: flex;
+  gap: 3mm;
+}
+
+.br-stat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  padding: 2.5mm 4mm;
+  border: 0.3mm solid var(--br-line);
+  border-radius: 3mm;
+  background: #f8fafc;
+}
+
+.br-stat-label {
+  font-size: 8pt;
+  color: var(--br-muted);
+}
+
+.br-stat-value {
+  font-size: 16pt;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.br-stat-value small {
+  margin-inline-start: 1.5mm;
+  font-size: 9pt;
+  font-weight: 500;
+}
+
+.br-stat-weight {
+  flex: 1.6;
+  border-color: var(--br-amber);
+  background: #fffbeb;
+}
+
+.br-stat-weight .br-stat-label,
+.br-stat-weight .br-stat-value {
+  color: #92400e;
+}
+
+.br-stat-weight .br-stat-value {
+  font-size: 22pt;
+}
+
+/* Sections (one per group) */
+.br-section {
+  margin-bottom: 6mm;
+}
+
+.br-section-head {
+  display: flex;
+  align-items: center;
+  gap: 2.5mm;
+  margin: 0 0 3mm;
+  padding: 2mm 4mm;
+  border-radius: 2.5mm;
+  background: var(--br-navy);
+  color: #fff;
+  font-size: 11pt;
+  font-weight: 600;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.br-section-count {
+  margin-inline-start: auto;
+  padding: 0.5mm 3mm;
+  border-radius: 10mm;
+  background: rgb(255 255 255 / 18%);
+  font-size: 8.5pt;
+  font-weight: 500;
+}
+
+.br-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5mm;
+}
+
+/* One equipment: photo, name + serial, every detail, and a tick box */
+.br-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 4mm;
+  padding: 3mm;
+  border: 0.3mm solid var(--br-line);
+  border-radius: 3mm;
+  background: #fff;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.br-item-accessory {
+  margin-inline-start: 10mm;
+  border-style: dashed;
+  background: #fafafa;
+}
+
+.br-photo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26mm;
+  height: 26mm;
+  overflow: hidden;
+  border-radius: 2.5mm;
+  background: #f1f5f9;
+  color: #cbd5e1;
+  font-size: 18pt;
+}
+
+.br-item-accessory .br-photo {
+  width: 18mm;
+  height: 18mm;
+  font-size: 13pt;
+}
+
+.br-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.br-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.br-item-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2mm;
+}
+
+.br-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 6mm;
+  height: 6mm;
+  border-radius: 50%;
+  background: var(--br-blue);
+  color: #fff;
+  font-size: 8pt;
+  font-weight: 700;
+}
+
+.br-item-name {
+  font-size: 11.5pt;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.br-serial {
+  padding: 0.3mm 2mm;
+  border-radius: 1.5mm;
+  background: #eef2ff;
+  color: var(--br-blue);
+  font-family: 'JetBrains Mono Variable', Consolas, monospace;
+  font-size: 8pt;
+  direction: ltr;
+}
+
+.br-parent {
+  margin-top: 0.5mm;
+  font-size: 8.5pt;
+  color: var(--br-muted);
+}
+
+.br-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1mm 5mm;
+  margin: 2mm 0 0;
+}
+
+.br-field {
+  display: flex;
+  gap: 1.5mm;
+  min-width: 0;
+  padding-bottom: 0.8mm;
+  border-bottom: 0.2mm dotted #cbd5e1;
+  font-size: 8.5pt;
+}
+
+.br-field dt {
+  flex: none;
+  color: var(--br-muted);
+}
+
+.br-field dt::after {
+  content: ':';
+}
+
+.br-field dd {
+  margin: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.br-check {
+  flex: none;
+  width: 5mm;
+  height: 5mm;
+  border: 0.4mm solid #94a3b8;
+  border-radius: 1mm;
+}
+
+.br-empty {
+  padding: 10mm;
+  text-align: center;
+  color: var(--br-muted);
+}
+
+/* Signatures */
+.br-signatures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8mm;
+  margin-top: 12mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.br-signature {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5mm;
+  text-align: center;
+}
+
+.br-signature-label {
+  font-size: 10pt;
+  font-weight: 600;
+  color: var(--br-navy);
+}
+
+.br-signature-line {
+  height: 14mm;
+  border-bottom: 0.3mm solid var(--br-ink);
+}
+
+.br-signature-hint {
+  font-size: 7.5pt;
+  color: var(--br-muted);
+}
+
+@media print {
+  /* The page margin (not the sheet's padding) so every printed page gets it */
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  .br-page {
+    padding: 0;
+    background: #fff;
+  }
+
+  .br-sheet {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .br-fields {
+    grid-template-columns: 1fr;
+  }
+}

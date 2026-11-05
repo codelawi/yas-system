@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, App, Button, Card, Col, Dropdown, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Tag, Typography } from 'antd'
-import { AppstoreAddOutlined, AppstoreOutlined, ClusterOutlined, DashboardOutlined, DeleteOutlined, DownOutlined, MinusCircleOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
+import { AppstoreAddOutlined, AppstoreOutlined, ClusterOutlined, DashboardOutlined, DeleteOutlined, FileTextOutlined, DownOutlined, MinusCircleOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
 import api, { boxUrl, errorKey } from '../api'
 import { useLang } from '../i18n'
 import { useAuth } from '../auth'
@@ -196,6 +196,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
     ...(box.equipment.length ? [{ key: 'manage', icon: <MinusCircleOutlined />, label: t('take_out_items') }] : []),
     { type: 'divider' },
     { key: 'edit', icon: <EditOutlined />, label: t('edit_box') },
+    { key: 'report', icon: <FileTextOutlined />, label: t('print_report') },
     ...(mobile ? [] : [{ key: 'print', icon: <PrinterOutlined />, label: t('print_label') }]),
     { type: 'divider' },
     { key: 'delete', icon: <DeleteOutlined />, label: t('delete_box'), danger: true },
@@ -203,6 +204,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
 
   const onMenu = async ({ key }) => {
     if (key === 'print') return window.open(`/boxes/labels?ids=${box.id}`, '_blank')
+    if (key === 'report') return window.open(`/boxes/${box.id}/report`, '_blank')
     if (key === 'delete') {
       return modal.confirm({
         title: t('delete_box_confirm'),
