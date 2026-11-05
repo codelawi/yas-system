@@ -1633,3 +1633,73 @@ h5,
 .box-head .ant-btn {
   flex: none;
 }
+
+/* Box information: number and name, then the weight and the item count as large figures */
+.box-title-icon {
+  color: #1d4ed8;
+}
+
+.box-subtitle {
+  margin-top: 2px;
+  font-size: 16px;
+  color: #4b5563;
+}
+
+.box-stats {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.box-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+}
+
+.box-stat-weight {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  cursor: pointer;
+}
+
+.box-stat-label {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.box-stat-weight .box-stat-label {
+  color: #b45309;
+}
+
+.box-stat-value {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #111827;
+}
+
+.box-stat-weight .box-stat-value {
+  font-size: 40px;
+  color: #92400e;
+}
+
+.box-stat-value small {
+  margin-inline-start: 6px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.box-stat-value.box-stat-empty {
+  font-size: 18px;
+  font-weight: 500;
+  color: #9ca3af;
+}

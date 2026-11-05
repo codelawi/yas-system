@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, App, Button, Card, Col, Dropdown, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Tag, Typography } from 'antd'
-import { AppstoreAddOutlined, ClusterOutlined, DeleteOutlined, DownOutlined, MinusCircleOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
+import { AppstoreAddOutlined, AppstoreOutlined, ClusterOutlined, DashboardOutlined, DeleteOutlined, DownOutlined, MinusCircleOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
 import api, { boxUrl, errorKey } from '../api'
 import { useLang } from '../i18n'
 import { useAuth } from '../auth'
@@ -235,17 +235,38 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
       {/* Title and the one Actions button on the same line (the button sits at the end: left in Arabic) */}
       <div className="page-head box-head">
         <div>
-          <Typography.Text type="secondary">
-            <InboxOutlined /> {t('box')}
-            {box.name && ` · ${box.name}`}
-          </Typography.Text>
           <Typography.Title level={mobile ? 2 : 3} style={{ margin: 0 }}>
-            {t('box')} {box.number}
+            <InboxOutlined className="box-title-icon" /> {t('box')} {box.number}
           </Typography.Title>
-          <Tag>{t('n_items', { n: box.equipment.length })}</Tag>
-          {formatWeight(box.weight, t) && <Tag color="gold">{formatWeight(box.weight, t)}</Tag>}
+          {box.name && <div className="box-subtitle">{box.name}</div>}
         </div>
         {actions}
+      </div>
+
+      {/* The weight matters most, so it is the first and largest figure; tapping it edits the box */}
+      <div className="box-stats">
+        <button type="button" className="box-stat box-stat-weight" onClick={() => onMenu({ key: 'edit' })} title={t('edit_box')}>
+          <span className="box-stat-label">
+            <DashboardOutlined /> {t('weight')}
+          </span>
+          {box.weight != null ? (
+            <span className="box-stat-value">
+              {Number(box.weight).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+              <small>{t('kg')}</small>
+            </span>
+          ) : (
+            <span className="box-stat-value box-stat-empty">{t('weight_not_set')}</span>
+          )}
+        </button>
+        <div className="box-stat">
+          <span className="box-stat-label">
+            <AppstoreOutlined /> {t('box_contents')}
+          </span>
+          <span className="box-stat-value">
+            {box.equipment.length}
+            <small>{t('items_word')}</small>
+          </span>
+        </div>
       </div>
 
       <Row gutter={[16, 16]}>
