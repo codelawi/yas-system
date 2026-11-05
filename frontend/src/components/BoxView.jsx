@@ -231,59 +231,76 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
     </Dropdown>
   )
 
+  // The weight matters most, so it is the first and largest figure; tapping it edits the box
+  const stats = (
+    <div className="box-stats">
+      <button
+        type="button"
+        className="box-stat box-stat-weight"
+        onClick={() => !printMode && onMenu({ key: 'edit' })}
+        title={printMode ? undefined : t('edit_box')}
+      >
+        <span className="box-stat-label">
+          {!printMode && <DashboardOutlined />} {t('weight')}
+        </span>
+        {box.weight != null ? (
+          <span className="box-stat-value">
+            {Number(box.weight).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+            <small>{t('kg')}</small>
+          </span>
+        ) : (
+          <span className="box-stat-value box-stat-empty">{t('weight_not_set')}</span>
+        )}
+      </button>
+      <div className="box-stat">
+        <span className="box-stat-label">
+          {!printMode && <AppstoreOutlined />} {t('box_contents')}
+        </span>
+        <span className="box-stat-value">
+          {box.equipment.length}
+          <small>{t('items_word')}</small>
+        </span>
+      </div>
+    </div>
+  )
+
   const sections = bySection(box.equipment)
   // Headings only help when something in the box belongs to a group (and are left off the printed sheet)
   const showSections = !printMode && sections.some((sec) => sec.group)
 
   return (
     <div className="page">
-      {/* Title and the one Actions button on the same line (the button sits at the end: left in Arabic) */}
-      <div className={`page-head box-head${printMode ? ' box-head-print' : ''}`}>
-        <div>
-          <Typography.Title level={mobile ? 2 : 3} style={{ margin: 0 }}>
-            {!printMode && <InboxOutlined className="box-title-icon" />} {t('box')} {box.number}
-          </Typography.Title>
-          {box.name && <div className="box-subtitle">{box.name}</div>}
-          {/* The printed sheet carries the box QR, so a phone can open the box from it */}
-          {printMode && (
+      {printMode ? (
+        <>
+          {/* Printed sheet: the box number large on top; below it the figures, and the QR at the left corner with the box name */}
+          <div className="page-head box-head box-head-print">
+            <Typography.Title level={2} style={{ margin: 0 }}>
+              {t('box')} {box.number}
+            </Typography.Title>
+          </div>
+          <div className="box-print-top">
+            {stats}
             <div className="box-print-qr">
-              <QrCode value={url} size={1} style={{ width: '38mm', height: '38mm' }} />
+              <QrCode value={url} size={1} style={{ width: '42mm', height: '42mm' }} />
+              {box.name && <div className="box-print-name">{box.name}</div>}
             </div>
-          )}
-        </div>
-        {!printMode && actions}
-      </div>
-
-      {/* The weight matters most, so it is the first and largest figure; tapping it edits the box */}
-      <div className="box-stats">
-        <button
-          type="button"
-          className="box-stat box-stat-weight"
-          onClick={() => !printMode && onMenu({ key: 'edit' })}
-          title={printMode ? undefined : t('edit_box')}
-        >
-          <span className="box-stat-label">
-            {!printMode && <DashboardOutlined />} {t('weight')}
-          </span>
-          {box.weight != null ? (
-            <span className="box-stat-value">
-              {Number(box.weight).toLocaleString('en-US', { maximumFractionDigits: 2 })}
-              <small>{t('kg')}</small>
-            </span>
-          ) : (
-            <span className="box-stat-value box-stat-empty">{t('weight_not_set')}</span>
-          )}
-        </button>
-        <div className="box-stat">
-          <span className="box-stat-label">
-            {!printMode && <AppstoreOutlined />} {t('box_contents')}
-          </span>
-          <span className="box-stat-value">
-            {box.equipment.length}
-            <small>{t('items_word')}</small>
-          </span>
-        </div>
-      </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Title and the one Actions button on the same line (the button sits at the end: left in Arabic) */}
+          <div className="page-head box-head">
+            <div>
+              <Typography.Title level={mobile ? 2 : 3} style={{ margin: 0 }}>
+                <InboxOutlined className="box-title-icon" /> {t('box')} {box.number}
+              </Typography.Title>
+              {box.name && <div className="box-subtitle">{box.name}</div>}
+            </div>
+            {actions}
+          </div>
+          {stats}
+        </>
+      )}
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={printMode ? 24 : 16}>
