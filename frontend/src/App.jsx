@@ -44,6 +44,7 @@ import { CustodyFormPage, CustodyFormsPage } from './pages/CustodyFormsPage'
 import { BoxDetail, BoxesPage, ScanBoxPage } from './pages/BoxPages'
 import { GroupDetail, GroupsPage } from './pages/GroupPages'
 import BoxLabelsPrint from './pages/BoxLabelsPrint'
+import BoxReport from './pages/BoxReport'
 
 // Latin letters and digits come from Inter, Arabic letters from IBM Plex Sans Arabic
 const FONT = '"Inter Variable", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif'
@@ -65,6 +66,7 @@ export default function App() {
               <Route path="/box/:number" element={<ScanBoxPage />} />
               <Route path="/labels" element={<LabelsPrint />} />
               <Route path="/boxes/labels" element={<BoxLabelsPrint />} />
+              <Route path="/boxes/:id/report" element={<BoxReport />} />
               <Route path="/scan" element={<ScanLabelPage />} />
               <Route path="/print/equipment/:id" element={<PrintSheet />} />
               <Route path="/print/list" element={<PrintList />} />

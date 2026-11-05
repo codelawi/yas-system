@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, App, Button, Card, Col, Dropdown, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Tag, Typography } from 'antd'
-import { AppstoreAddOutlined, AppstoreOutlined, ClusterOutlined, DashboardOutlined, DeleteOutlined, DownOutlined, MinusCircleOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
+import { AppstoreAddOutlined, AppstoreOutlined, ClusterOutlined, DashboardOutlined, DeleteOutlined, FileTextOutlined, DownOutlined, MinusCircleOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
 import api, { boxUrl, errorKey } from '../api'
 import { useLang } from '../i18n'
 import { useAuth } from '../auth'
@@ -127,8 +127,11 @@ function bySection(items) {
   return [...sections.values()].sort((a, b) => (a.group ? 0 : 1) - (b.group ? 0 : 1))
 }
 
-/** Box page, shared by the dashboard (/boxes/:id) and the phone scan page (/box/:number). */
-export default function BoxView({ box, onChange, onDeleted, mobile }) {
+/**
+ * Box page, shared by the dashboard (/boxes/:id) and the phone scan page (/box/:number).
+ * `printMode`: the same page as a sheet to print and stick on the box (no buttons, no side QR card).
+ */
+export default function BoxView({ box, onChange, onDeleted, mobile, printMode }) {
   const { t } = useLang()
   const { requirePin } = useAuth()
   const { settings } = useSettings()
@@ -196,6 +199,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
     ...(box.equipment.length ? [{ key: 'manage', icon: <MinusCircleOutlined />, label: t('take_out_items') }] : []),
     { type: 'divider' },
     { key: 'edit', icon: <EditOutlined />, label: t('edit_box') },
+    { key: 'report', icon: <FileTextOutlined />, label: t('print_report') },
     ...(mobile ? [] : [{ key: 'print', icon: <PrinterOutlined />, label: t('print_label') }]),
     { type: 'divider' },
     { key: 'delete', icon: <DeleteOutlined />, label: t('delete_box'), danger: true },
@@ -203,6 +207,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
 
   const onMenu = async ({ key }) => {
     if (key === 'print') return window.open(`/boxes/labels?ids=${box.id}`, '_blank')
+    if (key === 'report') return window.open(`/boxes/${box.id}/report`, '_blank')
     if (key === 'delete') {
       return modal.confirm({
         title: t('delete_box_confirm'),
@@ -227,27 +232,38 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
   )
 
   const sections = bySection(box.equipment)
-  // Headings only help when something in the box belongs to a group
-  const showSections = sections.some((sec) => sec.group)
+  // Headings only help when something in the box belongs to a group (and are left off the printed sheet)
+  const showSections = !printMode && sections.some((sec) => sec.group)
 
   return (
     <div className="page">
       {/* Title and the one Actions button on the same line (the button sits at the end: left in Arabic) */}
-      <div className="page-head box-head">
+      <div className={`page-head box-head${printMode ? ' box-head-print' : ''}`}>
         <div>
           <Typography.Title level={mobile ? 2 : 3} style={{ margin: 0 }}>
-            <InboxOutlined className="box-title-icon" /> {t('box')} {box.number}
+            {!printMode && <InboxOutlined className="box-title-icon" />} {t('box')} {box.number}
           </Typography.Title>
           {box.name && <div className="box-subtitle">{box.name}</div>}
+          {/* The printed sheet carries the box QR, so a phone can open the box from it */}
+          {printMode && (
+            <div className="box-print-qr">
+              <QrCode value={url} size={1} style={{ width: '38mm', height: '38mm' }} />
+            </div>
+          )}
         </div>
-        {actions}
+        {!printMode && actions}
       </div>
 
       {/* The weight matters most, so it is the first and largest figure; tapping it edits the box */}
       <div className="box-stats">
-        <button type="button" className="box-stat box-stat-weight" onClick={() => onMenu({ key: 'edit' })} title={t('edit_box')}>
+        <button
+          type="button"
+          className="box-stat box-stat-weight"
+          onClick={() => !printMode && onMenu({ key: 'edit' })}
+          title={printMode ? undefined : t('edit_box')}
+        >
           <span className="box-stat-label">
-            <DashboardOutlined /> {t('weight')}
+            {!printMode && <DashboardOutlined />} {t('weight')}
           </span>
           {box.weight != null ? (
             <span className="box-stat-value">
@@ -260,7 +276,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
         </button>
         <div className="box-stat">
           <span className="box-stat-label">
-            <AppstoreOutlined /> {t('box_contents')}
+            {!printMode && <AppstoreOutlined />} {t('box_contents')}
           </span>
           <span className="box-stat-value">
             {box.equipment.length}
@@ -270,8 +286,9 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
       </div>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={16}>
-          <Card title={`${t('box_contents')} (${box.equipment.length})`}>
+        <Col xs={24} lg={printMode ? 24 : 16}>
+          {/* No frame around the contents on the printed sheet */}
+          <Card title={`${t('box_contents')} (${box.equipment.length})`} variant={printMode ? 'borderless' : undefined} className={printMode ? 'box-contents-print' : undefined}>
             {managing && (
               <Alert
                 type="warning"
@@ -314,11 +331,9 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
                         <div key={eq.id} className={`box-item${eq.parent ? ' box-item-accessory' : ''}`}>
                           <Link to={linkTo(eq)} className="box-item-link">
                             {eq.photo_url ? (
-                              <img src={eq.photo_url} alt="" className="box-item-photo" loading="lazy" />
+                              <img src={eq.photo_url} alt="" className="box-item-photo" loading={printMode ? 'eager' : 'lazy'} />
                             ) : (
-                              <span className="box-item-photo box-item-nophoto">
-                                <PictureOutlined />
-                              </span>
+                              <span className="box-item-photo box-item-nophoto">{!printMode && <PictureOutlined />}</span>
                             )}
                             <span className="box-item-text">
                               <span className="box-item-name">{eq.display_name || eq.serial_number}</span>
@@ -360,7 +375,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
             )}
           </Card>
         </Col>
-        {!mobile && (
+        {!mobile && !printMode && (
           <Col xs={24} lg={8}>
             <Card title={t('qr_code')}>
               {qrPointsToLocalhost(settings) && <Typography.Paragraph type="warning">{t('localhost_warning')}</Typography.Paragraph>}

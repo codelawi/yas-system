@@ -1731,3 +1731,105 @@ h5,
   font-weight: 500;
   color: #9ca3af;
 }
+
+/* ───────── Box sheet: the box page printed on A4 to stick on the box ───────── */
+.br-page {
+  min-height: 100vh;
+  padding: 24px 12px 48px;
+  background: #e5e7eb;
+}
+
+.br-toolbar {
+  display: flex;
+  justify-content: space-between;
+  max-width: 210mm;
+  margin: 0 auto 16px;
+}
+
+.br-sheet {
+  width: 210mm;
+  max-width: 100%;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 12mm;
+  box-sizing: border-box;
+  background: #fff;
+  box-shadow: 0 10px 40px rgb(15 23 42 / 18%);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.br-sheet .page {
+  padding: 0;
+}
+
+.br-sheet .box-stat-weight {
+  cursor: default;
+}
+
+/* Printed sheet: the box title large and centred, with its QR under it */
+.box-head-print {
+  justify-content: center;
+  text-align: center;
+  margin-bottom: 8mm;
+}
+
+.box-head-print h2.ant-typography,
+.box-head-print h3.ant-typography {
+  font-size: 34pt;
+  line-height: 1.2;
+}
+
+.box-head-print .box-subtitle {
+  margin-top: 2mm;
+  font-size: 16pt;
+}
+
+.box-print-qr {
+  display: flex;
+  justify-content: center;
+  margin-top: 4mm;
+}
+
+/* Printed sheet: contents without the card frame */
+.box-contents-print > .ant-card-head {
+  min-height: 0;
+  padding: 0 0 3mm;
+  border-bottom: none;
+}
+
+.box-contents-print > .ant-card-body {
+  padding: 0;
+}
+
+.br-sheet .box-item,
+.br-sheet .box-section-head,
+.br-sheet .box-stats {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.br-sheet .box-section-head {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+@media print {
+  /* The page margin (not the sheet's padding) so every printed page gets it */
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  .br-page {
+    padding: 0;
+    background: #fff;
+  }
+
+  .br-sheet {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+}
