@@ -127,8 +127,11 @@ function bySection(items) {
   return [...sections.values()].sort((a, b) => (a.group ? 0 : 1) - (b.group ? 0 : 1))
 }
 
-/** Box page, shared by the dashboard (/boxes/:id) and the phone scan page (/box/:number). */
-export default function BoxView({ box, onChange, onDeleted, mobile }) {
+/**
+ * Box page, shared by the dashboard (/boxes/:id) and the phone scan page (/box/:number).
+ * `printMode`: the same page as a sheet to print and stick on the box (no buttons, no side QR card).
+ */
+export default function BoxView({ box, onChange, onDeleted, mobile, printMode }) {
   const { t } = useLang()
   const { requirePin } = useAuth()
   const { settings } = useSettings()
@@ -242,12 +245,17 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
           </Typography.Title>
           {box.name && <div className="box-subtitle">{box.name}</div>}
         </div>
-        {actions}
+        {!printMode && actions}
       </div>
 
       {/* The weight matters most, so it is the first and largest figure; tapping it edits the box */}
       <div className="box-stats">
-        <button type="button" className="box-stat box-stat-weight" onClick={() => onMenu({ key: 'edit' })} title={t('edit_box')}>
+        <button
+          type="button"
+          className="box-stat box-stat-weight"
+          onClick={() => !printMode && onMenu({ key: 'edit' })}
+          title={printMode ? undefined : t('edit_box')}
+        >
           <span className="box-stat-label">
             <DashboardOutlined /> {t('weight')}
           </span>
@@ -272,7 +280,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
       </div>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={16}>
+        <Col xs={24} lg={printMode ? 24 : 16}>
           <Card title={`${t('box_contents')} (${box.equipment.length})`}>
             {managing && (
               <Alert
@@ -362,7 +370,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
             )}
           </Card>
         </Col>
-        {!mobile && (
+        {!mobile && !printMode && (
           <Col xs={24} lg={8}>
             <Card title={t('qr_code')}>
               {qrPointsToLocalhost(settings) && <Typography.Paragraph type="warning">{t('localhost_warning')}</Typography.Paragraph>}
