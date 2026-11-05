@@ -331,7 +331,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
                         <div key={eq.id} className={`box-item${eq.parent ? ' box-item-accessory' : ''}`}>
                           <Link to={linkTo(eq)} className="box-item-link">
                             {eq.photo_url ? (
-                              <img src={eq.photo_url} alt="" className="box-item-photo" loading="lazy" />
+                              <img src={eq.photo_url} alt="" className="box-item-photo" loading={printMode ? 'eager' : 'lazy'} />
                             ) : (
                               <span className="box-item-photo box-item-nophoto">{!printMode && <PictureOutlined />}</span>
                             )}
