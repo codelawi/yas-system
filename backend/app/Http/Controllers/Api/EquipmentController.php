@@ -298,6 +298,28 @@ class EquipmentController extends Controller
         return null;
     }
 
+    /**
+     * A few details to show under the equipment's name in short lists (e.g. a box's contents):
+     * the first filled fields, without the name and the serial number.
+     *
+     * @return array<int, array{key: string, value: string}>
+     */
+    public static function summaryFields(Equipment $equipment, int $limit = 3): array
+    {
+        $name = trim((string) self::displayName($equipment));
+
+        return collect($equipment->fieldList())
+            ->map(fn (array $f) => ['key' => trim($f['key']), 'value' => trim((string) strtok((string) $f['value'], "\n"))])
+            ->filter(fn (array $f) => $f['value'] !== ''
+                && ! in_array(WordTableParser::normalize($f['key']), self::NAME_KEYS, true)
+                && $f['value'] !== $name
+                && $f['value'] !== $equipment->serial_number)
+            ->take($limit)
+            ->map(fn (array $f) => ['key' => $f['key'], 'value' => mb_strimwidth($f['value'], 0, 60, '…')])
+            ->values()
+            ->all();
+    }
+
     /** Equipment chosen for label printing (may span several pages of the list). */
     public function labels(Request $request)
     {

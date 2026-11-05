@@ -158,4 +158,28 @@ class BoxTest extends TestCase
         $ids = $group->equipment()->pluck('id')->all();
         $this->postJson("/api/boxes/{$box->id}/equipment/remove", ['ids' => $ids])->assertOk()->assertJsonCount(0, 'equipment');
     }
+
+    public function test_box_contents_show_a_few_details_without_the_name_or_serial(): void
+    {
+        $box = Box::create(['number' => '1']);
+        $equipment = Equipment::create(['serial_number' => 'S-1']);
+        $equipment->syncFields([
+            ['key' => 'اسم المعدة', 'value' => 'منشار'],
+            ['key' => 'الرقم', 'value' => 'S-1'],
+            ['key' => 'الماركة', 'value' => 'MAKITA'],
+            ['key' => 'الحالة', 'value' => ''],
+            ['key' => 'الطاقة', 'value' => "بطارية\n18V"],
+            ['key' => 'اللون', 'value' => 'أخضر'],
+            ['key' => 'الموقع', 'value' => 'مخزن'],
+        ]);
+        $box->equipment()->attach($equipment->id);
+
+        $this->getJson("/api/boxes/{$box->id}")->assertOk()
+            ->assertJsonPath('equipment.0.display_name', 'منشار')
+            ->assertJsonPath('equipment.0.summary', [
+                ['key' => 'الماركة', 'value' => 'MAKITA'],
+                ['key' => 'الطاقة', 'value' => 'بطارية'],
+                ['key' => 'اللون', 'value' => 'أخضر'],
+            ]);
+    }
 }
