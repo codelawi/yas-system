@@ -203,6 +203,7 @@ class BoxController extends Controller
                 'id' => $e->id,
                 'serial_number' => $e->serial_number,
                 'display_name' => EquipmentController::displayName($e),
+                'summary' => EquipmentController::summaryFields($e),
                 'category' => $e->category,
                 'parent' => $e->parent?->only(['id', 'serial_number', 'name']),
                 // Accessories show under their main equipment's group

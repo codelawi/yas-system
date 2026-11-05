@@ -322,11 +322,20 @@ export default function BoxView({ box, onChange, onDeleted, mobile }) {
                             )}
                             <span className="box-item-text">
                               <span className="box-item-name">{eq.display_name || eq.serial_number}</span>
-                              <span className="box-item-serial serial">{eq.serial_number}</span>
+                              {/* A few details instead of the serial number (it is on the equipment's own page) */}
+                              {eq.summary?.length > 0 && (
+                                <span className="box-item-details">
+                                  {eq.summary.map((f, i) => (
+                                    <span key={i}>
+                                      <span className="box-item-key">{f.key}:</span> {f.value}
+                                    </span>
+                                  ))}
+                                </span>
+                              )}
                               {eq.parent && (
-                                <Typography.Text type="secondary" className="box-item-extra">
-                                  ↳ {t('accessory_of')} {eq.parent.serial_number}
-                                </Typography.Text>
+                                <span className="box-item-details">
+                                  ↳ {t('accessory_of')} {eq.parent.name || eq.parent.serial_number}
+                                </span>
                               )}
                             </span>
                           </Link>
