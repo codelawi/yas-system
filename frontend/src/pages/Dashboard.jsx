@@ -272,7 +272,8 @@ function FollowUpCard({ stats }) {
                   <Link key={m.id} to={`/equipment/${m.equipment.id}`} className="mini-row">
                     <Tag color={DUE_COLOR[dueState(m.due_date)]}>{dayjs(m.due_date).format('YYYY-MM-DD')}</Tag>
                     <span className="mini-sub">
-                      <b className="serial">{m.equipment.serial_number}</b> · {m.title}
+                      <b className="serial">{m.equipment.serial_number}</b>
+                      {m.equipment.display_name && ` · ${m.equipment.display_name}`} · {m.title}
                     </span>
                     <span className="mini-date">{dayjs(m.due_date).fromNow()}</span>
                   </Link>
@@ -298,7 +299,8 @@ function FollowUpCard({ stats }) {
                   <Link key={c.id} to={`/equipment/${c.equipment.id}`} className="mini-row">
                     <Tag color={dayjs(c.due_back_at).isBefore(dayjs(), 'day') ? 'red' : 'blue'}>{dayjs(c.due_back_at).format('YYYY-MM-DD')}</Tag>
                     <span className="mini-sub">
-                      <b className="serial">{c.equipment.serial_number}</b> · {c.holder}
+                      <b className="serial">{c.equipment.serial_number}</b>
+                      {c.equipment.display_name && ` · ${c.equipment.display_name}`} · {c.holder}
                     </span>
                   </Link>
                 ))}
@@ -323,7 +325,7 @@ function FollowUpCard({ stats }) {
                 {issues.items.map((i) => (
                   <Link key={i.id} to={`/equipment/${i.equipment.id}`} className="mini-row">
                     <span className="serial">{i.equipment.serial_number}</span>
-                    <span className="mini-sub">{i.description}</span>
+                    <span className="mini-sub">{[i.equipment.display_name, i.description].filter(Boolean).join(' · ')}</span>
                     <span className="mini-date">{dayjs(i.created_at).fromNow()}</span>
                   </Link>
                 ))}

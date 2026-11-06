@@ -90,7 +90,7 @@ export default function CustodyPage() {
                 <Link to={`/equipment/${r.equipment.id}`} className="serial">
                   {r.equipment.serial_number}
                 </Link>
-                {r.equipment.name && <div className="list-name">{r.equipment.name}</div>}
+                {r.equipment.display_name && <div className="list-name">{r.equipment.display_name}</div>}
                 {r.equipment.parent && <div className="list-name">↳ {r.equipment.parent.serial_number}</div>}
               </div>
             ),

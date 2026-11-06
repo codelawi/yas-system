@@ -366,7 +366,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
                               )}
                               {eq.parent && (
                                 <span className="box-item-details">
-                                  ↳ {t('accessory_of')} {eq.parent.name || eq.parent.serial_number}
+                                  ↳ {t('accessory_of')} {eq.parent.display_name || eq.parent.serial_number}
                                 </span>
                               )}
                             </span>

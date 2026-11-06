@@ -144,7 +144,7 @@ export async function downloadBoxDocx(box, { url, t, filename }) {
           children: [
             para([text(eq.display_name || eq.serial_number, { size: 30, bold: true, color: '111827' })]),
             ...(details ? [para([text(details, { size: 23, color: '6B7280' })])] : []),
-            ...(eq.parent ? [para([text(`↳ ${t('accessory_of')} ${eq.parent.name || eq.parent.serial_number}`, { size: 23, color: '6B7280' })])] : []),
+            ...(eq.parent ? [para([text(`↳ ${t('accessory_of')} ${eq.parent.display_name || eq.parent.serial_number}`, { size: 23, color: '6B7280' })])] : []),
           ],
         }),
       ],

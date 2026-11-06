@@ -34,7 +34,7 @@ Laravel 13 (API) + React (Vite, Ant Design) + MySQL. It runs fully offline on th
   - Add a new equipment, choose existing ones, or add a whole group at once. Contents are listed by group, with **Take the group out**.
   - The box page shows the number and name, large weight and item-count tiles, and each item's photo, name and up to 3 details. All actions are in one **Actions** menu.
   - Deleting a box keeps its equipment. Adding to and taking out of a box is in the history log.
-  - **Box sheet**: the box page as an A4 sheet with a big centred title and the QR. Print it, or download it as PDF or as an editable Word file.
+  - **Box sheet**: the box page as an A4 sheet, with the QR at the left corner beside the box name and the figures stacked. Print it, or download it as PDF or as an editable Word file.
 - **QR labels**: each QR holds a link like `http://<PC-IP>/eq/<serial>`. Any phone camera opens it, with no app needed. You can print labels for many items at once, sized for a label printer.
 - **QR codes page**:
   - The address printed in QR codes.

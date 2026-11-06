@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Box;
 use App\Models\Equipment;
 use App\Models\EquipmentGroup;
 use App\Models\Import;
@@ -20,6 +21,66 @@ class EquipmentGroupTest extends TestCase
         Sanctum::actingAs($user);
 
         return $user;
+    }
+
+    public function test_equipment_without_a_name_shows_its_group_name(): void
+    {
+        $group = EquipmentGroup::create(['name' => 'وحدة الفتح والقص']);
+        $unnamed = Equipment::create(['serial_number' => 'G-1', 'group_id' => $group->id]);
+        $named = Equipment::create(['serial_number' => 'G-2', 'group_id' => $group->id, 'name' => 'مقص']);
+        $fromField = Equipment::create(['serial_number' => 'G-3', 'group_id' => $group->id]);
+        $fromField->syncFields([['key' => 'اسم المعدة', 'value' => 'فتاحة']]);
+        $accessory = Equipment::create(['serial_number' => 'G-4', 'parent_id' => $unnamed->id]);
+
+        $names = collect($this->getJson('/api/equipment?per_page=50')->assertOk()->json('data'))->pluck('display_name', 'serial_number');
+
+        $this->assertSame('وحدة الفتح والقص', $names['G-1']);
+        $this->assertSame('مقص', $names['G-2']);
+        $this->assertSame('فتاحة', $names['G-3']);
+        $this->assertNull($names['G-4']);
+
+        // Only shown: the saved name stays empty, so the edit form doesn't fill it in
+        $this->getJson("/api/equipment/{$unnamed->id}")
+            ->assertOk()
+            ->assertJsonPath('name', null)
+            ->assertJsonPath('display_name', 'وحدة الفتح والقص');
+        $this->getJson('/api/equipment/labels?ids[]='.$unnamed->id)->assertJsonPath('0.display_name', 'وحدة الفتح والقص');
+        $this->getJson("/api/groups/{$group->id}")->assertJsonPath('equipment.0.display_name', 'وحدة الفتح والقص');
+    }
+
+    public function test_the_group_name_also_shows_on_custody_home_stocktake_and_accessories(): void
+    {
+        $this->signIn();
+        $group = EquipmentGroup::create(['name' => 'وحدة الفتح والقص']);
+        $unit = Equipment::create(['serial_number' => 'G-1', 'group_id' => $group->id]);
+        $accessory = Equipment::create(['serial_number' => 'G-2', 'parent_id' => $unit->id]);
+        $box = Box::create(['number' => '1']);
+        $box->equipment()->attach($accessory->id);
+        $unit->custodies()->create(['holder' => 'سالم', 'handed_at' => now(), 'due_back_at' => now()->addDay()]);
+        $unit->schedules()->create(['title' => 'فحص', 'due_date' => now()->addDay()]);
+        $unit->issues()->create(['description' => 'عطل']);
+
+        $this->getJson('/api/custody')
+            ->assertJsonPath('open.0.equipment.display_name', 'وحدة الفتح والقص')
+            ->assertJsonMissingPath('open.0.equipment.fields');
+
+        $this->getJson('/api/stats')
+            ->assertJsonPath('maintenance.items.0.equipment.display_name', 'وحدة الفتح والقص')
+            ->assertJsonPath('issues.items.0.equipment.display_name', 'وحدة الفتح والقص')
+            ->assertJsonPath('custody.items.0.equipment.display_name', 'وحدة الفتح والقص');
+
+        $stocktake = $this->postJson('/api/stocktakes', ['name' => 'جرد'])->assertSuccessful()->json('id');
+        $this->postJson("/api/stocktakes/{$stocktake}/scan", ['code' => 'G-1'])
+            ->assertJsonPath('scan.equipment.display_name', 'وحدة الفتح والقص');
+        $this->postJson("/api/stocktakes/{$stocktake}/scan", ['code' => 'G-1'])
+            ->assertJsonPath('status', 'already')
+            ->assertJsonPath('scan.equipment.display_name', 'وحدة الفتح والقص');
+        $this->postJson("/api/stocktakes/{$stocktake}/scan", ['code' => 'NOT-THERE'])
+            ->assertJsonPath('status', 'unknown')
+            ->assertJsonPath('scan.equipment', null);
+
+        $this->getJson("/api/equipment/{$accessory->id}")->assertJsonPath('parent.display_name', 'وحدة الفتح والقص');
+        $this->getJson("/api/boxes/{$box->id}")->assertJsonPath('equipment.0.parent.display_name', 'وحدة الفتح والقص');
     }
 
     public function test_names_that_differ_only_in_spelling_are_one_group(): void

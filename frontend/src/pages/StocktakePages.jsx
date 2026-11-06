@@ -328,7 +328,7 @@ export function StocktakePage() {
                   <b className="serial">{last.scan.serial_number}</b> — {resultText(last)}
                 </span>
               }
-              description={last.scan.equipment?.name}
+              description={last.scan.equipment?.display_name}
             />
           )}
         </Card>

@@ -179,7 +179,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
         <div>
           <Typography.Text type="secondary">
             {isAccessory ? t('accessory') : t('serial_number')}
-            {equipment.name && ` · ${equipment.name}`}
+            {equipment.display_name && ` · ${equipment.display_name}`}
           </Typography.Text>
           <Typography.Title level={mobile ? 2 : 3} className="serial" style={{ margin: 0 }} copyable>
             {equipment.serial_number}
@@ -220,7 +220,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
             <span>
               {t('accessory_of')}:{' '}
               <Link to={linkTo(equipment.parent)}>
-                {equipment.parent.name && `${equipment.parent.name} · `}
+                {equipment.parent.display_name && `${equipment.parent.display_name} · `}
                 <span className="serial">{equipment.parent.serial_number}</span>
               </Link>
             </span>

@@ -67,7 +67,7 @@ export default function EquipmentForm({ open, equipment, parent, group, onClose,
       mask={{ closable: false }}
     >
       {parent && (
-        <Alert type="info" showIcon style={{ marginBottom: 16 }} title={`${t('accessory_of')}: ${[parent.name, parent.serial_number].filter(Boolean).join(' · ')}`} />
+        <Alert type="info" showIcon style={{ marginBottom: 16 }} title={`${t('accessory_of')}: ${[parent.display_name, parent.serial_number].filter(Boolean).join(' · ')}`} />
       )}
       <Form form={form} layout="vertical">
         <div className="form-grid">

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Http\Controllers\Api\EquipmentController;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -17,6 +19,21 @@ class Equipment extends Model
     protected $fillable = ['parent_id', 'group_id', 'serial_number', 'name', 'row_no', 'category', 'photo_path', 'import_id', 'created_by', 'updated_by'];
 
     protected $hidden = ['photo_path'];
+
+    /** What to load on a model's `equipment` relation for withDisplayName(). */
+    public const NAME_RELATIONS = ['equipment:id,serial_number,name,group_id', 'equipment.fields', 'equipment.group:id,name'];
+
+    /** @return Attribute<?string, never> */
+    protected function displayName(): Attribute
+    {
+        return Attribute::get(fn () => EquipmentController::displayName($this));
+    }
+
+    /** Sends display_name in this equipment's JSON, without the relations it was worked out from. */
+    public function withDisplayName(): static
+    {
+        return $this->append('display_name')->makeHidden(['fields', 'group']);
+    }
 
     public function fields(): HasMany
     {

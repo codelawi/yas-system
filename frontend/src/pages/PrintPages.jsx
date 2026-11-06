@@ -58,7 +58,7 @@ export function PrintSheet() {
           {settings.company_name && <div className="print-company">{settings.company_name}</div>}
           <h1 className="serial">{eq.serial_number}</h1>
           <div className="print-sub">
-            {[eq.name, eq.category, eq.row_no != null && `${t('row_no')} ${eq.row_no}`, eq.parent && `${t('accessory_of')} ${eq.parent.serial_number}`].filter(Boolean).join(' · ')}
+            {[eq.display_name, eq.category, eq.row_no != null && `${t('row_no')} ${eq.row_no}`, eq.parent && `${t('accessory_of')} ${eq.parent.serial_number}`].filter(Boolean).join(' · ')}
           </div>
         </div>
         <QrCode value={equipmentUrl(settings, eq.serial_number)} size={110} onReady={() => setQrReady(true)} />
