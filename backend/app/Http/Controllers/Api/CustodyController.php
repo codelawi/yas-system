@@ -17,7 +17,7 @@ class CustodyController extends Controller
     public function index(Request $request)
     {
         $query = Custody::open()
-            ->with(['equipment' => fn ($q) => $q->select('id', 'serial_number', 'name', 'parent_id')->with('parent:id,serial_number'), 'handedBy:id,name'])
+            ->with(['equipment' => fn ($q) => $q->select('id', 'serial_number', 'name', 'parent_id', 'group_id')->with(['parent:id,serial_number', 'fields', 'group:id,name']), 'handedBy:id,name'])
             ->whereHas('equipment')
             ->when($request->query('holder'), fn ($q, $holder) => $q->where('holder', $holder))
             ->orderByRaw('due_back_at is null')
@@ -25,7 +25,7 @@ class CustodyController extends Controller
             ->orderBy('handed_at');
 
         return [
-            'open' => $query->get(),
+            'open' => $query->get()->each(fn (Custody $custody) => $custody->equipment->withDisplayName()),
             'holders' => Custody::open()->select('holder')->distinct()->orderBy('holder')->pluck('holder'),
         ];
     }

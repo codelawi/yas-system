@@ -152,7 +152,7 @@ class BoxController extends Controller
     {
         $ids = array_filter(array_map('intval', (array) $request->query('ids', [])));
 
-        return Box::with('equipment.fields')
+        return Box::with(['equipment.fields', 'equipment.group:id,name'])
             ->whereIn('id', $ids)
             ->get()
             ->sortBy('number', SORT_NATURAL)
@@ -190,7 +190,7 @@ class BoxController extends Controller
 
     private function detail(Box $box): array
     {
-        $box->load(['equipment.fields', 'equipment.group:id,name', 'equipment.parent:id,serial_number,name,group_id', 'equipment.parent.group:id,name']);
+        $box->load(['equipment.fields', 'equipment.group:id,name', 'equipment.parent:id,serial_number,name,group_id', 'equipment.parent.fields', 'equipment.parent.group:id,name']);
 
         return [
             'id' => $box->id,
@@ -205,7 +205,7 @@ class BoxController extends Controller
                 'display_name' => EquipmentController::displayName($e),
                 'summary' => EquipmentController::summaryFields($e),
                 'category' => $e->category,
-                'parent' => $e->parent?->only(['id', 'serial_number', 'name']),
+                'parent' => $e->parent?->only(['id', 'serial_number', 'name', 'display_name']),
                 // Accessories show under their main equipment's group
                 'group' => ($e->parent ? $e->parent->group : $e->group)?->only(['id', 'name']),
                 'photo_url' => $e->photoUrl(),

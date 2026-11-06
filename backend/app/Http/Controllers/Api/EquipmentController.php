@@ -279,7 +279,10 @@ class EquipmentController extends Controller
         return $count + 1;
     }
 
-    /** The equipment's name, or else the value of a name-like field (most items only have fields). */
+    /**
+     * The equipment's name, or else the value of a name-like field (most items only have fields),
+     * or else the name of its group.
+     */
     public static function displayName(Equipment $equipment): ?string
     {
         if ($equipment->name) {
@@ -295,7 +298,7 @@ class EquipmentController extends Controller
             }
         }
 
-        return null;
+        return $equipment->group?->name;
     }
 
     /**
@@ -325,7 +328,7 @@ class EquipmentController extends Controller
     {
         $ids = array_filter(array_map('intval', (array) $request->query('ids', [])));
 
-        return Equipment::with(['parent:id,serial_number', 'fields'])
+        return Equipment::with(['parent:id,serial_number', 'fields', 'group:id,name'])
             ->whereIn('id', $ids)
             ->orderByRaw('coalesce(parent_id, id), parent_id is not null, serial_number')
             ->get()
@@ -420,21 +423,24 @@ class EquipmentController extends Controller
             'maintenance' => [
                 'overdue' => MaintenanceSchedule::whereHas('equipment')->where('due_date', '<', now()->toDateString())->count(),
                 'soon' => MaintenanceSchedule::whereHas('equipment')->whereBetween('due_date', [now()->toDateString(), now()->addDays(7)->toDateString()])->count(),
-                'items' => MaintenanceSchedule::with('equipment:id,serial_number,name')->whereHas('equipment')->orderBy('due_date')->limit(6)->get(),
+                'items' => MaintenanceSchedule::with(Equipment::NAME_RELATIONS)->whereHas('equipment')->orderBy('due_date')->limit(6)->get()
+                    ->each(fn (MaintenanceSchedule $schedule) => $schedule->equipment->withDisplayName()),
             ],
             'issues' => [
                 'open' => IssueReport::whereHas('equipment')->where('status', 'open')->count(),
-                'items' => IssueReport::with('equipment:id,serial_number,name')->whereHas('equipment')->where('status', 'open')->latest('id')->limit(5)->get(),
+                'items' => IssueReport::with(Equipment::NAME_RELATIONS)->whereHas('equipment')->where('status', 'open')->latest('id')->limit(5)->get()
+                    ->each(fn (IssueReport $issue) => $issue->equipment->withDisplayName()),
             ],
             'custody' => [
                 'open' => Custody::open()->whereHas('equipment')->count(),
                 'overdue' => Custody::open()->whereHas('equipment')->where('due_back_at', '<', now()->toDateString())->count(),
                 // Names of people only with a PIN
                 'items' => $withPin
-                    ? Custody::open()->with('equipment:id,serial_number,name')->whereHas('equipment')->whereNotNull('due_back_at')->orderBy('due_back_at')->limit(5)->get()
+                    ? Custody::open()->with(Equipment::NAME_RELATIONS)->whereHas('equipment')->whereNotNull('due_back_at')->orderBy('due_back_at')->limit(5)->get()
+                        ->each(fn (Custody $custody) => $custody->equipment->withDisplayName())
                     : null,
             ],
-            'recent_equipment' => Equipment::with('fields')->withCount('accessories')->whereNull('parent_id')->latest('created_at')->latest('id')->limit(6)->get()
+            'recent_equipment' => Equipment::with(['fields', 'group:id,name'])->withCount('accessories')->whereNull('parent_id')->latest('created_at')->latest('id')->limit(6)->get()
                 ->map(fn (Equipment $e) => [
                     'id' => $e->id,
                     'serial_number' => $e->serial_number,
@@ -513,15 +519,16 @@ class EquipmentController extends Controller
 
     private function detail(Equipment $equipment): array
     {
-        $equipment->load(['fields', 'import', 'creator:id,name', 'updater:id,name', 'parent:id,serial_number,name,category', 'accessories.fields', 'boxes', 'group:id,name']);
+        $equipment->load(['fields', 'import', 'creator:id,name', 'updater:id,name', 'parent:id,serial_number,name,category,group_id', 'parent.fields', 'parent.group:id,name', 'accessories.fields', 'boxes', 'group:id,name']);
 
         return [
             'id' => $equipment->id,
             'serial_number' => $equipment->serial_number,
             'name' => $equipment->name,
+            'display_name' => self::displayName($equipment),
             'row_no' => $equipment->row_no,
             'category' => $equipment->category,
-            'parent' => $equipment->parent?->only(['id', 'serial_number', 'name', 'category']),
+            'parent' => $equipment->parent?->only(['id', 'serial_number', 'name', 'display_name', 'category']),
             'group' => $equipment->group?->only(['id', 'name']),
             'accessories' => $equipment->accessories->map(fn (Equipment $a) => [
                 'id' => $a->id,

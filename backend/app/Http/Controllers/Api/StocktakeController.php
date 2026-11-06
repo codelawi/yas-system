@@ -48,7 +48,7 @@ class StocktakeController extends Controller
         $serial = self::serialFromCode($data['code']);
         $existing = $stocktake->scans()->where('serial_number', $serial)->first();
         if ($existing) {
-            return ['status' => 'already', 'scan' => $existing->load('equipment:id,serial_number,name'), 'counts' => $this->counts($stocktake)];
+            return ['status' => 'already', 'scan' => $this->withEquipmentName($existing), 'counts' => $this->counts($stocktake)];
         }
 
         $equipment = Equipment::where('serial_number', $serial)->first();
@@ -64,7 +64,15 @@ class StocktakeController extends Controller
             'scanned_by' => $request->user()->id,
         ]);
 
-        return ['status' => $result, 'scan' => $scan->load('equipment:id,serial_number,name'), 'counts' => $this->counts($stocktake)];
+        return ['status' => $result, 'scan' => $this->withEquipmentName($scan), 'counts' => $this->counts($stocktake)];
+    }
+
+    /** An unknown label has no equipment. */
+    private function withEquipmentName(StocktakeScan $scan): StocktakeScan
+    {
+        $scan->load(Equipment::NAME_RELATIONS)->equipment?->withDisplayName();
+
+        return $scan;
     }
 
     public function destroyScan(Stocktake $stocktake, StocktakeScan $scan)
@@ -136,16 +144,16 @@ class StocktakeController extends Controller
 
     private function report(Stocktake $stocktake): array
     {
-        $scans = $stocktake->scans()->with(['equipment.fields', 'scannedBy:id,name'])->latest('id')->get();
+        $scans = $stocktake->scans()->with(['equipment.fields', 'equipment.group:id,name', 'scannedBy:id,name'])->latest('id')->get();
         $foundIds = $scans->where('result', 'found')->pluck('equipment_id')->filter()->all();
         $describe = fn (?Equipment $e) => $e ? [
             'id' => $e->id,
             'serial_number' => $e->serial_number,
-            'name' => $e->name ?: $e->fields->first(fn ($f) => in_array($f->key, ['اسم المعدة', 'الاسم', 'المعدة', 'النوع'], true))?->value,
+            'name' => EquipmentController::displayName($e),
             'location' => $e->fields->first(fn ($f) => in_array($f->key, ['المكان', 'الموقع', 'Location'], true))?->value,
         ] : [];
 
-        $missing = $stocktake->expectedQuery()->with('fields')->whereNotIn('id', $foundIds)->orderBy('serial_number')->limit(2000)->get()
+        $missing = $stocktake->expectedQuery()->with(['fields', 'group:id,name'])->whereNotIn('id', $foundIds)->orderBy('serial_number')->limit(2000)->get()
             ->map(fn (Equipment $e) => $describe($e))->values();
         $mapScan = fn (StocktakeScan $s) => $describe($s->equipment) + [
             'scan_id' => $s->id,

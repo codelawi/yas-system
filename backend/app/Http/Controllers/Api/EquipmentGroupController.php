@@ -29,7 +29,7 @@ class EquipmentGroupController extends Controller
 
     public function show(EquipmentGroup $group)
     {
-        $items = $group->equipment()->with('fields')->withCount('accessories')->orderBy('row_no')->orderBy('serial_number')->get();
+        $items = $group->equipment()->with(['fields', 'group:id,name'])->withCount('accessories')->orderBy('row_no')->orderBy('serial_number')->get();
 
         return [
             'id' => $group->id,

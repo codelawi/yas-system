@@ -339,7 +339,7 @@ function PrintPicker() {
                 <Link to={`/equipment/${r.id}`} className="serial">
                   {v}
                 </Link>
-                {r.name && <div className="list-name">{r.name}</div>}
+                {r.display_name && <div className="list-name">{r.display_name}</div>}
               </div>
             ),
           },
