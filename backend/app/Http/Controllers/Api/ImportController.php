@@ -83,6 +83,8 @@ class ImportController extends Controller
 
         return Equipment::with('fields')
             ->whereIn('serial_number', array_unique($data['serials']))
+            // Main equipment last, so it wins over an accessory with the same serial
+            ->orderByRaw('parent_id is null')
             ->get()
             ->mapWithKeys(fn (Equipment $e) => [$e->serial_number => [
                 'id' => $e->id,
@@ -163,7 +165,7 @@ class ImportController extends Controller
                 $category = ($item['category'] ?? null) ?: ($data['category'] ?? null);
 
                 Equipment::purgeTrashedSerial($serial);
-                $equipment = Equipment::with('fields')->where('serial_number', $serial)->first();
+                $equipment = Equipment::with('fields')->forSerial($serial)->first();
 
                 if ($equipment && $item['action'] !== 'overwrite') {
                     $errors[] = ['index' => $i, 'serial' => $serial, 'error' => 'exists'];
@@ -211,7 +213,7 @@ class ImportController extends Controller
                 }
 
                 foreach ($accessories as $acc) {
-                    $result = $this->importAccessory($equipment, $acc, $importId, $userId, $handled);
+                    $result = $this->importAccessory($equipment, $acc, $importId, $userId);
                     if ($result === true) {
                         $accessoryCount++;
                     } elseif ($result !== null) {
@@ -242,23 +244,16 @@ class ImportController extends Controller
     /**
      * Creates one accessory under $parent. Returns true when created, null when it
      * already belongs to this parent (nothing to do), or an error key.
+     * Its serial may repeat on other equipment, so only this parent's accessories are compared.
      */
-    private function importAccessory(Equipment $parent, array $acc, int $importId, int $userId, array &$handled): bool|string|null
+    private function importAccessory(Equipment $parent, array $acc, int $importId, int $userId): bool|string|null
     {
         $serial = $acc['serial'];
         if ($parent->isAccessory()) {
             return 'nested_accessory';
         }
-        if (isset($handled[$serial])) {
-            return 'duplicate_in_upload';
-        }
-        $handled[$serial] = true;
-
-        Equipment::purgeTrashedSerial($serial);
-        $existing = Equipment::where('serial_number', $serial)->first();
-        if ($existing) {
-            // Accessories are fixed to their main equipment
-            return $existing->parent_id === $parent->id ? null : 'accessory_taken';
+        if ($parent->accessories()->where('serial_number', $serial)->where('name', $acc['name'])->exists()) {
+            return null;
         }
 
         $accessory = Equipment::create([

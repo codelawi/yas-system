@@ -88,7 +88,7 @@ export default function CustodyPage() {
             render: (_, r) => (
               <div>
                 <Link to={`/equipment/${r.equipment.id}`} className="serial">
-                  {r.equipment.serial_number}
+                  {r.equipment.serial_number || '—'}
                 </Link>
                 {r.equipment.display_name && <div className="list-name">{r.equipment.display_name}</div>}
                 {r.equipment.parent && <div className="list-name">↳ {r.equipment.parent.serial_number}</div>}
@@ -144,7 +144,7 @@ export default function CustodyPage() {
           },
         ]}
       />
-      <Modal open={!!receiving} title={`${t('take_back')} · ${receiving?.equipment.serial_number}`} okText={t('save')} cancelText={t('cancel')} onOk={receive} onCancel={() => setReceiving(null)}>
+      <Modal open={!!receiving} title={`${t('take_back')} · ${receiving?.equipment.serial_number || receiving?.equipment.display_name || ''}`} okText={t('save')} cancelText={t('cancel')} onOk={receive} onCancel={() => setReceiving(null)}>
         <Typography.Paragraph>{receiving && t('in_custody_with', { name: receiving.holder })}</Typography.Paragraph>
         <Input.TextArea autoSize={{ minRows: 2 }} placeholder={t('return_notes')} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Modal>

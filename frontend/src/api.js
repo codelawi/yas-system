@@ -37,10 +37,10 @@ export function errorKey(error) {
   return data?.message || error?.message
 }
 
-/** Link printed inside the QR code for a serial number. */
+/** Link printed inside the QR code for a serial number (an accessory without one gets the system's address). */
 export function equipmentUrl(settings, serial) {
   const base = (settings?.base_url || window.location.origin).replace(/\/+$/, '')
-  return `${base}/eq/${encodeURIComponent(serial)}`
+  return serial ? `${base}/eq/${encodeURIComponent(serial)}` : base
 }
 
 /** Link printed inside the QR code on a box label. */

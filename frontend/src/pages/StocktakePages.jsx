@@ -221,7 +221,7 @@ export function StocktakePage() {
     {
       title: t('serial_number'),
       dataIndex: 'serial_number',
-      render: (v, r) => (r.id ? <Link to={`/equipment/${r.id}`} className="serial">{v}</Link> : <span className="serial">{v}</span>),
+      render: (v, r) => (r.id ? <Link to={`/equipment/${r.id}`} className="serial">{v || '—'}</Link> : <span className="serial">{v}</span>),
     },
     { title: t('name_field'), dataIndex: 'name', render: (v) => v || '—' },
     { title: t('recorded_location'), dataIndex: 'location', render: (v) => v || '—' },

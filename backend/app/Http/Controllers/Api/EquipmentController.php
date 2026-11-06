@@ -139,7 +139,7 @@ class EquipmentController extends Controller
 
     public function bySerial(string $serial)
     {
-        $equipment = Equipment::where('serial_number', $serial)->firstOrFail();
+        $equipment = Equipment::forSerial($serial)->firstOrFail();
 
         return $this->detail($equipment);
     }
@@ -328,8 +328,10 @@ class EquipmentController extends Controller
     {
         $ids = array_filter(array_map('intval', (array) $request->query('ids', [])));
 
+        // An accessory without a serial has no QR link, so no label
         return Equipment::with(['parent:id,serial_number', 'fields', 'group:id,name'])
             ->whereIn('id', $ids)
+            ->whereNotNull('serial_number')
             ->orderByRaw('coalesce(parent_id, id), parent_id is not null, serial_number')
             ->get()
             ->map(fn (Equipment $e) => [
@@ -554,10 +556,16 @@ class EquipmentController extends Controller
     private function validated(Request $request, ?Equipment $equipment = null): array
     {
         $request->merge(['serial_number' => trim((string) $request->input('serial_number'))]);
-        Equipment::purgeTrashedSerial($request->input('serial_number'));
+        // Only main equipment needs a unique serial; an accessory's may repeat or be empty
+        $isAccessory = $equipment ? $equipment->isAccessory() : $request->filled('parent_id');
+        if (! $isAccessory) {
+            Equipment::purgeTrashedSerial($request->input('serial_number'));
+        }
 
         $data = $request->validate([
-            'serial_number' => ['required', 'string', 'max:191', Rule::unique('equipment', 'serial_number')->ignore($equipment?->id)],
+            'serial_number' => $isAccessory
+                ? ['nullable', 'string', 'max:191']
+                : ['required', 'string', 'max:191', Rule::unique('equipment', 'serial_number')->whereNull('parent_id')->ignore($equipment?->id)],
             'name' => ['nullable', 'string', 'max:191'],
             'row_no' => ['nullable', 'integer', 'min:0', 'max:999999999'],
             'category' => ['nullable', 'string', 'max:191'],
@@ -569,6 +577,7 @@ class EquipmentController extends Controller
             'fields.*.value' => ['nullable', 'string', 'max:10000'],
         ], ['serial_number.unique' => 'serial_taken']);
 
+        $data['serial_number'] = ($data['serial_number'] ?? '') ?: null;
         $data['fields'] = array_values(array_map(fn ($f) => [
             'key' => trim($f['key']),
             'value' => isset($f['value']) ? trim($f['value']) : null,

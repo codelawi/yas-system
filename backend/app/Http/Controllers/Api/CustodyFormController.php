@@ -135,7 +135,7 @@ class CustodyFormController extends Controller
         abort_unless($form->usesTags() && Storage::exists($form->file_path), 404);
         $data = CustodyFormData::for($custody);
         $path = CustodyFormData::fill(Storage::path($form->file_path), $form->kind, $data);
-        $name = 'عهدة-'.preg_replace('#[\\\\/:*?"<>|]+#', '-', $data['serial_number']).'.'.$form->kind;
+        $name = 'عهدة-'.preg_replace('#[\\\\/:*?"<>|]+#', '-', (string) $data['serial_number']).'.'.$form->kind;
 
         return response()->download($path, $name)->deleteFileAfterSend();
     }

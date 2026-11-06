@@ -65,7 +65,7 @@ class ImportFlowTest extends TestCase
         $this->assertSame('تمساح', Equipment::where('serial_number', 'CRC-1')->value('name'));
     }
 
-    public function test_accessory_serial_owned_by_another_equipment_is_reported(): void
+    public function test_accessory_serial_may_repeat_on_another_equipment(): void
     {
         $other = Equipment::create(['serial_number' => 'MAIN-A']);
         Equipment::create(['serial_number' => 'ACC-1', 'parent_id' => $other->id]);
@@ -79,9 +79,22 @@ class ImportFlowTest extends TestCase
                 'fields' => [],
                 'accessories' => [['name' => 'x', 'serial' => 'ACC-1']],
             ]],
-        ])->assertOk()->assertJsonPath('errors.0.error', 'accessory_taken');
+        ])->assertOk()->assertJson(['created' => 1, 'accessories' => 1, 'errors' => []]);
 
-        $this->assertSame($other->id, Equipment::where('serial_number', 'ACC-1')->value('parent_id'));
+        $this->assertSame(2, Equipment::where('serial_number', 'ACC-1')->count());
+        $this->assertSame(1, $other->accessories()->count());
+
+        // Importing the same accessory again under the same equipment adds nothing
+        $this->postJson('/api/imports/commit', [
+            'items' => [[
+                'import_id' => $importId,
+                'action' => 'overwrite',
+                'serial' => 'MAIN-B',
+                'fields' => [],
+                'accessories' => [['name' => 'x', 'serial' => 'ACC-1']],
+            ]],
+        ])->assertOk()->assertJson(['accessories' => 0]);
+        $this->assertSame(2, Equipment::where('serial_number', 'ACC-1')->count());
     }
 
     public function test_check_reports_existing_serials(): void

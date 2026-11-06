@@ -99,7 +99,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
       <Button type="primary" icon={<EditOutlined />} onClick={edit} size={mobile ? 'large' : 'middle'}>
         {t('edit')}
       </Button>
-      {!mobile && (
+      {!mobile && equipment.serial_number && (
         <Button icon={<PrinterOutlined />} onClick={() => printLabels([equipment.id])}>
           {t('print_label')}
         </Button>
@@ -138,8 +138,8 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
       }
       extra={
         <div className="page-actions">
-          {!mobile && accessories.length > 0 && (
-            <Button size="small" icon={<PrinterOutlined />} onClick={() => printLabels(accessories.map((a) => a.id))}>
+          {!mobile && accessories.some((a) => a.serial_number) && (
+            <Button size="small" icon={<PrinterOutlined />} onClick={() => printLabels(accessories.filter((a) => a.serial_number).map((a) => a.id))}>
               {t('print_accessory_labels')}
             </Button>
           )}
@@ -153,9 +153,9 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
       {accessories.length ? (
         <div className="accessory-list">
           {accessories.map((a) => (
-            <Link key={a.id} to={linkTo(a)} className="accessory-item">
+            <Link key={a.id} to={`/equipment/${a.id}`} className="accessory-item">
               <span className="accessory-name">{a.name || t('accessory')}</span>
-              <span className="serial">{a.serial_number}</span>
+              <span className="serial">{a.serial_number || '—'}</span>
               {a.fields.length > 0 && (
                 <Typography.Text type="secondary" className="accessory-extra">
                   {a.fields
@@ -181,8 +181,8 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
             {isAccessory ? t('accessory') : t('serial_number')}
             {equipment.display_name && ` · ${equipment.display_name}`}
           </Typography.Text>
-          <Typography.Title level={mobile ? 2 : 3} className="serial" style={{ margin: 0 }} copyable>
-            {equipment.serial_number}
+          <Typography.Title level={mobile ? 2 : 3} className="serial" style={{ margin: 0 }} copyable={!!equipment.serial_number}>
+            {equipment.serial_number || equipment.display_name || t('accessory')}
           </Typography.Title>
           {equipment.row_no != null && <Tag title={t('row_no_long')}>{t('row_no')} {equipment.row_no}</Tag>}
           {equipment.category && <Tag color="blue">{equipment.category}</Tag>}
@@ -257,7 +257,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
         </Col>
         <Col xs={24} lg={8}>
           {!mobile && photo}
-          {!mobile && (
+          {!mobile && equipment.serial_number && (
             <Card title={t('qr_code')} style={{ marginBottom: 16 }}>
               {qrPointsToLocalhost(settings) && <Alert type="warning" showIcon title={t('localhost_warning')} style={{ marginBottom: 12 }} />}
               <div className="qr-box">

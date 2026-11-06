@@ -187,7 +187,7 @@ export default function EquipmentList() {
       sortOrder: sortOrder('serial_number'),
       render: (v, r) => (
         <Link to={`/equipment/${r.id}`} className="serial list-big">
-          {v}
+          {v || '—'}
         </Link>
       ),
     },

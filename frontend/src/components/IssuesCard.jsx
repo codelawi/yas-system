@@ -112,7 +112,7 @@ export function ReportProblemModal({ equipment, open, onClose, onSent }) {
   }
 
   return (
-    <Modal open={open} title={`${t('report_problem')} · ${equipment.serial_number}`} okText={t('confirm')} cancelText={t('cancel')} onOk={send} onCancel={onClose} confirmLoading={sending} forceRender>
+    <Modal open={open} title={`${t('report_problem')} · ${equipment.serial_number || equipment.name || t('accessory')}`} okText={t('confirm')} cancelText={t('cancel')} onOk={send} onCancel={onClose} confirmLoading={sending} forceRender>
       <Form form={form} layout="vertical">
         <Form.Item name="description" label={t('problem_desc')} rules={[{ required: true, whitespace: true, message: t('problem_desc') }]}>
           <Input.TextArea autoSize={{ minRows: 3 }} />

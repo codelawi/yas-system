@@ -31,7 +31,7 @@ export default function EquipmentPicker({ open, title, hint, exclude = [], exclu
             label: (
               <span>
                 {e.display_name && `${e.display_name} · `}
-                <span className="serial">{e.serial_number}</span>
+                <span className="serial">{e.serial_number || '—'}</span>
                 {e.parent && <Typography.Text type="secondary"> ↳ {e.parent.serial_number}</Typography.Text>}
                 {e.accessories_count > 0 && <Typography.Text type="secondary"> (+{t('n_accessories', { n: e.accessories_count })})</Typography.Text>}
                 {excluded.has(e.id) && <Tag style={{ marginInlineStart: 6 }}>{excludedLabel}</Tag>}

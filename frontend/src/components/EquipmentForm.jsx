@@ -71,7 +71,7 @@ export default function EquipmentForm({ open, equipment, parent, group, onClose,
       )}
       <Form form={form} layout="vertical">
         <div className="form-grid">
-          <Form.Item name="serial_number" label={t('serial_number')} rules={[{ required: true, whitespace: true, message: t('serial_number') }]}>
+          <Form.Item name="serial_number" label={t('serial_number')} rules={[{ required: !parent && !equipment?.parent, whitespace: true, message: t('serial_number') }]}>
             <Input />
           </Form.Item>
           <Form.Item name="name" label={t('name_field')}>

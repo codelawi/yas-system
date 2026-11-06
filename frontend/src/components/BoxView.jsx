@@ -143,7 +143,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
   const [creating, setCreating] = useState(false)
   const [addingGroups, setAddingGroups] = useState(false)
   const url = boxUrl(settings, box.number)
-  const linkTo = (eq) => (mobile ? `/eq/${encodeURIComponent(eq.serial_number)}` : `/equipment/${eq.id}`)
+  const linkTo = (eq) => (mobile && !eq.parent ? `/eq/${encodeURIComponent(eq.serial_number)}` : `/equipment/${eq.id}`)
   const withPin = (open) => async () => {
     if (await requirePin()) open(true)
   }
@@ -353,7 +353,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
                               <span className="box-item-photo box-item-nophoto">{!printMode && <PictureOutlined />}</span>
                             )}
                             <span className="box-item-text">
-                              <span className="box-item-name">{eq.display_name || eq.serial_number}</span>
+                              <span className="box-item-name">{eq.display_name || eq.serial_number || t('accessory')}</span>
                               {/* A few details instead of the serial number (it is on the equipment's own page) */}
                               {eq.summary?.length > 0 && (
                                 <span className="box-item-details">
