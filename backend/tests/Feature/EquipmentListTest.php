@@ -26,6 +26,36 @@ class EquipmentListTest extends TestCase
         $this->assertNull($names['A-3']);
     }
 
+    public function test_accessory_serial_may_repeat_or_be_empty_but_main_serial_may_not(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $main = Equipment::create(['serial_number' => 'M-1']);
+        $other = Equipment::create(['serial_number' => 'M-2']);
+
+        $this->postJson('/api/equipment', ['serial_number' => 'A-1', 'parent_id' => $main->id])->assertOk();
+        $this->postJson('/api/equipment', ['serial_number' => 'A-1', 'parent_id' => $other->id])->assertOk();
+        $noSerial = $this->postJson('/api/equipment', ['serial_number' => '', 'name' => 'خرطوم', 'parent_id' => $main->id])
+            ->assertOk()
+            ->assertJsonPath('serial_number', null)
+            ->json('id');
+        $this->postJson('/api/equipment', ['parent_id' => $main->id])->assertOk();
+
+        // A serial used by a main equipment is free for an accessory, and the main one opens first
+        $this->postJson('/api/equipment', ['serial_number' => 'M-1', 'parent_id' => $other->id])->assertOk();
+        $this->getJson('/api/equipment/serial/M-1')->assertJsonPath('id', $main->id);
+
+        $this->putJson("/api/equipment/{$noSerial}", ['serial_number' => 'A-1', 'name' => 'خرطوم'])->assertOk();
+        $this->putJson("/api/equipment/{$noSerial}", ['serial_number' => '', 'name' => 'خرطوم'])->assertOk()->assertJsonPath('serial_number', null);
+
+        // No QR link, so no label
+        $this->getJson("/api/equipment/labels?ids[]={$noSerial}")->assertOk()->assertJsonCount(0);
+
+        // Main equipment keeps both rules
+        $this->postJson('/api/equipment', ['serial_number' => 'M-1'])->assertJsonValidationErrors(['serial_number' => 'serial_taken']);
+        $this->postJson('/api/equipment', ['serial_number' => ''])->assertJsonValidationErrors('serial_number');
+        $this->putJson("/api/equipment/{$other->id}", ['serial_number' => 'M-1'])->assertJsonValidationErrors(['serial_number' => 'serial_taken']);
+    }
+
     public function test_bulk_delete_removes_equipment_with_their_accessories(): void
     {
         Sanctum::actingAs(User::factory()->create());

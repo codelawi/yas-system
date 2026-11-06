@@ -45,7 +45,7 @@ export function PrintSheet() {
     api.get(`/equipment/${id}`).then(({ data }) => setEq(data))
     api.get(`/equipment/${id}/maintenance`).then(({ data }) => setDates(data.schedules))
   }, [id])
-  useAutoPrint(eq && qrReady)
+  useAutoPrint(eq && (qrReady || !eq.serial_number))
 
   if (!eq) return <Spin size="large" className="page-spin" />
 
@@ -56,12 +56,12 @@ export function PrintSheet() {
       <header className="print-head">
         <div>
           {settings.company_name && <div className="print-company">{settings.company_name}</div>}
-          <h1 className="serial">{eq.serial_number}</h1>
+          <h1 className="serial">{eq.serial_number || eq.display_name || t('accessory')}</h1>
           <div className="print-sub">
             {[eq.display_name, eq.category, eq.row_no != null && `${t('row_no')} ${eq.row_no}`, eq.parent && `${t('accessory_of')} ${eq.parent.serial_number}`].filter(Boolean).join(' · ')}
           </div>
         </div>
-        <QrCode value={equipmentUrl(settings, eq.serial_number)} size={110} onReady={() => setQrReady(true)} />
+        {eq.serial_number && <QrCode value={equipmentUrl(settings, eq.serial_number)} size={110} onReady={() => setQrReady(true)} />}
       </header>
 
       <h2>{t('details')}</h2>
@@ -92,7 +92,7 @@ export function PrintSheet() {
               {eq.accessories.map((a) => (
                 <tr key={a.id}>
                   <td>{a.name || '—'}</td>
-                  <td className="serial">{a.serial_number}</td>
+                  <td className="serial">{a.serial_number || '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -186,7 +186,7 @@ export function PrintList() {
           {items.map((e) => (
             <tr key={e.id}>
               <td>{e.row_no ?? ''}</td>
-              <td className="serial">{e.serial_number}</td>
+              <td className="serial">{e.serial_number || '—'}</td>
               <td>{e.display_name}</td>
               <td>{e.parent ? `↳ ${e.parent.serial_number}` : e.accessories_count || ''}</td>
               <td className="print-fields">

@@ -337,7 +337,7 @@ function PrintPicker() {
             render: (v, r) => (
               <div>
                 <Link to={`/equipment/${r.id}`} className="serial">
-                  {v}
+                  {v || '—'}
                 </Link>
                 {r.display_name && <div className="list-name">{r.display_name}</div>}
               </div>

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Http\Controllers\Api\EquipmentController;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -113,10 +114,16 @@ class Equipment extends Model
 
     protected $casts = ['row_no' => 'integer'];
 
-    /** A deleted equipment must not block its serial number from being used again. */
+    /** A deleted main equipment must not block its serial number from being used again. */
     public static function purgeTrashedSerial(string $serial): void
     {
-        static::onlyTrashed()->where('serial_number', $serial)->get()->each->forceDelete();
+        static::onlyTrashed()->whereNull('parent_id')->where('serial_number', $serial)->get()->each->forceDelete();
+    }
+
+    /** Equipment with this serial: accessories may share one, so main equipment comes first. */
+    public function scopeForSerial(Builder $query, string $serial): void
+    {
+        $query->where('serial_number', $serial)->orderByRaw('parent_id is not null')->orderBy('id');
     }
 
     /** @return array<int, array{key: string, value: ?string}> */

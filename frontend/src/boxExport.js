@@ -142,7 +142,7 @@ export async function downloadBoxDocx(box, { url, t, filename }) {
           verticalAlign: VerticalAlign.CENTER,
           margins: { top: 100, bottom: 100, left: 200, right: 200 },
           children: [
-            para([text(eq.display_name || eq.serial_number, { size: 30, bold: true, color: '111827' })]),
+            para([text(eq.display_name || eq.serial_number || t('accessory'), { size: 30, bold: true, color: '111827' })]),
             ...(details ? [para([text(details, { size: 23, color: '6B7280' })])] : []),
             ...(eq.parent ? [para([text(`↳ ${t('accessory_of')} ${eq.parent.display_name || eq.parent.serial_number}`, { size: 23, color: '6B7280' })])] : []),
           ],

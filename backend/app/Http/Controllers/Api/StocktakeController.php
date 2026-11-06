@@ -51,7 +51,7 @@ class StocktakeController extends Controller
             return ['status' => 'already', 'scan' => $this->withEquipmentName($existing), 'counts' => $this->counts($stocktake)];
         }
 
-        $equipment = Equipment::where('serial_number', $serial)->first();
+        $equipment = Equipment::forSerial($serial)->first();
         $result = match (true) {
             ! $equipment => 'unknown',
             $stocktake->expectedQuery()->whereKey($equipment->id)->exists() => 'found',
