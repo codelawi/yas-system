@@ -83,6 +83,19 @@ class EquipmentGroupTest extends TestCase
         $this->getJson("/api/boxes/{$box->id}")->assertJsonPath('equipment.0.parent.display_name', 'وحدة الفتح والقص');
     }
 
+    public function test_searching_the_grouped_list_finds_accessories_of_grouped_equipment(): void
+    {
+        $group = EquipmentGroup::create(['name' => 'وحدات']);
+        $unit = Equipment::create(['serial_number' => 'U-1', 'group_id' => $group->id]);
+        $battery = Equipment::create(['serial_number' => 'U-1ACC01', 'name' => 'بطارية', 'parent_id' => $unit->id]);
+        $battery->syncFields([['key' => 'عدد', 'value' => '2']]);
+        $serials = fn (string $query) => collect($this->getJson('/api/equipment?ungrouped=1'.$query)->assertOk()->json('data'))->pluck('serial_number')->all();
+
+        $this->assertSame([], $serials(''));
+        $this->assertSame(['U-1ACC01'], $serials('&q=ACC01'));
+        $this->assertSame(['U-1ACC01'], $serials('&q='.urlencode('بطارية')));
+    }
+
     public function test_names_that_differ_only_in_spelling_are_one_group(): void
     {
         $this->signIn();

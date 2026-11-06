@@ -19,6 +19,11 @@ use RuntimeException;
 
 class ImportController extends Controller
 {
+    /** Fields of an accessory whose cell held a count instead of a serial. */
+    private const QUANTITY_FIELD = 'عدد';
+
+    private const NOTE_FIELD = 'ملاحظات';
+
     public function index()
     {
         return Import::with('user:id,name')
@@ -110,6 +115,8 @@ class ImportController extends Controller
             'items.*.serial' => ['nullable', 'string', 'max:191'],
             'items.*.row_no' => ['nullable', 'integer', 'min:0'],
             'items.*.category' => ['nullable', 'string', 'max:191'],
+            // Chosen for this item in the Word editor: a group, or null for none. Left out: the import's group
+            'items.*.group_id' => ['nullable', 'integer', 'exists:equipment_groups,id'],
             'items.*.fields' => ['array'],
             'items.*.fields.*.key' => ['required', 'string', 'max:255'],
             'items.*.fields.*.value' => ['nullable', 'string', 'max:10000'],
@@ -117,6 +124,10 @@ class ImportController extends Controller
             'items.*.accessories' => ['sometimes', 'array'],
             'items.*.accessories.*.name' => ['nullable', 'string', 'max:191'],
             'items.*.accessories.*.serial' => ['required', 'string', 'max:191'],
+            // How many there are, a note, and the cell's text, when the cell held a count instead of a serial
+            'items.*.accessories.*.quantity' => ['nullable', 'integer', 'min:1'],
+            'items.*.accessories.*.note' => ['nullable', 'string', 'max:10000'],
+            'items.*.accessories.*.raw' => ['nullable', 'string', 'max:191'],
         ]);
 
         $userId = $request->user()->id;
@@ -125,12 +136,15 @@ class ImportController extends Controller
         $accessoryCount = 0;
         $accessoryKeys = array_flip($data['accessory_keys'] ?? []);
 
-        $group = isset($data['group_id']) ? EquipmentGroup::find($data['group_id']) : null;
+        $importGroup = isset($data['group_id']) ? EquipmentGroup::find($data['group_id']) : null;
+        $itemGroups = EquipmentGroup::whereIn('id', array_filter(array_column($data['items'], 'group_id')))->get()->keyBy('id');
 
-        DB::transaction(function () use ($data, $userId, $accessoryKeys, $group, &$counts, &$errors, &$accessoryCount) {
+        DB::transaction(function () use ($data, $userId, $accessoryKeys, $importGroup, $itemGroups, &$counts, &$errors, &$accessoryCount) {
             $handled = [];
             foreach ($data['items'] as $i => $item) {
                 $importId = $item['import_id'];
+                $groupChosen = array_key_exists('group_id', $item);
+                $group = $groupChosen ? $itemGroups->get($item['group_id']) : $importGroup;
                 $counts[$importId] ??= ['created' => 0, 'updated' => 0, 'skipped' => 0];
                 $serial = trim((string) ($item['serial'] ?? ''));
 
@@ -148,7 +162,7 @@ class ImportController extends Controller
                 $handled[$serial] = true;
 
                 $fields = [];
-                $accessories = array_map(fn ($a) => ['name' => $a['name'] ?? null, 'serial' => trim($a['serial'])], $item['accessories'] ?? []);
+                $accessories = array_map(fn ($a) => ['serial' => trim($a['serial'])] + $a + ['name' => null], $item['accessories'] ?? []);
                 foreach ($item['fields'] ?? [] as $f) {
                     $key = trim($f['key']);
                     if (! isset($item['accessories']) && isset($accessoryKeys[$key])) {
@@ -205,7 +219,7 @@ class ImportController extends Controller
                     ActivityLog::record($equipment, 'imported', ['added' => $equipment->fieldList()], $userId);
                     if ($group) {
                         ActivityLog::record($equipment, 'group_changed', ['summary' => '→ '.$group->name], $userId);
-                    } else {
+                    } elseif (! $groupChosen) {
                         // A new unit joins the group of its kind (same name), if there is one
                         EquipmentGroup::joinByName($equipment);
                     }
@@ -252,7 +266,20 @@ class ImportController extends Controller
         if ($parent->isAccessory()) {
             return 'nested_accessory';
         }
-        if ($parent->accessories()->where('serial_number', $serial)->where('name', $acc['name'])->exists()) {
+        $details = array_values(array_filter([
+            isset($acc['quantity']) ? ['key' => self::QUANTITY_FIELD, 'value' => (string) $acc['quantity']] : null,
+            isset($acc['note']) ? ['key' => self::NOTE_FIELD, 'value' => $acc['note']] : null,
+        ]));
+
+        // Imported before as well: by its serial, or by the cell's text from when that was kept as the serial
+        $existing = $parent->accessories()->where('name', $acc['name'])->whereIn('serial_number', array_filter([$serial, $acc['raw'] ?? null]))->first();
+        if ($existing) {
+            if ($details) {
+                $kept = array_filter($existing->fieldList(), fn (array $f) => ! in_array($f['key'], array_column($details, 'key'), true));
+                $existing->update(['serial_number' => $serial, 'updated_by' => $userId]);
+                $existing->syncFields([...$kept, ...$details]);
+            }
+
             return null;
         }
 
@@ -265,6 +292,7 @@ class ImportController extends Controller
             'created_by' => $userId,
             'updated_by' => $userId,
         ]);
+        $accessory->syncFields($details);
         ActivityLog::record($accessory, 'imported', null, $userId);
         ActivityLog::record($parent, 'accessory_added', ['accessory' => $accessory->only(['id', 'serial_number', 'name'])], $userId);
 
