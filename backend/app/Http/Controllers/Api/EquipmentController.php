@@ -87,9 +87,9 @@ class EquipmentController extends Controller
                 : $query->where('category', $request->query('category')))
             ->when($request->filled('import_id'), fn ($query) => $query->where('import_id', $request->query('import_id')))
             ->when($request->filled('group_id'), fn ($query) => $query->where('group_id', $request->query('group_id')))
-            // Grouped list: what is not in a group (accessories of grouped equipment show inside their group)
+            // Grouped list: what is not in a group. Accessories of grouped equipment only show when searched for
             ->when($request->boolean('ungrouped'), fn ($query) => $query->whereNull('group_id')
-                ->where(fn ($w) => $w->whereNull('parent_id')->orWhereHas('parent', fn ($p) => $p->whereNull('group_id'))))
+                ->when($q === '', fn ($list) => $list->where(fn ($w) => $w->whereNull('parent_id')->orWhereHas('parent', fn ($p) => $p->whereNull('group_id')))))
             ->tap(fn ($query) => $this->applyFieldFilters($query, $request))
             ->when($request->query('type') === 'main', fn ($query) => $query->whereNull('parent_id'))
             ->when($request->query('type') === 'accessory', fn ($query) => $query->whereNotNull('parent_id'));

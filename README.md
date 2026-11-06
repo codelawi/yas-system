@@ -109,15 +109,20 @@ cd frontend && npm run build
 `composer.json` pins the PHP platform to 8.3, so `vendor/` also works on the Windows PC's PHP.
 
 ## Word import rules
-- After uploading, click **عرض الجداول وتخصيصها (View & customize tables)** for a file. It opens its tables as they look in Word. For each table:
-  - Choose the layout: *rows*, *Key | Value*, or *ignore*.
-  - Click a row number to make it the header row.
-  - Choose a role for every column or key: serial, ت, field (renamable), accessory, or ignore.
-  - The result (items and accessories) updates live, and **Apply** updates the review list.
+- After uploading, click **فتح الملف وتخصيصه (Open & customize file)**. It opens the file's tables on one full page, as they look in Word, with a toolbar above them. Changes apply to this import only; the Word file does not change.
+  - **Edit**: type in any cell, insert or delete rows and columns, paste a block from Excel, and undo with Ctrl+Z. **New table** adds a table of your own.
+  - **Select with the mouse**: drag, or use Shift and Ctrl; a row number or column head selects the whole line. Then choose a type for the selection: serial, ت, field, accessory or ignore. Selecting a header cell or every item in a column sets the column; fewer cells set those cells only.
+  - **Link to a cell**: select a cell, press **Link to a cell**, then click the cell to take the value from. The value follows later edits to that cell. On a cell in an item's row, it sets that item's field. On a header or title cell, the cell's text is the field name and every item in the table gets it.
+  - **Group**: each table can use the group from the review page, no group, an existing group or a new one. Rows can have their own choice from the toolbar. "No group" also stops the item joining a group with its name; an item being overwritten keeps its current group.
+  - For each table choose the layout: *rows*, *Key | Value* or *ignore*. The star button makes the selected row the header row.
+  - Opening the file and applying again clears the changes made in the review list for that file.
 - The serial column is found by name. The names are set in **Settings** → *Serial number column names* (default includes `الرقم التسلسلي` and its `ى` spelling, `Serial Number`, `SN`, `S/N`).
 - In a header-row table, the other columns become fields of that equipment. For LUKAS this means the serials of the parts (مضخة يدوية, تمساح…). Empty cells are skipped.
 - **Row number «ت»**: the table's row-number column (default names: `ت`, `م`, `تسلسل`, `#`, `No`; edit them in **Settings**) is saved as the equipment's **ت**, not as a normal field. Arabic digits (١٢٣) are understood. ت restarts in every table and stays empty when a table has no ت column. It shows as a sortable column in the equipment list and on the QR label (it can be hidden on the QR page).
-- **Accessory columns**: in the review step, choose the columns that hold accessory serials (e.g. `مضخة يدوية`, `تمساح`, `خراطيم`). Each value becomes an accessory named after its column and linked to that row's equipment. A cell with several serials on separate lines creates several accessories. The choice is remembered for the next import. The same serial may repeat on other equipment; importing the same accessory again under the same equipment adds nothing.
+- **Accessory columns**: in the review step, choose the columns that hold accessories (e.g. `مضخة يدوية`, `تمساح`, `خراطيم`). Each value becomes an accessory named after its column and linked to that row's equipment. A cell with several lines creates several accessories.
+  - A number of up to 3 digits is how many there are. It is saved in the accessory's `عدد` field, and its serial is made from the equipment's: serial `5501` gives `5501ACC01`, `5501ACC02`… in the order of the accessories in that row. Arabic text after the number (`1حقيبة كتان`) goes in a `ملاحظات` field.
+  - Any other value is the accessory's own serial. A count of 0, or a cell with no letter or digit such as `-`, creates no accessory.
+  - Importing the same row again updates these accessories, including ones saved earlier with the count as their serial. The choice is remembered for the next import. The same serial may repeat on other equipment; importing the same accessory again under the same equipment adds nothing.
 - A vertically merged cell (e.g. one `المكان` for several rows) gives its value to each row.
 - If a table has no serial column, its rows show as *No serial number*. You can type the serials in the review step.
 - Only `.docx` is supported. Save old `.doc` files as `.docx` first.

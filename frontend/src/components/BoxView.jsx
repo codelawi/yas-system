@@ -1,7 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, App, Button, Card, Col, Dropdown, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row, Tag, Typography } from 'antd'
-import { AppstoreAddOutlined, AppstoreOutlined, ClusterOutlined, DashboardOutlined, DeleteOutlined, FileTextOutlined, DownOutlined, MinusCircleOutlined, EditOutlined, InboxOutlined, PictureOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
+import {
+  AppstoreAddOutlined,
+  AppstoreOutlined,
+  ClusterOutlined,
+  DashboardOutlined,
+  DeleteOutlined,
+  DownOutlined,
+  EditOutlined,
+  FileTextOutlined,
+  InboxOutlined,
+  MinusCircleOutlined,
+  PictureOutlined,
+  PlusOutlined,
+  PrinterOutlined,
+  UpOutlined,
+} from '@ant-design/icons'
 import api, { boxUrl, errorKey } from '../api'
 import { useLang } from '../i18n'
 import { useAuth } from '../auth'
@@ -73,6 +88,24 @@ export function BoxForm({ open, box, onClose, onSaved }) {
   )
 }
 
+const FOLDED_KEY = 'repo_box_accessories_folded'
+
+function storedFolded() {
+  try {
+    return localStorage.getItem(FOLDED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function rememberFolded(value) {
+  try {
+    localStorage.setItem(FOLDED_KEY, value ? '1' : '0')
+  } catch {
+    /* only a convenience */
+  }
+}
+
 /** Put every unit of one or more groups (with their accessories) in the box. */
 function AddGroupsModal({ open, box, onClose, onAdded }) {
   const { t } = useLang()
@@ -142,7 +175,25 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
   const [picking, setPicking] = useState(false)
   const [creating, setCreating] = useState(false)
   const [addingGroups, setAddingGroups] = useState(false)
+  // Main equipment whose accessories are folded away; the choice for the whole list is remembered
+  const [folded, setFolded] = useState(() => new Set(storedFolded() ? box.equipment.flatMap((e) => (e.parent ? [e.parent.id] : [])) : []))
   const url = boxUrl(settings, box.number)
+  const mainIds = new Set(box.equipment.filter((e) => !e.parent).map((e) => e.id))
+  const accessoriesOf = (id) => box.equipment.filter((e) => e.parent?.id === id).length
+  const foldable = [...mainIds].filter((id) => accessoriesOf(id) > 0)
+  const canFold = !printMode && !managing
+  const isHidden = (eq) => canFold && !!eq.parent && mainIds.has(eq.parent.id) && folded.has(eq.parent.id)
+  const allFolded = foldable.length > 0 && foldable.every((id) => folded.has(id))
+  const toggleOne = (id) =>
+    setFolded((set) => {
+      const next = new Set(set)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+  const toggleAll = () => {
+    setFolded(new Set(allFolded ? [] : foldable))
+    rememberFolded(!allFolded)
+  }
   const linkTo = (eq) => (mobile && !eq.parent ? `/eq/${encodeURIComponent(eq.serial_number)}` : `/equipment/${eq.id}`)
   const withPin = (open) => async () => {
     if (await requirePin()) open(true)
@@ -305,7 +356,19 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={printMode ? 24 : 16}>
           {/* No frame around the contents on the printed sheet */}
-          <Card title={`${t('box_contents')} (${box.equipment.length})`} variant={printMode ? 'borderless' : undefined} className={printMode ? 'box-contents-print' : undefined}>
+          <Card
+            title={`${t('box_contents')} (${box.equipment.length})`}
+            variant={printMode ? 'borderless' : undefined}
+            className={printMode ? 'box-contents-print' : undefined}
+            extra={
+              canFold &&
+              foldable.length > 0 && (
+                <Button size="small" icon={allFolded ? <DownOutlined /> : <UpOutlined />} onClick={toggleAll}>
+                  {t(allFolded ? 'show_accessories' : 'hide_accessories')}
+                </Button>
+              )
+            }
+          >
             {managing && (
               <Alert
                 type="warning"
@@ -344,7 +407,7 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
                       </div>
                     )}
                     <div className="box-items">
-                      {section.items.map((eq) => (
+                      {section.items.filter((eq) => !isHidden(eq)).map((eq) => (
                         <div key={eq.id} className={`box-item${eq.parent ? ' box-item-accessory' : ''}`}>
                           <Link to={linkTo(eq)} className="box-item-link">
                             {eq.photo_url ? (
@@ -371,6 +434,11 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
                               )}
                             </span>
                           </Link>
+                          {canFold && !eq.parent && accessoriesOf(eq.id) > 0 && (
+                            <Button size="small" type="text" className="box-item-fold" icon={folded.has(eq.id) ? <DownOutlined /> : <UpOutlined />} aria-expanded={!folded.has(eq.id)} onClick={() => toggleOne(eq.id)}>
+                              {t('accessories_n', { n: accessoriesOf(eq.id) })}
+                            </Button>
+                          )}
                           {managing && (
                             <Popconfirm
                               title={eq.parent ? t('take_out_confirm') : t('take_out_confirm_main')}

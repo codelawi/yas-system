@@ -7,9 +7,9 @@ import { useLang } from '../i18n'
 import { useAuth } from '../auth'
 import FieldList from '../components/FieldList'
 import FieldEditor, { cleanFields } from '../components/FieldEditor'
-import TableMapper from '../components/TableMapper'
+import WordEditor from '../components/WordEditor'
 import GroupSelect from '../components/GroupSelect'
-import { accessoryCandidates, activeAccessoryKeys, applyAccessoryKeys, buildItems, initialMapping } from '../importMapping'
+import { accessoryCandidates, activeAccessoryKeys, applyAccessoryKeys, buildItems, initialMapping, withAccessorySerials } from '../importMapping'
 
 const ACC_KEYS_STORE = 'repo_accessory_keys'
 const STATUS_COLOR = { new: 'green', exists: 'orange', missing_serial: 'red', duplicate_in_upload: 'purple' }
@@ -44,6 +44,7 @@ export default function ImportPage() {
   const [params] = useSearchParams()
   const [groupId, setGroupId] = useState(() => Number(params.get('group')) || null)
   const [categories, setCategories] = useState([])
+  const [groups, setGroups] = useState([])
   const [mapperFor, setMapperFor] = useState(null)
   const [editRow, setEditRow] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -51,6 +52,7 @@ export default function ImportPage() {
 
   useEffect(() => {
     api.get('/equipment/categories').then(({ data }) => setCategories(data))
+    api.get('/groups').then(({ data }) => setGroups(data))
   }, [])
 
   const read = async () => {
@@ -90,6 +92,8 @@ export default function ImportPage() {
         ...item,
         serial,
         fields: o.fields ?? item.fields,
+        // Made here so they follow a serial typed in the review list
+        accessories: withAccessorySerials(serial, item.accessories),
         status,
         existing: existing[serial],
         action: o.action && (status === 'exists' ? ['overwrite', 'skip'] : ['create', 'skip']).includes(o.action) ? o.action : DEFAULT_ACTION[status],
@@ -153,7 +157,10 @@ export default function ImportPage() {
           serial: r.serial,
           row_no: r.row_no ?? null,
           fields: cleanFields(r.fields),
-          accessories: r.accessories,
+          // A skipped row may have no serial, so its accessories have none either
+          accessories: r.action === 'skip' ? [] : r.accessories,
+          // Left out: the group chosen for the whole import applies
+          ...(r.group !== undefined && { group_id: r.group }),
         })),
       })
       setResult(data)
@@ -241,6 +248,7 @@ export default function ImportPage() {
               {t('accessories_n', { n: r.accessories.length })}
             </Tag>
           )}
+          {r.group !== undefined && <Tag color="blue">{r.group === null ? t('we_no_group') : groups.find((g) => g.id === r.group)?.name}</Tag>}
           {r.fields.slice(0, 3).map((f, i) => (
             <span key={i}>
               <b>
@@ -310,11 +318,9 @@ export default function ImportPage() {
                       </Tag>
                     ))}
                     <div style={{ flex: 1 }} />
-                    {f.tables.length > 0 && (
-                      <Button type="primary" ghost icon={<EyeOutlined />} onClick={() => setMapperFor(f.import_id)}>
-                        {t('map_open')}
-                      </Button>
-                    )}
+                    <Button type="primary" ghost icon={<EyeOutlined />} onClick={() => setMapperFor(f.import_id)}>
+                      {t('map_open')}
+                    </Button>
                   </>
                 )}
               </div>
@@ -331,7 +337,7 @@ export default function ImportPage() {
               {checking && <Spin size="small" />}
               <div style={{ flex: 1 }} />
               <AutoComplete value={category} onChange={setCategory} options={categories.map((c) => ({ value: c }))} placeholder={t('import_category')} filterOption allowClear style={{ minWidth: 260 }} />
-              <GroupSelect value={groupId} onChange={setGroupId} placeholder={t('import_group')} style={{ minWidth: 260 }} />
+              <GroupSelect key={groups.length} value={groupId} onChange={setGroupId} placeholder={t('import_group')} style={{ minWidth: 260 }} />
               {counts.exists > 0 && (
                 <>
                   <Button onClick={() => setExistingAction('overwrite')}>{t('overwrite_all')}</Button>
@@ -367,7 +373,7 @@ export default function ImportPage() {
                     <Typography.Text strong>
                       <ApartmentOutlined /> {t('accessories')}
                     </Typography.Text>
-                    <FieldList fields={r.accessories.map((a) => ({ key: a.name, value: a.serial }))} compact />
+                    <FieldList fields={r.accessories.map((a) => ({ key: a.name, value: [a.serial, a.quantity && `${t('accessory_quantity')}: ${a.quantity}`, a.note].filter(Boolean).join(' · ') }))} compact />
                   </div>
                 )
                 return r.status === 'exists' ? (
@@ -429,19 +435,25 @@ export default function ImportPage() {
         />
       )}
 
-      <TableMapper
-        key={mapperFor ?? 'closed'}
-        open={!!mapperFile}
-        file={mapperFile}
-        mappings={mapperFile ? mappings[mapperFile.import_id] : []}
-        accessoryKeys={accessoryKeys}
-        onClose={() => setMapperFor(null)}
-        onApply={(draft) => {
-          setMappings((m) => ({ ...m, [mapperFile.import_id]: draft }))
-          resetFieldOverrides([mapperFile.import_id])
-          setMapperFor(null)
-        }}
-      />
+      {mapperFile && (
+        <WordEditor
+          key={mapperFor}
+          file={mapperFile}
+          mappings={mappings[mapperFile.import_id]}
+          accessoryKeys={accessoryKeys}
+          groups={groups}
+          onGroupCreated={(group) => setGroups((list) => [...list, group])}
+          onClose={() => setMapperFor(null)}
+          onApply={(tables, draft) => {
+            const id = mapperFile.import_id
+            setFiles((list) => list.map((f) => (f.import_id === id ? { ...f, tables } : f)))
+            setMappings((m) => ({ ...m, [id]: draft }))
+            // Rows may have moved, so changes made in the review list no longer match
+            setOverrides((o) => Object.fromEntries(Object.entries(o).filter(([uid]) => !uid.startsWith(`${id}:`))))
+            setMapperFor(null)
+          }}
+        />
+      )}
 
       <Modal
         open={!!editRow}

@@ -152,20 +152,22 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
     >
       {accessories.length ? (
         <div className="accessory-list">
-          {accessories.map((a) => (
-            <Link key={a.id} to={`/equipment/${a.id}`} className="accessory-item">
-              <span className="accessory-name">{a.name || t('accessory')}</span>
-              <span className="serial">{a.serial_number || '—'}</span>
-              {a.fields.length > 0 && (
-                <Typography.Text type="secondary" className="accessory-extra">
-                  {a.fields
-                    .slice(0, 2)
-                    .map((f) => `${f.key}: ${f.value.split('\n')[0]}`)
-                    .join(' · ')}
-                </Typography.Text>
-              )}
-            </Link>
-          ))}
+          {accessories.map((a) => {
+            const quantity = a.fields.find((f) => f.key === 'عدد')?.value
+            const details = a.fields.filter((f) => f.key !== 'عدد').slice(0, 2)
+            return (
+              <Link key={a.id} to={`/equipment/${a.id}`} className="accessory-item">
+                <span className="accessory-name">{a.name || t('accessory')}</span>
+                {quantity && <span className="accessory-quantity">{`${t('accessory_quantity')} ${quantity}`}</span>}
+                <span className="serial">{a.serial_number || '—'}</span>
+                {details.length > 0 && (
+                  <Typography.Text type="secondary" className="accessory-extra">
+                    {details.map((f) => `${f.key}: ${f.value.split('\n')[0]}`).join(' · ')}
+                  </Typography.Text>
+                )}
+              </Link>
+            )
+          })}
         </div>
       ) : (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('no_accessories')} />
