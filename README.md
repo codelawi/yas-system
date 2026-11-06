@@ -7,8 +7,9 @@ Laravel 13 (API) + React (Vite, Ant Design) + MySQL. It runs fully offline on th
   - A 2-column `Key | Value` table: one equipment.
   - Merged cells, empty rows, and header rows repeated on each page are handled.
   - A review step shows new / already-existing / missing-serial items. For existing items you choose overwrite or skip.
+  - You can choose a group for the imported equipment (new and overwritten). **Import from Word** on a group page opens the import with that group chosen.
 - **Export**: Excel (.xlsx, right-to-left, one column per field) of the equipment list (same search / filters) and of the history; PDF through print pages (equipment data sheet, equipment list) and the browser's "Save as PDF".
-- **Bulk edit**: set / remove a field or set the category on selected equipment. **Field names** (Settings): merge / rename keys everywhere, including the label design.
+- **Bulk edit**: set / remove a field, or set the category or group, on selected equipment. **Field names** (Settings): merge / rename keys everywhere, including the label design.
 - **Maintenance & dates** per equipment (repeating every N months); "Done" logs the work and moves the date forward. Due / overdue list on the home page.
 - **Custody (عهدة)**: hand over (optionally with accessories) with a return date, take back; the **العهد** tab lists who holds what, with overdue returns highlighted. Holder names need a PIN.
 - **Damage reports**: anyone who scans a label can report a problem with a photo, without a PIN; closing it needs a PIN. Photos are included in backups.
@@ -21,6 +22,19 @@ Laravel 13 (API) + React (Vite, Ant Design) + MySQL. It runs fully offline on th
   - Recent equipment and imports, a QR that opens the system on a phone, and 30-day activity (PIN only).
 - **Dashboard**: search any value, filter by category, add/edit/delete equipment with flexible fields.
 - **Accessories**: an equipment can have accessories. Each accessory is a full equipment (its own serial, fields, page and QR) linked permanently to one main equipment. You can add them from the equipment page, or create them on import from the columns you choose. Deleting a main equipment also deletes its accessories.
+- **Equipment photo**: one photo per equipment, shrunk on the device before upload. Everyone can see it; adding or removing it needs a PIN. Photos are included in backups.
+- **Groups (مجموعات)**: a kind of equipment, e.g. «وحدة الفتح والقص», holding every unit of that kind. Each unit keeps its own serial and details.
+  - Only main equipment is grouped, and it is in at most one group. Accessories stay under their main equipment.
+  - **Auto-group** suggests groups from equipment sharing a name (spelling-insensitive) and applies them only after you confirm.
+  - New or imported equipment joins the group with its name.
+  - The equipment list has a grouped view (one row per group that opens to its units) and a flat view.
+  - Deleting a group keeps its equipment, without a group.
+- **Boxes (صناديق)**: a numbered box with a name, a weight and its own QR label (`/box/<number>`) that any phone can open. Viewing is open to everyone; changes need a PIN.
+  - An equipment can be in several boxes, and a main equipment brings its accessories in and out with it.
+  - Add a new equipment, choose existing ones, or add a whole group at once. Contents are listed by group, with **Take the group out**.
+  - The box page shows the number and name, large weight and item-count tiles, and each item's photo, name and up to 3 details. All actions are in one **Actions** menu.
+  - Deleting a box keeps its equipment. Adding to and taking out of a box is in the history log.
+  - **Box sheet**: the box page as an A4 sheet, with the QR at the left corner beside the box name and the figures stacked. Print it, or download it as PDF or as an editable Word file.
 - **QR labels**: each QR holds a link like `http://<PC-IP>/eq/<serial>`. Any phone camera opens it, with no app needed. You can print labels for many items at once, sized for a label printer.
 - **QR codes page**:
   - The address printed in QR codes.
@@ -66,7 +80,7 @@ The QR codes contain the laptop's name, **`http://repo.local`** (mDNS). It works
 | `find-php.bat` | Finds Laragon's PHP (used by the other scripts) |
 
 ### Data safety
-- **Backups**: database + original Word files in one zip. Made automatically once a day while the system is used, by the scheduled task, by `update.bat`, and with **Settings → Backups → Back up now**. The oldest are removed beyond the "keep" limit (default 30).
+- **Backups**: database, original Word files, equipment and damage-report photos, and custody form templates in one zip. Made automatically once a day while the system is used, by the scheduled task, by `update.bat`, and with **Settings → Backups → Back up now**. The oldest are removed beyond the "keep" limit (default 30).
 - **Backup folder**: set it in Settings to another disk, a USB stick or a network share.
 - **Restore**: `php artisan repo:restore`. The current data is backed up first, so a restore never loses anything.
 - With `APP_ENV=production`, Laravel refuses `migrate:fresh`, `migrate:refresh`, `migrate:reset` and `db:wipe`.
@@ -74,6 +88,8 @@ The QR codes contain the laptop's name, **`http://repo.local`** (mDNS). It works
 
 ## Printing labels
 Use the **QR codes** page (or select items in **Equipment** → **Print labels**). Each label prints as one page sized like your label (set on the QR codes page). In the browser print dialog choose the label printer, set margins to *None* and scale to 100%. If the printer driver has its own paper size setting, set it to the same label size.
+
+Box labels print from the **Boxes** page or a box's **Actions** menu: only the QR code, as large as the label allows, one label per page. Their label size is chosen on the print page and remembered on that computer.
 
 ## Development (on the Mac)
 

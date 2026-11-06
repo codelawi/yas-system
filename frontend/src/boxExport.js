@@ -30,7 +30,7 @@ export async function downloadBoxPdf(node, filename) {
   const box = node.getBoundingClientRect()
   const ratio = canvas.width / box.width
   // Where a page may end: under the title, the figures, the list heading or any item
-  const ends = [...node.querySelectorAll('.box-head, .box-stats, .ant-card-head, .box-item')]
+  const ends = [...node.querySelectorAll('.box-head, .box-print-top, .ant-card-head, .box-item')]
     .map((el) => Math.round((el.getBoundingClientRect().bottom - box.top) * ratio))
     .sort((a, b) => a - b)
 
@@ -93,7 +93,7 @@ export async function downloadBoxDocx(box, { url, t, filename }) {
   const pageW = Math.round(A4_W * TWIP_PER_MM)
   const margin = Math.round(MARGIN * TWIP_PER_MM)
   const contentW = pageW - margin * 2
-  const photoCol = Math.round(26 * TWIP_PER_MM)
+  const photoCol = Math.round(32 * TWIP_PER_MM)
   const grey = 'E5E7EB'
   const line = { style: BorderStyle.SINGLE, size: 4, color: grey }
   const none = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }
@@ -107,9 +107,11 @@ export async function downloadBoxDocx(box, { url, t, filename }) {
   const qr = await (await fetch(await QRCode.toDataURL(url, { margin: 1, width: 400 }))).arrayBuffer()
   const photos = await Promise.all(box.equipment.map((eq) => (eq.photo_url ? photoForWord(eq.photo_url) : null)))
 
+  const qrCol = Math.round(66 * TWIP_PER_MM)
+  const statsCol = contentW - qrCol
   const stat = (label, value, fill) =>
     new TableCell({
-      width: { size: Math.round(contentW / 2), type: WidthType.DXA },
+      width: { size: statsCol, type: WidthType.DXA },
       shading: fill ? { type: ShadingType.CLEAR, color: 'auto', fill } : undefined,
       margins: { top: 120, bottom: 120, left: 200, right: 200 },
       children: [para([text(label, { size: 20, color: fill ? 'B45309' : '6B7280' })]), para([text(value, { size: 40, bold: true, color: fill ? '92400E' : '111827' })])],
@@ -117,7 +119,7 @@ export async function downloadBoxDocx(box, { url, t, filename }) {
 
   const itemRow = (eq, photo) => {
     const details = (eq.summary || []).map((f) => `${f.key}: ${f.value}`).join('  ·  ')
-    const size = photo ? Math.min(90 / Math.max(photo.width, photo.height), 1) : 1
+    const size = photo ? Math.min(110 / Math.max(photo.width, photo.height), 1) : 1
     return new TableRow({
       cantSplit: true,
       children: [
@@ -140,9 +142,9 @@ export async function downloadBoxDocx(box, { url, t, filename }) {
           verticalAlign: VerticalAlign.CENTER,
           margins: { top: 100, bottom: 100, left: 200, right: 200 },
           children: [
-            para([text(eq.display_name || eq.serial_number, { size: 26, bold: true, color: '111827' })]),
-            ...(details ? [para([text(details, { size: 19, color: '6B7280' })])] : []),
-            ...(eq.parent ? [para([text(`↳ ${t('accessory_of')} ${eq.parent.display_name || eq.parent.serial_number}`, { size: 19, color: '6B7280' })])] : []),
+            para([text(eq.display_name || eq.serial_number, { size: 30, bold: true, color: '111827' })]),
+            ...(details ? [para([text(details, { size: 23, color: '6B7280' })])] : []),
+            ...(eq.parent ? [para([text(`↳ ${t('accessory_of')} ${eq.parent.display_name || eq.parent.serial_number}`, { size: 23, color: '6B7280' })])] : []),
           ],
         }),
       ],
@@ -162,18 +164,45 @@ export async function downloadBoxDocx(box, { url, t, filename }) {
         },
         children: [
           para([text(`${t('box')} ${box.number}`, { size: 68, bold: true, color: '111827' })], { alignment: AlignmentType.CENTER }),
-          ...(box.name ? [para([text(box.name, { size: 32, color: '4B5563' })], { alignment: AlignmentType.CENTER })] : []),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 160, after: 240 },
-            children: [new ImageRun({ type: 'png', data: qr, transformation: { width: 140, height: 140 } })],
-          }),
+          // Weight and count stacked on the right; the QR at the left corner with the box name under it
           new Table({
             visuallyRightToLeft: true,
             width: { size: contentW, type: WidthType.DXA },
-            columnWidths: [Math.round(contentW / 2), Math.round(contentW / 2)],
-            borders: { ...borders, insideVertical: line },
-            rows: [new TableRow({ children: [stat(t('weight'), weight, 'FFFBEB'), stat(t('box_contents'), `${box.equipment.length} ${t('items_word')}`)] })],
+            columnWidths: [statsCol, qrCol],
+            borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({
+                    width: { size: statsCol, type: WidthType.DXA },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [
+                      new Table({
+                        visuallyRightToLeft: true,
+                        width: { size: statsCol, type: WidthType.DXA },
+                        columnWidths: [statsCol],
+                        borders,
+                        rows: [
+                          new TableRow({ children: [stat(t('weight'), weight, 'FFFBEB')] }),
+                          new TableRow({ children: [stat(t('box_contents'), `${box.equipment.length} ${t('items_word')}`)] }),
+                        ],
+                      }),
+                    ],
+                  }),
+                  new TableCell({
+                    width: { size: qrCol, type: WidthType.DXA },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [
+                      new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [new ImageRun({ type: 'png', data: qr, transformation: { width: 150, height: 150 } })],
+                      }),
+                      ...(box.name ? [para([text(box.name, { size: 30, bold: true, color: '111827' })], { alignment: AlignmentType.CENTER })] : []),
+                    ],
+                  }),
+                ],
+              }),
+            ],
           }),
           para([text(`${t('box_contents')} (${box.equipment.length})`, { size: 28, bold: true })], { spacing: { before: 360, after: 160 } }),
           box.equipment.length
