@@ -15,6 +15,27 @@ const ACC_KEYS_STORE = 'repo_accessory_keys'
 const STATUS_COLOR = { new: 'green', exists: 'orange', missing_serial: 'red', duplicate_in_upload: 'purple' }
 const DEFAULT_ACTION = { new: 'create', exists: 'skip', missing_serial: 'skip', duplicate_in_upload: 'skip' }
 
+// PHP's defaults allow 20 files and 8 MB per request, and it drops the rest
+const BATCH_FILES = 15
+const BATCH_BYTES = 6 * 1024 * 1024
+
+/** Splits the chosen files into requests PHP will take whole. */
+function uploadBatches(files) {
+  const batches = []
+  let bytes = 0
+  for (const file of files) {
+    const last = batches.at(-1)
+    if (!last || last.length >= BATCH_FILES || bytes + file.size > BATCH_BYTES) {
+      batches.push([file])
+      bytes = file.size
+    } else {
+      last.push(file)
+      bytes += file.size
+    }
+  }
+  return batches
+}
+
 function storedAccessoryKeys() {
   try {
     return JSON.parse(localStorage.getItem(ACC_KEYS_STORE)) || []
@@ -30,6 +51,7 @@ export default function ImportPage() {
   const [step, setStep] = useState(0)
   const [fileList, setFileList] = useState([])
   const [reading, setReading] = useState(false)
+  const [readCount, setReadCount] = useState(0)
   const [files, setFiles] = useState([])
   // import_id → one mapping per table (what each column / key means)
   const [mappings, setMappings] = useState({})
@@ -57,13 +79,21 @@ export default function ImportPage() {
 
   const read = async () => {
     setReading(true)
+    setReadCount(0)
     try {
-      const body = new FormData()
-      fileList.forEach((f) => body.append('files[]', f.originFileObj || f))
-      const { data } = await api.post('/imports/preview', body)
+      const read = []
+      for (const batch of uploadBatches(fileList.map((f) => f.originFileObj || f))) {
+        const body = new FormData()
+        batch.forEach((f) => body.append('files[]', f))
+        const { data } = await api.post('/imports/preview', body)
+        // A PHP warning in front of the JSON leaves plain text here
+        if (!Array.isArray(data?.files)) throw new Error('import_read_failed')
+        read.push(...data.files)
+        setReadCount(read.length)
+      }
       const remembered = storedAccessoryKeys()
-      setFiles(data.files)
-      setMappings(Object.fromEntries(data.files.map((f) => [f.import_id, f.tables.map((tb) => initialMapping(tb, remembered))])))
+      setFiles(read)
+      setMappings(Object.fromEntries(read.map((f) => [f.import_id, f.tables.map((tb) => initialMapping(tb, remembered))])))
       setOverrides({})
       setExisting({})
       checked.current = new Set()
@@ -292,7 +322,7 @@ export default function ImportPage() {
             <p className="ant-upload-hint">{t('import_drop_hint')}</p>
           </Upload.Dragger>
           <Button type="primary" size="large" block disabled={!fileList.length} loading={reading} onClick={read} style={{ marginTop: 16 }}>
-            {t('read_files')} ({fileList.length})
+            {t('read_files')} ({reading ? `${readCount} / ${fileList.length}` : fileList.length})
           </Button>
         </Card>
       )}
