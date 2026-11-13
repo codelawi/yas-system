@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\IssueController;
 use App\Http\Controllers\Api\MaintenanceController;
 use App\Http\Controllers\Api\NetworkController;
+use App\Http\Controllers\Api\OfflineController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\StocktakeController;
 use App\Http\Controllers\Api\UserController;
@@ -56,6 +57,9 @@ Route::get('/issues/{issue}/photo', [IssueController::class, 'photo']);
 Route::get('/network/ping', [NetworkController::class, 'ping']);
 Route::get('/network/check-address', [NetworkController::class, 'checkAddress'])->middleware('throttle:30,1');
 Route::post('/labels/printed', [SettingController::class, 'labelsPrinted'])->middleware('throttle:30,1');
+
+// Phones download everything once, then open scanned labels without a connection
+Route::get('/offline/snapshot', [OfflineController::class, 'snapshot'])->middleware('throttle:10,1');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);

@@ -9,7 +9,10 @@ export default function GroupSelect({ value, onChange, ...props }) {
   const [groups, setGroups] = useState([])
 
   useEffect(() => {
-    api.get('/groups').then(({ data }) => setGroups(data))
+    api
+      .get('/groups')
+      .then(({ data }) => setGroups(data))
+      .catch(() => {}) // no list without a connection: the form cannot save then anyway
   }, [])
 
   return (

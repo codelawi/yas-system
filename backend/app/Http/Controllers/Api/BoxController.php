@@ -162,7 +162,7 @@ class BoxController extends Controller
                 'number' => $box->number,
                 'name' => $box->name,
                 'weight' => $box->weight,
-                'items' => $this->sortedEquipment($box)
+                'items' => self::sortedEquipment($box)
                     ->map(fn (Equipment $e) => EquipmentController::displayName($e) ?: $e->serial_number)
                     ->values(),
             ]);
@@ -178,7 +178,7 @@ class BoxController extends Controller
     }
 
     /** Main equipment first, each followed by its accessories. */
-    private function sortedEquipment(Box $box): Collection
+    private static function sortedEquipment(Box $box): Collection
     {
         return $box->equipment->sortBy(fn (Equipment $e) => [$e->parent_id ?? $e->id, $e->parent_id === null ? 0 : 1, $e->serial_number])->values();
     }
@@ -190,8 +190,22 @@ class BoxController extends Controller
 
     private function detail(Box $box): array
     {
-        $box->load(['equipment.fields', 'equipment.group:id,name', 'equipment.parent:id,serial_number,name,group_id', 'equipment.parent.fields', 'equipment.parent.group:id,name']);
+        $box->load(self::DETAIL_RELATIONS);
 
+        return self::present($box);
+    }
+
+    /** The relations present() reads. */
+    public const DETAIL_RELATIONS = ['equipment.fields', 'equipment.group:id,name', 'equipment.parent:id,serial_number,name,group_id', 'equipment.parent.fields', 'equipment.parent.group:id,name'];
+
+    /**
+     * A box's page. The DETAIL_RELATIONS must be loaded.
+     * Also used for the copy that phones keep for working without a connection.
+     *
+     * @return array<string, mixed>
+     */
+    public static function present(Box $box): array
+    {
         return [
             'id' => $box->id,
             'number' => $box->number,
@@ -199,7 +213,7 @@ class BoxController extends Controller
             'weight' => $box->weight,
             'created_at' => $box->created_at,
             'updated_at' => $box->updated_at,
-            'equipment' => $this->sortedEquipment($box)->map(fn (Equipment $e) => [
+            'equipment' => self::sortedEquipment($box)->map(fn (Equipment $e) => [
                 'id' => $e->id,
                 'serial_number' => $e->serial_number,
                 'display_name' => EquipmentController::displayName($e),

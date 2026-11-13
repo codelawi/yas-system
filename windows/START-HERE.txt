@@ -1,181 +1,307 @@
-﻿EQUIPMENT REPOSITORY - SETUP DAY GUIDE
-======================================
-Situation: one laptop runs the system. It gets its network from PHONE HOTSPOTS
-(no router, the IP changes every time). The QR codes will contain the laptop's
-NAME  http://repo.local  so they keep working on any hotspot.
+﻿دليل تثبيت نظام إدارة المستودع - جهاز Windows مع XAMPP
+=======================================================
 
-Do the parts IN ORDER. Do NOT print labels before PART 3 passes.
+الوضع: حاسوب واحد يشغّل النظام، ويأخذ الشبكة من نقاط اتصال الهواتف (Hotspot)
+بلا راوتر، وعنوان IP يتغيّر كل مرة. لذلك تحمل رموز QR اسم الجهاز:
+    https://repo.local
+فتبقى تعمل على أي نقطة اتصال.
 
-Files in this folder:
-  START-HERE.txt        this guide
-  setup.bat             installs the system (safe to run again, never deletes data)
-  hotspot-setup.ps1     network: laptop name "repo", firewall, no sleep, QR address
-  apache-vhost.conf     tells Apache where the system is
-  backup.bat            backup now
-  schedule-backup.bat   daily automatic backup at 14:00
-  update.bat            for a future new version (backs up first)
-  find-php.bat          helper used by the other scripts
+كيف يعمل النظام على هذا الجهاز:
+  - MySQL من XAMPP: قاعدة البيانات.
+  - PHP 8.3 أو أحدث في المجلد C:\php : يشغّل النظام (نافذة start-server.bat).
+  - Apache من XAMPP: يستقبل الهواتف على http و https ويوصلها إلى النظام
+    (من الجزء 4). نسخة PHP التي تأتي مع XAMPP لا تُستخدم، فقدمها لا يهم.
 
+نفّذ الأجزاء بالترتيب. لا تطبع الملصقات قبل نجاح الجزء 4.
+جهاز عليه Laragon بدل XAMPP؟ انظر الملحق في آخر الدليل.
 
-PART 0 - BEFORE YOU LEAVE (on the Mac)
---------------------------------------
-[ ] Copy to the USB stick:  the folder "backend"  and the folder "windows"
-[ ] Take the laptop charger (the laptop must stay plugged in)
-[ ] Optional test today: connect the Mac to your phone hotspot and open
-    http://MacBook-Pro.local:8080  on that phone and on a 2nd phone.
-    If both open the system, the same idea will work tomorrow.
-
-
-PART 1 - INSTALL THE SYSTEM (about 30 minutes)
-----------------------------------------------
-1.  Plug in the laptop. Laragon must be installed in C:\laragon.
-
-2.  Check PHP: open Laragon > Terminal and type
-        php -v          (must be 8.3 or newer - you have 8.5)
-        php -m          (the list must contain: pdo_mysql  mbstring  zip  fileinfo  openssl)
-
-3.  Copy from the USB stick:
-        backend  ->  C:\laragon\www\repo           (C:\laragon\www\repo\public must exist)
-        windows  ->  C:\laragon\www\repo\windows
-
-4.  PHP settings: Laragon menu > PHP > php.ini - find and set:
-        upload_max_filesize = 50M
-        post_max_size = 200M
-        max_file_uploads = 100
-        memory_limit = 512M
-    These lines must NOT start with ;
-        extension=pdo_mysql   extension=mbstring   extension=zip   extension=fileinfo
-    Save.
-
-5.  Apache: copy  C:\laragon\www\repo\windows\apache-vhost.conf  to
-        C:\laragon\etc\apache2\sites-enabled\00-repo.conf
-
-6.  Laragon: click "Start All". Apache and MySQL must turn green.
-    (Apache red = port 80 is used by another program, e.g. IIS or Skype - close it.)
-
-7.  Double-click  C:\laragon\www\repo\windows\setup.bat
-      - First time it opens .env in Notepad. Check these lines:
-            APP_ENV=production
-            DB_DATABASE=equipment_repo
-            DB_USERNAME=root
-            DB_PASSWORD=
-        Save, close Notepad, double-click setup.bat AGAIN.
-      - It creates the database, the tables, the first admin and a first backup.
-      - The end must say "Done".
-
-8.  Open  http://localhost  in the browser.
-      - Click "إدخال الرمز" (Enter PIN) > 1234
-      - Users page: CHANGE the admin PIN, add a PIN for each person.
-
-9.  Laragon menu > Preferences > General:
-        [x] Run Laragon when Windows starts
-        [x] Start All automatically
+الملفات في هذا المجلد:
+  START-HERE.txt        هذا الدليل
+  setup.bat             يثبّت النظام (آمن عند تكراره، لا يحذف أي بيانات)
+  start-server.bat      يشغّل النظام - اترك نافذته مفتوحة دائماً
+  hotspot-setup.ps1     الشبكة: اسم الجهاز repo، والجدار الناري، ومنع السكون، وعنوان QR
+  https-setup.ps1       https: الهواتف تحفظ البيانات وتفتح الملصقات دون اتصال
+  apache-proxy.conf     إعدادات Apache يضعها https-setup.ps1 في XAMPP (لا تنسخه يدوياً)
+  apache-vhost.conf     لأجهزة Laragon فقط (الملحق)
+  backup.bat            نسخة احتياطية الآن
+  schedule-backup.bat   نسخة احتياطية تلقائية كل يوم الساعة 14:00
+  update.bat            بعد نسخ إصدار جديد من النظام (يأخذ نسخة احتياطية أولاً)
+  find-php.bat          يجد PHP (تستخدمه السكربتات الأخرى)
 
 
-PART 2 - NETWORK (about 15 minutes)
------------------------------------
-10. Connect the laptop to a phone hotspot (Wi-Fi).
-
-11. Start menu > type PowerShell > right-click > Run as administrator:
-        cd C:\laragon\www\repo\windows
-        powershell -ExecutionPolicy Bypass -File .\hotspot-setup.ps1
-    - Type YES when it asks to rename the laptop to "repo".
-    - It asks for a restart: restart the laptop.
-
-12. After the restart: wait for Laragon (green), connect to the hotspot again,
-    and run the SAME two commands again (as administrator).
-    Every line must be [OK]. It sets the QR address to  http://repo.local
-
-13. In the system: "الشبكة" (Network) page - the box at the top must be GREEN.
-
-
-PART 3 - PHONE TEST (must pass BEFORE printing)
------------------------------------------------
-On each phone open:  http://repo.local     The system must open every time.
-
-[ ] a) The phone that SHARES the hotspot - iPhone
-[ ] b) The phone that SHARES the hotspot - Android
-[ ] c) Another phone CONNECTED to the same hotspot
-[ ] d) Share the hotspot from a DIFFERENT phone, connect the laptop to it,
-       open http://repo.local again on the phones
-
-All ticked?  -> go to PART 4 with  http://repo.local
-An Android fails? -> use PLAN B below, and decide NOW (not after printing).
-
-PLAN B - the laptop is the hotspot (fixed address 192.168.137.1)
-  - Windows Settings > Network & internet > Mobile hotspot > On
-    (choose a name and password; "Share over: Wi-Fi")
-    Windows wants some connection to switch it on: if it refuses, first connect
-    the laptop to any phone hotspot, then turn Mobile hotspot on.
-  - The phones connect to the LAPTOP's Wi-Fi.
-  - Laragon > Terminal:
-        cd C:\laragon\www\repo
-        php artisan repo:qr-address http://192.168.137.1
-  - Repeat the phone tests with  http://192.168.137.1
-
-
-PART 4 - KEEP THE DATA SAFE
----------------------------
-14. Plug in a USB stick that STAYS in the laptop (or another drive).
-    System > "الإعدادات" (Settings) > Backups:
-      - Backup folder: e.g.  E:\RepoBackups   (the USB stick's letter) > Save
-      - Click "Back up now" - it must appear in the list.
-
-15. Double-click  windows\schedule-backup.bat   (daily backup at 14:00).
-    The system also makes a backup by itself once a day while it is used.
-
-16. Once a week: Settings > Backups > download the newest backup and keep it
-    somewhere else (another PC, email, cloud). One laptop = one place to lose.
-
-
-PART 5 - PRINT
---------------
-17. "استيراد من Word" (Import): upload the real Word files > "عرض الجداول وتخصيصها"
-    to check each table (serial, ت, accessories) > Apply > Save.
-
-18. "رموز QR" (QR codes) page:
-      - Label design: set the size of your labels > Save
-      - Select ONE item > "طباعة المحدد" (Print selected)
-      - Print dialog: the label printer, margins None, scale 100%
-19. Scan that label with the camera on 2 phones. It opens the item? Then:
-20. Print all labels ("طباعة كل النتائج" or select and print).
-
-After the first print the QR address is LOCKED: changing it later shows how many
-labels would break and needs a typed confirmation.
-
-
-EVERY DAY AFTER THAT
+الجزء 0 - قبل الذهاب
 --------------------
-- Turn on the laptop (plugged in) > Laragon starts by itself > connect to any phone
-  hotspot > phones scan the labels.
-- A label does not open? In the system tap "مسح ملصق" (Scan label) and take a
-  photo of it - works with any label.
-- Check the QR address:   php artisan repo:qr-address   (in C:\laragon\www\repo)
+[ ] انسخ إلى الفلاشة: المجلد backend والمجلد windows
+[ ] خذ شاحن الحاسوب (يجب أن يبقى موصولاً بالكهرباء)
 
 
-RULES THAT PROTECT THE DATA
----------------------------
-- NEVER delete  C:\laragon\data  (the database lives there).
-- NEVER run  migrate:fresh / migrate:refresh / migrate:reset / db:wipe
-  (they are blocked anyway while .env says APP_ENV=production).
-- NEVER rename the laptop again after printing (the name is in the QR codes).
-- New version of the system: copy the new files over C:\laragon\www\repo but
-  KEEP the file .env and the folder storage, then run  windows\update.bat
-- Restore a backup (the current data is backed up first, nothing is lost):
-      cd C:\laragon\www\repo
-      php artisan repo:restore
-- New laptop one day: install Laragon, PART 1 + PART 2 (same name "repo"), then
-      php artisan repo:restore <the newest backup .zip>
+الجزء 1 - تثبيت النظام (حوالي 30 دقيقة)
+---------------------------------------
+1)  XAMPP: يجب أن يكون مثبتاً في المجلد
+        C:\xampp
+    افتح XAMPP Control Panel كمسؤول (زر يمين > Run as administrator):
+      - علّم مربع Service بجانب MySQL (ليعمل مع Windows)، ثم Start. يجب أن يصبح أخضر.
+      - لا تشغّل Apache الآن، فهو يُضبط في الجزء 4.
+
+2)  PHP 8.3 أو أحدث في المجلد C:\php
+    - غير موجود؟ من الموقع windows.php.net/download نزّل ملف zip لنسخة
+      8.3 أو أحدث، نوع "x64 Non Thread Safe"، وفك ضغطه في المجلد C:\php
+    - افتح موجه الأوامر (cmd) واكتب:
+          C:\php\php.exe -v
+      يجب أن يظهر 8.3 أو رقم أكبر.
+    - في المجلد C:\php انسخ الملف php.ini-production باسم php.ini ، وافتحه بـ Notepad.
+      ابحث عن هذه الأسطر واحذف ; من أول كل سطر، وعدّل القيم لتصبح هكذا:
+          extension_dir = "ext"
+          extension=pdo_mysql
+          extension=mbstring
+          extension=zip
+          extension=fileinfo
+          extension=openssl
+          upload_max_filesize = 50M
+          post_max_size = 200M
+          max_file_uploads = 100
+          memory_limit = 512M
+      احفظ.
+    - تأكد، يجب أن تظهر في القائمة: pdo_mysql و mbstring و zip و fileinfo و openssl
+          C:\php\php.exe -m
+
+3)  انسخ من الفلاشة:
+        backend  ->  C:\repo              (يجب أن يوجد المجلد C:\repo\public)
+        windows  ->  C:\repo\windows
+    لا تضعه داخل C:\xampp\htdocs : لو عمل Apache قبل الجزء 4 لعرض ما في htdocs
+    للشبكة كما هو، ومنه الملف .env الذي فيه أسرار النظام.
+
+4)  انقر مرتين على:
+        C:\repo\windows\setup.bat
+    - أول مرة يفتح الملف .env في Notepad. تأكد من هذه الأسطر (إعدادات XAMPP الافتراضية):
+          APP_ENV=production
+          DB_DATABASE=equipment_repo
+          DB_USERNAME=root
+          DB_PASSWORD=
+      احفظ، وأغلق Notepad، ثم انقر مرتين على setup.bat مرة أخرى.
+    - ينشئ قاعدة البيانات والجداول وأول مدير وأول نسخة احتياطية.
+    - يجب أن ينتهي بكلمة Done.
+
+5)  انقر مرتين على الملف التالي، واترك نافذته مفتوحة:
+        C:\repo\windows\start-server.bat
+    افتح في المتصفح:
+        http://localhost
+    - اضغط «إدخال الرمز» واكتب 1234
+    - صفحة «المستخدمون»: غيّر رمز المدير، وأضف رمزاً لكل شخص.
+
+6)  تشغيل النظام تلقائياً مع Windows:
+    اضغط Win+R واكتب  shell:startup  ثم Enter. في المجلد الذي يفتح:
+    زر يمين > New > Shortcut > Browse > اختر الملف C:\repo\windows\start-server.bat
 
 
-IF SOMETHING GOES WRONG
+الجزء 2 - الشبكة (حوالي 15 دقيقة)
+---------------------------------
+7)  صِل الحاسوب بنقطة اتصال هاتف (Wi-Fi). نافذة start-server.bat مفتوحة.
+
+8)  قائمة Start > اكتب PowerShell > زر يمين > Run as administrator، ثم:
+        cd C:\repo\windows
+        powershell -ExecutionPolicy Bypass -File .\hotspot-setup.ps1
+    - اكتب YES عندما يطلب تغيير اسم الحاسوب إلى repo
+    - يطلب إعادة التشغيل: أعد تشغيل الحاسوب.
+
+9)  بعد إعادة التشغيل: انتظر نافذة start-server.bat، وصِل الحاسوب بنقطة الاتصال
+    مرة أخرى، ونفّذ الأمرين نفسيهما مرة أخرى (كمسؤول).
+    كل الأسطر يجب أن تنتهي بـ [OK]. يجعل عنوان QR مؤقتاً:  http://repo.local
+
+10) في النظام، صفحة «الشبكة»: المربع في الأعلى يجب أن يكون أخضر.
+
+
+الجزء 3 - تجربة الهواتف
 -----------------------
-Problem                               Fix
-Apache will not start (red)           Port 80 is used: close IIS / Skype / other web server
-setup.bat: "Database step failed"     Laragon > Start All (MySQL green), run setup.bat again
-setup.bat: PHP not found / too old    Laragon > Terminal > php -v ; check C:\laragon\bin\php
-http://localhost shows another site   Check step 5 (00-repo.conf), Laragon > Reload Apache
-Phone: page does not open             Same hotspot? Run hotspot-setup.ps1 again (firewall)
-Phone: repo.local fails, IP works     That phone does not support .local - PLAN B
-Network page box is red               The laptop name changed or no network - rerun step 12
-Upload of Word file fails             Step 4 (php.ini sizes), then Laragon > Reload Apache
+على كل هاتف افتح العنوان التالي، ويجب أن يفتح النظام في كل مرة:
+    http://repo.local
+
+[ ] أ) الهاتف الذي يشارك نقطة الاتصال - آيفون
+[ ] ب) الهاتف الذي يشارك نقطة الاتصال - أندرويد
+[ ] ج) هاتف آخر متصل بنقطة الاتصال نفسها
+[ ] د) شارك نقطة الاتصال من هاتف مختلف، وصِل الحاسوب بها، وافتح العنوان مرة أخرى
+
+كلها نجحت؟ انتقل إلى الجزء 4.
+أندرويد فشل؟ استخدم الخطة ب الآن، وليس بعد الطباعة.
+
+الخطة ب - الحاسوب نفسه نقطة الاتصال (عنوان ثابت 192.168.137.1)
+  - إعدادات Windows > Network & internet > Mobile hotspot > On
+    (اختر اسماً وكلمة سر، و "Share over: Wi-Fi"). إن رفض Windows التشغيل،
+    صِل الحاسوب أولاً بأي نقطة اتصال هاتف، ثم شغّل Mobile hotspot.
+  - الهواتف تتصل بشبكة الحاسوب.
+  - في موجه الأوامر (cmd):
+        cd C:\repo
+        C:\php\php.exe artisan repo:qr-address http://192.168.137.1
+  - كرّر تجربة الهواتف بالعنوان  http://192.168.137.1
+  - بعد الجزء 4 اجعل عنوان QR بـ https، والهواتف تنزّل البيانات من
+    https://192.168.137.1/offline :
+        C:\php\php.exe artisan repo:qr-address https://192.168.137.1
+
+
+الجزء 4 - https: الملصقات تفتح دون اتصال (حوالي 20 دقيقة)
+-----------------------------------------------------------
+الهاتف ينزّل كل البيانات مرة واحدة وهو متصل. بعدها، حتى بلا أي اتصال بالحاسوب،
+مسح الملصق بالكاميرا يفتح صفحة المعدة أو الصندوق (للعرض فقط).
+الهواتف تسمح بذلك على https فقط، فنفّذ هذا الجزء قبل الطباعة.
+عنوان QR يصبح:  https://repo.local
+
+11) أغلق نافذة start-server.bat ، فـ Apache يأخذ المنفذ 80 من الآن.
+
+12) PowerShell كمسؤول:
+        cd C:\repo\windows
+        powershell -ExecutionPolicy Bypass -File .\https-setup.ps1
+    (XAMPP في مجلد غير C:\xampp ؟ أضف في آخر الأمر:  -Xampp D:\xampp )
+    السكربت:
+      - ينشئ شهادة النظام مرة واحدة، في المجلد C:\repo\storage\https
+      - يضبط Apache في XAMPP أمام النظام، ويحفظ httpd.conf الأصلي باسم
+            C:\xampp\apache\conf\httpd.conf.before-repo
+      - يطلب منك: في XAMPP Control Panel اضغط Stop ثم Start بجانب Apache حتى يصبح
+        أخضر، ثم اضغط Enter
+      - يطلب منك تشغيل start-server.bat (يعمل الآن على 127.0.0.1:8000 خلف Apache)،
+        ثم اضغط Enter
+      - يجرّب http و https، ويجعل عنوان QR:  https://repo.local
+    كل الأسطر يجب أن تنتهي بـ [OK]. ويطبع تاريخ تشغيله مرة أخرى (بعد سنتين تقريباً).
+
+13) في XAMPP Control Panel (كمسؤول): علّم مربع Service بجانب Apache ليعمل مع Windows.
+
+14) على كل هاتف، مرة واحدة (وهو متصل بنقطة الاتصال):
+    أ) افتح  http://repo.local/offline  واضغط «تنزيل الشهادة»
+    ب) آيفون:  الإعدادات > «تم تنزيل ملف التعريف» > تثبيت
+               ثم الإعدادات > عام > حول > إعدادات الثقة بالشهادات
+               > فعّل  Equipment Repository CA
+       أندرويد: الإعدادات > الأمان > التشفير وبيانات الاعتماد > تثبيت شهادة
+               > شهادة CA > اختر الملف (أسماء القوائم تختلف قليلاً بين الهواتف)
+    ج) افتح  https://repo.local/offline  ويجب ألا يظهر أي تحذير
+    د) علّم «مع صور المعدات» إن أردت الصور، ثم «تنزيل البيانات»
+
+15) تجربة على كل هاتف: اطبع ملصقاً واحداً (الجزء 6)، ثم أطفئ Wi-Fi وبيانات الهاتف،
+    وامسح الملصق بالكاميرا. يجب أن تفتح الصفحة مع شريط أصفر «دون اتصال» في الأعلى.
+
+قبل كل خروج: افتح https://repo.local/offline على الهاتف واضغط «تحديث البيانات».
+التغييرات بعد آخر تنزيل لا تظهر على الهاتف.
+على الآيفون قد يحذف Safari البيانات إذا لم يُفتح النظام نحو أسبوع.
+
+احتفظ بنسخة من المجلد C:\repo\storage\https مع النسخ الاحتياطية. جهاز جديد معه
+المجلد نفسه لا يحتاج شيئاً جديداً على الهواتف. شهادة جديدة تعني تثبيتها على كل هاتف.
+
+
+الجزء 5 - حماية البيانات
+------------------------
+16) صِل فلاشة تبقى في الحاسوب (أو قرصاً آخر).
+    النظام > «الإعدادات» > النسخ الاحتياطي:
+      - مجلد النسخ الاحتياطية: مثلاً  E:\RepoBackups  (حرف الفلاشة) > حفظ
+      - اضغط «نسخة احتياطية الآن»، ويجب أن تظهر في القائمة.
+
+17) انقر مرتين على  windows\schedule-backup.bat  (نسخة يومية الساعة 14:00).
+    النظام يأخذ أيضاً نسخة وحده مرة كل يوم أثناء استخدامه.
+
+18) مرة في الأسبوع: الإعدادات > النسخ الاحتياطي > نزّل أحدث نسخة واحفظها في مكان
+    آخر (حاسوب آخر، بريد، سحابة). حاسوب واحد = مكان واحد يمكن أن يضيع.
+
+
+الجزء 6 - الطباعة
+-----------------
+19) «استيراد من Word»: ارفع ملفات Word الحقيقية > «فتح الملف وتخصيصه» لمراجعة كل
+    جدول (الرقم التسلسلي، ت، الملحقات) > تطبيق > حفظ.
+
+20) صفحة «رموز QR»:
+      - تصميم الملصق: اضبط مقاس ملصقاتك > حفظ
+      - تأكد أن عنوان QR هو  https://repo.local
+      - حدد معدة واحدة > «طباعة المحدد»
+      - نافذة الطباعة: طابعة الملصقات، الهوامش None، المقياس 100%
+
+21) امسح هذا الملصق بالكاميرا على هاتفين، متصلين ثم دون اتصال (الخطوة 15).
+    يفتح المعدة؟ إذن:
+
+22) اطبع كل الملصقات («طباعة كل النتائج» أو حدد ثم اطبع).
+
+بعد أول طباعة يُقفل عنوان QR: تغييره لاحقاً يعرض عدد الملصقات التي ستتوقف،
+ويطلب كتابة العنوان الجديد للتأكيد.
+
+
+كل يوم بعد ذلك
+--------------
+- شغّل الحاسوب (موصولاً بالكهرباء). MySQL و Apache يعملان وحدهما (Service)،
+  ونافذة start-server.bat تفتح وحدها (الخطوة 6). اتركها مفتوحة.
+- صِل الحاسوب بأي نقطة اتصال هاتف، والهواتف تمسح الملصقات.
+- ملصق لا يفتح؟ في النظام اضغط «مسح ملصق» وصوّره، فهذا يعمل مع أي ملصق.
+- لمعرفة عنوان QR الحالي:
+      cd C:\repo
+      C:\php\php.exe artisan repo:qr-address
+
+
+قواعد تحمي البيانات
+-------------------
+- لا تحذف أبداً المجلد  C:\xampp\mysql\data  (قاعدة البيانات هناك)،
+  ولا تلغِ تثبيت XAMPP.
+- لا تشغّل أبداً  migrate:fresh  أو  migrate:refresh  أو  migrate:reset  أو  db:wipe
+  (وهي ممنوعة أصلاً ما دام الملف .env فيه APP_ENV=production).
+- لا تغيّر اسم الحاسوب بعد الطباعة، فالاسم داخل رموز QR.
+- لا تنقل مجلد النظام من C:\repo بعد الجزء 4 (إعدادات Apache تشير إليه).
+  إن نقلته فشغّل https-setup.ps1 مرة أخرى.
+- إصدار جديد من النظام: انسخ الملفات الجديدة فوق C:\repo مع الإبقاء على الملف .env
+  والمجلد storage ، ثم انقر مرتين على  windows\update.bat
+- استرجاع نسخة احتياطية (تُحفظ البيانات الحالية أولاً، فلا يضيع شيء):
+      cd C:\repo
+      C:\php\php.exe artisan repo:restore
+- حاسوب جديد يوماً ما: XAMPP و PHP، ثم الجزء 1 والجزء 2 (بالاسم نفسه repo).
+  انسخ المجلد storage\https القديم إلى C:\repo\storage\https قبل الجزء 4،
+  فلا تحتاج الهواتف شهادة جديدة. ثم:
+      C:\php\php.exe artisan repo:restore <أحدث ملف zip>
+
+
+إذا حدثت مشكلة
+--------------
+* MySQL لا يعمل (أحمر في XAMPP):
+    برنامج آخر يستخدم المنفذ 3306 (MySQL آخر مثبت). أوقفه ثم Start.
+* setup.bat يقول "Database step failed":
+    MySQL أخضر في XAMPP؟ وأسطر DB_ في .env صحيحة؟ ثم شغّل setup.bat مرة أخرى.
+* "PHP not found" أو "older than PHP 8.3":
+    الخطوة 2. تأكد في cmd:  C:\php\php.exe -v
+* "PHP extensions missing":
+    الملف C:\php\php.ini : السطر extension_dir = "ext" وأسطر extension= (الخطوة 2).
+* start-server.bat يقول إن المنفذ مستخدم:
+    قبل الجزء 4: أوقف Apache في XAMPP. بعد الجزء 4: نافذة start-server.bat أخرى مفتوحة.
+* http://localhost يعرض صفحة XAMPP بدل النظام:
+    الجزء 4 لم يكتمل، أو Apache لم يُعد تشغيله بعده (Stop ثم Start).
+* الصفحة تقول "Service Unavailable" أو "Bad Gateway":
+    نافذة start-server.bat مغلقة. شغّلها.
+* Apache لا يعمل (أحمر) بعد الجزء 4:
+    نافذة start-server.bat قديمة تستخدم المنفذ 80: أغلقها ثم Start.
+    للتراجع عن إعدادات Apache: الملف httpd.conf.before-repo هو httpd.conf قبل السكربت.
+* https-setup يقول "Port 443 is used by":
+    أغلق ذلك البرنامج (غالباً VMware أو Skype أو IIS)، ثم شغّل السكربت مرة أخرى.
+* https-setup يقول "No answer on https":
+    Apache أخضر في XAMPP، ونافذة start-server.bat مفتوحة؟ ثم شغّل السكربت مرة أخرى.
+* الهاتف لا يفتح الصفحة:
+    على نقطة الاتصال نفسها؟ شغّل hotspot-setup.ps1 مرة أخرى (الجدار الناري).
+* الهاتف: repo.local لا يفتح، لكن عنوان IP يفتح:
+    الهاتف لا يدعم عناوين .local ، استخدم الخطة ب.
+* مربع صفحة «الشبكة» أحمر:
+    تغيّر اسم الحاسوب أو لا توجد شبكة. نفّذ الخطوة 9 مرة أخرى.
+* الهاتف يعرض تحذير https «غير آمن»:
+    الشهادة غير مثبتة، أو (آيفون) الثقة بها غير مفعّلة. الخطوة 14.
+* دون اتصال، الملصق لا يفتح:
+    الملصق مطبوع بـ http:// ، أو البيانات لم تُنزّل على هذا الهاتف من
+    https://repo.local/offline (الخطوة 14).
+* رفع ملف Word يفشل:
+    الأحجام في C:\php\php.ini (الخطوة 2)، ثم أغلق start-server.bat وشغّله مرة أخرى.
+
+
+ملحق - جهاز عليه Laragon بدل XAMPP
+----------------------------------
+Laragon فيه Apache و MySQL و PHP 8.3+، فلا حاجة لـ C:\php ولا لـ start-server.bat.
+- انسخ:
+      backend  ->  C:\laragon\www\repo
+      windows  ->  C:\laragon\www\repo\windows
+- إعدادات PHP: قائمة Laragon > PHP > php.ini (الأحجام كما في الخطوة 2).
+- انسخ الملف windows\apache-vhost.conf إلى:
+      C:\laragon\etc\apache2\sites-enabled\00-repo.conf
+- Laragon > Start All ، ثم setup.bat ، ثم افتح http://localhost
+- Laragon > Preferences > General: علّم  Run Laragon when Windows starts
+  و  Start All automatically
+- الشبكة والهواتف: الجزء 2 والجزء 3 (المسار C:\laragon\www\repo\windows).
+- https: قائمة Laragon > Apache > SSL > Enabled ، ثم شغّل https-setup.ps1 ،
+  ثم Laragon > Apache > Reload ، ثم شغّل https-setup.ps1 مرة أخرى حتى تنتهي كل
+  الأسطر بـ [OK]. بعدها الهواتف كالخطوة 14.
+- قاعدة البيانات في المجلد C:\laragon\data ، لا تحذفه أبداً.

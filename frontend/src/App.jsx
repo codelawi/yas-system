@@ -8,6 +8,7 @@ import {
   AuditOutlined,
   ClusterOutlined,
   CameraOutlined,
+  CloudDownloadOutlined,
   DashboardOutlined,
   FileWordOutlined,
   GlobalOutlined,
@@ -45,6 +46,8 @@ import { BoxDetail, BoxesPage, ScanBoxPage } from './pages/BoxPages'
 import { GroupDetail, GroupsPage } from './pages/GroupPages'
 import BoxLabelsPrint from './pages/BoxLabelsPrint'
 import BoxReport from './pages/BoxReport'
+import OfflinePage from './pages/OfflinePage'
+import OfflineBanner from './components/OfflineBanner'
 
 // Latin letters and digits come from Inter, Arabic letters from IBM Plex Sans Arabic
 const FONT = '"Inter Variable", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif'
@@ -60,6 +63,7 @@ export default function App() {
       <AntApp>
         <SettingsProvider>
           <AuthProvider>
+            <OfflineBanner />
             <Routes>
               {/* Opened by phones scanning a QR code */}
               <Route path="/eq/:serial" element={<ScanPage />} />
@@ -68,6 +72,7 @@ export default function App() {
               <Route path="/boxes/labels" element={<BoxLabelsPrint />} />
               <Route path="/boxes/:id/report" element={<BoxReport />} />
               <Route path="/scan" element={<ScanLabelPage />} />
+              <Route path="/offline" element={<OfflinePage />} />
               <Route path="/print/equipment/:id" element={<PrintSheet />} />
               <Route path="/print/list" element={<PrintList />} />
               <Route path="/print/custody/:custodyId" element={<PrintCustodyForm />} />
@@ -99,6 +104,7 @@ function Shell() {
     { key: '/qr', icon: <QrcodeOutlined />, label: <Link to="/qr">{t('qr_codes')}</Link> },
     { key: '/history', icon: <HistoryOutlined />, label: <Link to="/history">{t('history')}</Link> },
     { key: '/network', icon: <WifiOutlined />, label: <Link to="/network">{t('network')}</Link> },
+    { key: '/offline', icon: <CloudDownloadOutlined />, label: <Link to="/offline">{t('offline_title')}</Link> },
     ...(isAdmin
       ? [
           { key: '/users', icon: <TeamOutlined />, label: <Link to="/users">{t('users')}</Link> },

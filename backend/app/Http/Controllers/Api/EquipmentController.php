@@ -521,8 +521,25 @@ class EquipmentController extends Controller
 
     private function detail(Equipment $equipment): array
     {
-        $equipment->load(['fields', 'import', 'creator:id,name', 'updater:id,name', 'parent:id,serial_number,name,category,group_id', 'parent.fields', 'parent.group:id,name', 'accessories.fields', 'boxes', 'group:id,name']);
+        $equipment->load(self::DETAIL_RELATIONS);
 
+        return [
+            ...self::present($equipment),
+            'logs' => auth('sanctum')->check() ? $equipment->logs()->with('user:id,name')->limit(100)->get() : null,
+        ];
+    }
+
+    /** The relations present() reads. */
+    public const DETAIL_RELATIONS = ['fields', 'import', 'creator:id,name', 'updater:id,name', 'parent:id,serial_number,name,category,group_id', 'parent.fields', 'parent.group:id,name', 'accessories.fields', 'boxes', 'group:id,name'];
+
+    /**
+     * An equipment's page, without its history. The DETAIL_RELATIONS must be loaded.
+     * Also used for the copy that phones keep for working without a connection.
+     *
+     * @return array<string, mixed>
+     */
+    public static function present(Equipment $equipment): array
+    {
         return [
             'id' => $equipment->id,
             'serial_number' => $equipment->serial_number,
@@ -549,7 +566,6 @@ class EquipmentController extends Controller
             'updated_by' => $equipment->updater?->name,
             'created_at' => $equipment->created_at,
             'updated_at' => $equipment->updated_at,
-            'logs' => auth('sanctum')->check() ? $equipment->logs()->with('user:id,name')->limit(100)->get() : null,
         ];
     }
 

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { isOffline, setOffline } from './offline'
 
 const TOKEN_KEY = 'repo_token'
 
@@ -19,9 +20,18 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+/** Answers from the phone's saved copy carry this header (see sw.js); any answer from the server clears it. */
+const noteOffline = (res) => setOffline(!!res.headers?.['x-repo-offline'])
+
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    noteOffline(res)
+    return res
+  },
   (error) => {
+    if (error.response) noteOffline(error.response)
+    // A change (or anything not in the copy) while offline: say why instead of "Network Error"
+    else if (isOffline()) error.message = 'offline_no_edit'
     if (error.response?.status === 401 && tokenStore.get()) {
       tokenStore.clear()
       window.dispatchEvent(new Event('auth:expired'))

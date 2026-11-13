@@ -7,6 +7,7 @@ import api from '../api'
 import { useLang } from '../i18n'
 import { useAuth } from '../auth'
 import BoxView, { BoxForm, formatWeight } from '../components/BoxView'
+import { OfflineNoCopy, noOfflineCopy } from '../components/OfflineBanner'
 
 /** All boxes: search, add, print labels. */
 export function BoxesPage() {
@@ -118,7 +119,7 @@ export function ScanBoxPage() {
           setBox(data)
           setState('ok')
         })
-        .catch(() => setState('missing')),
+        .catch((e) => setState(noOfflineCopy(e) ? 'no_copy' : 'missing')),
     [number],
   )
 
@@ -144,6 +145,7 @@ export function ScanBoxPage() {
       </Layout.Header>
       <Layout.Content className="app-content">
         {state === 'loading' && <Spin size="large" className="page-spin" />}
+        {state === 'no_copy' && <OfflineNoCopy />}
         {state === 'missing' && (
           <Result
             status="404"

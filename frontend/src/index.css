@@ -2009,3 +2009,41 @@ h5,
     padding: 12px;
   }
 }
+
+/* Working without a connection */
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.offline-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0;
+}
+.offline-meta dt {
+  color: rgba(0, 0, 0, 0.55);
+}
+.offline-meta dd {
+  margin: 0;
+  font-weight: 600;
+}
+.offline-steps {
+  padding-inline-start: 20px;
+  margin: 0;
+}
+.offline-steps li + li {
+  margin-top: 20px;
+}
+.offline-hint {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.offline-tips {
+  padding-inline-start: 20px;
+  margin: 0;
+}
+.offline-tips li + li {
+  margin-top: 6px;
+}
