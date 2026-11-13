@@ -161,7 +161,8 @@
 | `START-HERE.txt` | دليل يوم التثبيت |
 | `setup.bat` | يثبّت النظام: قاعدة البيانات، والجداول (يضيف فقط ولا يعيد الإنشاء أبداً)، وأول مدير، وأول نسخة احتياطية |
 | `hotspot-setup.ps1` | PowerShell (كمسؤول): يغيّر اسم الحاسوب إلى `repo`، ويفعّل mDNS، ويفتح الجدار الناري على كل الشبكات، ويمنع السكون، ويحدد عنوان QR |
-| `https-setup.ps1` | PowerShell (كمسؤول): شهادة النظام لـ https، والمنفذ 443، وعنوان QR <code dir="ltr">https://repo.local</code>. مطلوب لتفتح الهواتف الملصقات دون اتصال |
+| `https-setup.ps1` | PowerShell (كمسؤول): شهادة النظام لـ https، والمنفذ 443، وعنوان QR <code dir="ltr">https://repo.local</code>. مطلوب لتفتح الهواتف الملصقات دون اتصال. مع **XAMPP** يضع Apache الخاص به أمام النظام (http على 80 و https على 443)، ويشغّل `start-server.bat` النظام بعدها على <code dir="ltr">127.0.0.1:8000</code>. مع **Laragon** يفحص Apache الخاص به |
+| `apache-proxy.conf` | إعدادات Apache التي يضعها `https-setup.ps1` في XAMPP (لا تُنسخ يدوياً) |
 | `apache-vhost.conf` | يُنسخ إلى `C:\laragon\etc\apache2\sites-enabled\00-repo.conf` (جزء https فيه يعمل بعد `https-setup.ps1`) |
 | `backup.bat` / `schedule-backup.bat` | نسخة احتياطية الآن / نسخة احتياطية يومية الساعة 14:00 |
 | `update.bat` | بعد نسخ إصدار جديد: نسخة احتياطية أولاً، ثم تحديثات قاعدة البيانات |

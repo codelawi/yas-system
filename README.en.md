@@ -80,7 +80,8 @@ The QR codes contain the laptop's name, **`http://repo.local`** (mDNS). It works
 | `START-HERE.txt` | The setup-day guide |
 | `setup.bat` | Installs the system: database, tables (only adds, never re-creates), first admin, first backup |
 | `hotspot-setup.ps1` | PowerShell (admin): renames the laptop to `repo`, turns on mDNS, firewall on every network, no sleep, sets the QR address |
-| `https-setup.ps1` | PowerShell (admin): the system's certificate for https, port 443, QR address `https://repo.local`. Needed for phones to open labels without a connection |
+| `https-setup.ps1` | PowerShell (admin): the system's certificate for https, port 443, QR address `https://repo.local`. Needed for phones to open labels without a connection. With **XAMPP** it puts XAMPP's Apache in front of the system (http 80 + https 443) and `start-server.bat` then runs it on `127.0.0.1:8000`; with **Laragon** it checks Laragon's Apache |
+| `apache-proxy.conf` | The Apache settings `https-setup.ps1` puts in XAMPP (not copied by hand) |
 | `apache-vhost.conf` | Copy to `C:\laragon\etc\apache2\sites-enabled\00-repo.conf` (its https part starts after `https-setup.ps1`) |
 | `backup.bat` / `schedule-backup.bat` | Backup now / daily backup at 14:00 |
 | `update.bat` | After copying a new version: backup first, then database changes |

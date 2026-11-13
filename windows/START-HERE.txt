@@ -11,6 +11,7 @@ Files in this folder:
   setup.bat             installs the system (safe to run again, never deletes data)
   hotspot-setup.ps1     network: laptop name "repo", firewall, no sleep, QR address
   https-setup.ps1       https: phones keep the data and open labels WITHOUT a connection
+  apache-proxy.conf     Apache settings https-setup.ps1 puts in XAMPP (do not copy by hand)
   apache-vhost.conf     tells Apache where the system is
   backup.bat            backup now
   schedule-backup.bat   daily automatic backup at 14:00
@@ -122,16 +123,24 @@ connection to the laptop, scanning a label still opens the equipment or box
 page (view only). Phones allow this only on https, so do this BEFORE printing:
 the QR address becomes  https://repo.local
 
-H1. Laragon menu > Apache > SSL > Enabled.
-    Copy  windows\apache-vhost.conf  AGAIN to
-        C:\laragon\etc\apache2\sites-enabled\00-repo.conf
-    (it now has an https part). Laragon menu > Apache > Reload - Apache green.
+H1. Prepare the web server:
+    - XAMPP (no Laragon): nothing to do by hand. Keep start-server.bat closed for
+      now - the script sets up XAMPP's Apache in front of the system: Apache answers
+      phones on http (80) and https (443), and start-server.bat then runs the system
+      behind it on 127.0.0.1:8000. XAMPP's PHP version does not matter.
+    - Laragon: Laragon menu > Apache > SSL > Enabled. Copy windows\apache-vhost.conf
+      AGAIN to C:\laragon\etc\apache2\sites-enabled\00-repo.conf (it now has an
+      https part). Laragon menu > Apache > Reload - Apache green.
 
-H2. PowerShell AS ADMINISTRATOR:
-        cd C:\laragon\www\repo\windows
+H2. PowerShell AS ADMINISTRATOR, in the system's windows folder, e.g.:
+        cd C:\xampp\htdocs\repo\windows        (Laragon: C:\laragon\www\repo\windows)
         powershell -ExecutionPolicy Bypass -File .\https-setup.ps1
-    Every line must be [OK]. It sets the QR address to  https://repo.local
-    and prints the date to run it again (about 2 years).
+    XAMPP somewhere else than C:\xampp? Add  -Xampp D:\xampp
+    With XAMPP it asks you to: restart Apache in the XAMPP Control Panel (Stop, Start),
+    then start start-server.bat. Every line must end [OK]. It sets the QR address to
+    https://repo.local and prints the date to run it again (about 2 years).
+    XAMPP every day from now on: Apache green in the XAMPP Control Panel (tick its
+    "Service" box so it starts with Windows) AND the start-server.bat window open.
     Labels already printed with http:// still open the system while connected,
     but only labels printed with https:// open WITHOUT a connection.
 
@@ -223,7 +232,11 @@ http://localhost shows another site   Check step 5 (00-repo.conf), Laragon > Rel
 Phone: page does not open             Same hotspot? Run hotspot-setup.ps1 again (firewall)
 Phone: repo.local fails, IP works     That phone does not support .local - PLAN B
 Network page box is red               The laptop name changed or no network - rerun step 12
-https-setup: no answer on https       Laragon > Apache > SSL > Enabled, step H1, Reload Apache
+https-setup: no answer on https       XAMPP: Apache green + start-server.bat open. Laragon: step H1
+https-setup: "Port 443 is used by"    Close that program (VMware, Skype, IIS...), run the script again
+XAMPP Apache will not start (red)     Port 80 still used by an old start-server.bat window - close it.
+                                      Settings undone? C:\xampp\apache\conf\httpd.conf.before-repo
+                                      is httpd.conf as it was before the script
 Phone: https warning / not private    Certificate not installed or (iPhone) trust not turned ON - step H3
 Offline: label does not open          Label printed with http://, or data not downloaded on that
                                       phone from https://repo.local/offline - step H3
