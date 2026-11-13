@@ -112,9 +112,11 @@ try {
 # After https-setup.ps1 the labels use https (needed to open them without a connection): keep it
 if (Test-Path (Join-Path $AppPath 'storage\https\repo.crt')) { $qrUrl = "https://$Name.local" }
 Step "6. QR address = $qrUrl"
-$php = $null
-if ($env:PHP -and (Test-Path $env:PHP)) { $php = $env:PHP } else { $cmd = Get-Command php -ErrorAction SilentlyContinue; if ($cmd) { $php = $cmd.Source } }
-if (-not $php) { Fail 'PHP not found - set the QR address on the Network page instead.'; exit 1 }
+# The same PHP 8.3+ the other scripts use (find-php.bat: PATH, C:\php, Program Files\PHP)
+Push-Location $PSScriptRoot
+$php = cmd /v:on /c "call find-php.bat >nul 2>&1 && echo !PHP!" | Select-Object -Last 1
+Pop-Location
+if (-not $php -or -not (Test-Path $php)) { Fail 'PHP 8.3+ not found (run find-php.bat to see why) - set the QR address on the Network page instead.'; exit 1 }
 & $php "$AppPath\artisan" repo:qr-address $qrUrl
 if ($LASTEXITCODE -eq 0) { & $php "$AppPath\artisan" repo:qr-address } else { Fail 'The QR address was not changed (see above).' }
 

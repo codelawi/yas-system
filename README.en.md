@@ -69,23 +69,27 @@ frontend/   React source (only needed to change the UI)
 windows/    setup scripts for the Windows PC
 ```
 
-## Install on the Windows laptop (Laragon, phone hotspots)
+## Install on the Windows laptop (XAMPP, phone hotspots)
 
-Follow **`windows/START-HERE.txt`** step by step: install, network, phone test, backups, printing.
+Follow **`windows/START-HERE.txt`** (in Arabic) step by step: install, network, phone test, https, backups, printing.
 
-The QR codes contain the laptop's name, **`http://repo.local`** (mDNS). It works on any phone hotspot even when the IP changes. Plan B, if a phone can't open `.local`: the laptop is the hotspot, with the fixed address `192.168.137.1`.
+- **XAMPP**: MySQL comes from XAMPP; the system lives in `C:\repo` and runs on PHP 8.3+ from `C:\php` through `start-server.bat`. After `https-setup.ps1`, XAMPP's Apache sits in front of it for http and https.
+- **Laragon**: an alternative, in the appendix at the end of the guide.
+
+The QR codes contain the laptop's name, **`https://repo.local`** (mDNS). It works on any phone hotspot even when the IP changes. Plan B, if a phone can't open `.local`: the laptop is the hotspot, with the fixed address `192.168.137.1`.
 
 | File in `windows/` | What it does |
 |---|---|
 | `START-HERE.txt` | The setup-day guide |
 | `setup.bat` | Installs the system: database, tables (only adds, never re-creates), first admin, first backup |
+| `start-server.bat` | Runs the system on PHP (keep its window open): on port 80, or on `127.0.0.1:8000` behind Apache once `https-setup.ps1` set up XAMPP |
 | `hotspot-setup.ps1` | PowerShell (admin): renames the laptop to `repo`, turns on mDNS, firewall on every network, no sleep, sets the QR address |
 | `https-setup.ps1` | PowerShell (admin): the system's certificate for https, port 443, QR address `https://repo.local`. Needed for phones to open labels without a connection. With **XAMPP** it puts XAMPP's Apache in front of the system (http 80 + https 443) and `start-server.bat` then runs it on `127.0.0.1:8000`; with **Laragon** it checks Laragon's Apache |
 | `apache-proxy.conf` | The Apache settings `https-setup.ps1` puts in XAMPP (not copied by hand) |
-| `apache-vhost.conf` | Copy to `C:\laragon\etc\apache2\sites-enabled\00-repo.conf` (its https part starts after `https-setup.ps1`) |
+| `apache-vhost.conf` | Laragon only: copy to `C:\laragon\etc\apache2\sites-enabled\00-repo.conf` (its https part starts after `https-setup.ps1`) |
 | `backup.bat` / `schedule-backup.bat` | Backup now / daily backup at 14:00 |
 | `update.bat` | After copying a new version: backup first, then database changes |
-| `find-php.bat` | Finds Laragon's PHP (used by the other scripts) |
+| `find-php.bat` | Finds PHP 8.3+ in PATH or `C:\php` (used by the other scripts) |
 
 ### Data safety
 - **Backups**: database, original Word files, equipment and damage-report photos, and custody form templates in one zip. Made automatically once a day while the system is used, by the scheduled task, by `update.bat`, and with **Settings → Backups → Back up now**. The oldest are removed beyond the "keep" limit (default 30).

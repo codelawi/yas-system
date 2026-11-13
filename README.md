@@ -150,23 +150,27 @@
 | `samples` | ملفات Word نموذجية لتجربة الاستيراد |
 | `docs/screenshots` | صور هذا الملف |
 
-## التثبيت على حاسوب Windows (Laragon ونقاط اتصال الهاتف)
+## التثبيت على حاسوب Windows (XAMPP ونقاط اتصال الهاتف)
 
-اتبع الملف **`windows/START-HERE.txt`** خطوة بخطوة: التثبيت، والشبكة، واختبار الهاتف، والنسخ الاحتياطي، والطباعة.
+اتبع الملف **`windows/START-HERE.txt`** (بالعربية) خطوة بخطوة: التثبيت، والشبكة، واختبار الهاتف، و https، والنسخ الاحتياطي، والطباعة.
 
-رموز QR تحمل اسم الحاسوب **`http://repo.local`** (mDNS)، فتعمل على أي نقطة اتصال هاتف حتى لو تغيّر عنوان IP. الخطة البديلة إن لم يفتح الهاتف عناوين ‎`.local`: يكون الحاسوب نفسه نقطة الاتصال، بالعنوان الثابت `192.168.137.1`.
+- **XAMPP**: قاعدة البيانات MySQL منه، والنظام في <code dir="ltr">C:\repo</code> يعمل بـ PHP 8.3+ من <code dir="ltr">C:\php</code> عبر `start-server.bat`. بعد `https-setup.ps1` يصبح Apache من XAMPP أمام النظام على http و https.
+- **Laragon**: بديل، في ملحق آخر الدليل.
+
+رموز QR تحمل اسم الحاسوب **<code dir="ltr">https://repo.local</code>** (mDNS)، فتعمل على أي نقطة اتصال هاتف حتى لو تغيّر عنوان IP. الخطة البديلة إن لم يفتح الهاتف عناوين ‎`.local`: يكون الحاسوب نفسه نقطة الاتصال، بالعنوان الثابت `192.168.137.1`.
 
 | الملف في مجلد `windows` | عمله |
 |---|---|
 | `START-HERE.txt` | دليل يوم التثبيت |
 | `setup.bat` | يثبّت النظام: قاعدة البيانات، والجداول (يضيف فقط ولا يعيد الإنشاء أبداً)، وأول مدير، وأول نسخة احتياطية |
+| `start-server.bat` | يشغّل النظام بـ PHP (تبقى نافذته مفتوحة): على المنفذ 80، أو على <code dir="ltr">127.0.0.1:8000</code> خلف Apache بعد `https-setup.ps1` مع XAMPP |
 | `hotspot-setup.ps1` | PowerShell (كمسؤول): يغيّر اسم الحاسوب إلى `repo`، ويفعّل mDNS، ويفتح الجدار الناري على كل الشبكات، ويمنع السكون، ويحدد عنوان QR |
 | `https-setup.ps1` | PowerShell (كمسؤول): شهادة النظام لـ https، والمنفذ 443، وعنوان QR <code dir="ltr">https://repo.local</code>. مطلوب لتفتح الهواتف الملصقات دون اتصال. مع **XAMPP** يضع Apache الخاص به أمام النظام (http على 80 و https على 443)، ويشغّل `start-server.bat` النظام بعدها على <code dir="ltr">127.0.0.1:8000</code>. مع **Laragon** يفحص Apache الخاص به |
 | `apache-proxy.conf` | إعدادات Apache التي يضعها `https-setup.ps1` في XAMPP (لا تُنسخ يدوياً) |
-| `apache-vhost.conf` | يُنسخ إلى `C:\laragon\etc\apache2\sites-enabled\00-repo.conf` (جزء https فيه يعمل بعد `https-setup.ps1`) |
+| `apache-vhost.conf` | لـ Laragon فقط: يُنسخ إلى `C:\laragon\etc\apache2\sites-enabled\00-repo.conf` (جزء https فيه يعمل بعد `https-setup.ps1`) |
 | `backup.bat` / `schedule-backup.bat` | نسخة احتياطية الآن / نسخة احتياطية يومية الساعة 14:00 |
 | `update.bat` | بعد نسخ إصدار جديد: نسخة احتياطية أولاً، ثم تحديثات قاعدة البيانات |
-| `find-php.bat` | يجد PHP الخاص بـ Laragon (تستخدمه السكربتات الأخرى) |
+| `find-php.bat` | يجد PHP 8.3+ في PATH أو <code dir="ltr">C:\php</code> (تستخدمه السكربتات الأخرى) |
 
 أول مدير يُنشأ بالرمز السري `1234`. غيّره من صفحة **المستخدمون** بعد أول دخول.
 
