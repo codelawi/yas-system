@@ -13,10 +13,13 @@ export default function FieldEditor({ value = [], onChange }) {
 
   useEffect(() => {
     if (keyCache) return
-    api.get('/equipment/keys').then(({ data }) => {
-      keyCache = data
-      setKeys(data)
-    })
+    api
+      .get('/equipment/keys')
+      .then(({ data }) => {
+        keyCache = data
+        setKeys(data)
+      })
+      .catch(() => {}) // only suggestions (and the form is hidden on a phone without a connection)
   }, [])
 
   const update = (i, patch) => onChange(value.map((f, idx) => (idx === i ? { ...f, ...patch } : f)))

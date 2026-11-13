@@ -109,6 +109,8 @@ try {
 }
 
 # ---------------------------------------------------------------- 6. QR address
+# After https-setup.ps1 the labels use https (needed to open them without a connection): keep it
+if (Test-Path (Join-Path $AppPath 'storage\https\repo.crt')) { $qrUrl = "https://$Name.local" }
 Step "6. QR address = $qrUrl"
 $php = $null
 if ($env:PHP -and (Test-Path $env:PHP)) { $php = $env:PHP } else { $cmd = Get-Command php -ErrorAction SilentlyContinue; if ($cmd) { $php = $cmd.Source } }

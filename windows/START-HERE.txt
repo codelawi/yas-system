@@ -10,6 +10,7 @@ Files in this folder:
   START-HERE.txt        this guide
   setup.bat             installs the system (safe to run again, never deletes data)
   hotspot-setup.ps1     network: laptop name "repo", firewall, no sleep, QR address
+  https-setup.ps1       https: phones keep the data and open labels WITHOUT a connection
   apache-vhost.conf     tells Apache where the system is
   backup.bat            backup now
   schedule-backup.bat   daily automatic backup at 14:00
@@ -99,7 +100,7 @@ On each phone open:  http://repo.local     The system must open every time.
 [ ] d) Share the hotspot from a DIFFERENT phone, connect the laptop to it,
        open http://repo.local again on the phones
 
-All ticked?  -> go to PART 4 with  http://repo.local
+All ticked?  -> go to PART 3B (https), then PART 4
 An Android fails? -> use PLAN B below, and decide NOW (not after printing).
 
 PLAN B - the laptop is the hotspot (fixed address 192.168.137.1)
@@ -112,6 +113,50 @@ PLAN B - the laptop is the hotspot (fixed address 192.168.137.1)
         cd C:\laragon\www\repo
         php artisan repo:qr-address http://192.168.137.1
   - Repeat the phone tests with  http://192.168.137.1
+
+
+PART 3B - HTTPS: OPEN LABELS WITHOUT A CONNECTION (about 20 minutes)
+---------------------------------------------------------------------
+A phone downloads all the data once (while on the hotspot). Later, with NO
+connection to the laptop, scanning a label still opens the equipment or box
+page (view only). Phones allow this only on https, so do this BEFORE printing:
+the QR address becomes  https://repo.local
+
+H1. Laragon menu > Apache > SSL > Enabled.
+    Copy  windows\apache-vhost.conf  AGAIN to
+        C:\laragon\etc\apache2\sites-enabled\00-repo.conf
+    (it now has an https part). Laragon menu > Apache > Reload - Apache green.
+
+H2. PowerShell AS ADMINISTRATOR:
+        cd C:\laragon\www\repo\windows
+        powershell -ExecutionPolicy Bypass -File .\https-setup.ps1
+    Every line must be [OK]. It sets the QR address to  https://repo.local
+    and prints the date to run it again (about 2 years).
+    Labels already printed with http:// still open the system while connected,
+    but only labels printed with https:// open WITHOUT a connection.
+
+H3. On EACH phone, once (connected to the hotspot):
+    a) open  http://repo.local/offline  > "تنزيل الشهادة" (Download the certificate)
+    b) iPhone:  Settings > Profile Downloaded > Install
+                then Settings > General > About > Certificate Trust Settings
+                > turn ON "Equipment Repository CA"
+       Android: Settings > Security > Encryption & credentials
+                > Install a certificate > CA certificate > pick the file
+                (the menu names differ a little between phones)
+    c) open  https://repo.local/offline  - NO warning may appear
+    d) tick "مع صور المعدات" if you want photos > "تنزيل البيانات" (Download data)
+
+H4. Test on each phone: turn Wi-Fi and mobile data OFF, scan a label printed
+    with https (print ONE in PART 5 first) - the page must open with a yellow
+    "دون اتصال" (Offline) bar at the top.
+
+Before each trip: open https://repo.local/offline on the phone and tap
+"تحديث البيانات" (Update data). Changes made after that are not on the phone.
+On iPhone, Safari may clear the data if the system is not opened for about a week.
+
+KEEP storage\https (copy it with the backups). A new laptop with the same
+folder needs nothing new on the phones; a new authority means installing the
+certificate on every phone again.
 
 
 PART 4 - KEEP THE DATA SAFE
@@ -178,4 +223,8 @@ http://localhost shows another site   Check step 5 (00-repo.conf), Laragon > Rel
 Phone: page does not open             Same hotspot? Run hotspot-setup.ps1 again (firewall)
 Phone: repo.local fails, IP works     That phone does not support .local - PLAN B
 Network page box is red               The laptop name changed or no network - rerun step 12
+https-setup: no answer on https       Laragon > Apache > SSL > Enabled, step H1, Reload Apache
+Phone: https warning / not private    Certificate not installed or (iPhone) trust not turned ON - step H3
+Offline: label does not open          Label printed with http://, or data not downloaded on that
+                                      phone from https://repo.local/offline - step H3
 Upload of Word file fails             Step 4 (php.ini sizes), then Laragon > Reload Apache

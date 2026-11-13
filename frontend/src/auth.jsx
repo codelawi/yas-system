@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { Input, Modal, Typography } from 'antd'
+import { App, Input, Modal, Typography } from 'antd'
 import { LockOutlined } from '@ant-design/icons'
 import api, { errorKey, tokenStore } from './api'
 import { useLang } from './i18n'
+import { isOffline } from './offline'
 
 const AuthContext = createContext(null)
 const USER_KEY = 'repo_user'
@@ -21,6 +22,7 @@ function readUser() {
  */
 export function AuthProvider({ children }) {
   const { t } = useLang()
+  const { message } = App.useApp()
   const [user, setUser] = useState(readUser)
   const [open, setOpen] = useState(false)
   const [pin, setPin] = useState('')
@@ -47,12 +49,17 @@ export function AuthProvider({ children }) {
   }
 
   const requirePin = useCallback(() => {
+    // Changes are saved on the server: none while the phone shows its saved copy
+    if (isOffline()) {
+      message.warning(t('offline_no_edit'))
+      return Promise.resolve(null)
+    }
     if (tokenStore.get() && user) return Promise.resolve(user)
     setPin('')
     setError(null)
     setOpen(true)
     return new Promise((resolve) => waiters.current.push(resolve))
-  }, [user])
+  }, [user, message, t])
 
   const submit = async () => {
     if (!pin) return

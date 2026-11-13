@@ -6,6 +6,7 @@ import api from '../api'
 import { useLang } from '../i18n'
 import { useAuth } from '../auth'
 import EquipmentView from '../components/EquipmentView'
+import { OfflineNoCopy, noOfflineCopy } from '../components/OfflineBanner'
 
 /** Page opened by a phone after scanning the QR code on an equipment. */
 export default function ScanPage() {
@@ -23,7 +24,7 @@ export default function ScanPage() {
           setEquipment(data)
           setState('ok')
         })
-        .catch(() => setState('missing')),
+        .catch((e) => setState(noOfflineCopy(e) ? 'no_copy' : 'missing')),
     [serial],
   )
 
@@ -50,6 +51,7 @@ export default function ScanPage() {
       </Layout.Header>
       <Layout.Content className="app-content">
         {state === 'loading' && <Spin size="large" className="page-spin" />}
+        {state === 'no_copy' && <OfflineNoCopy />}
         {state === 'missing' && (
           <Result
             status="404"
