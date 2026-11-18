@@ -4,7 +4,7 @@ REM Keep this window open while the system is used - closing it stops the system
 REM Port 80 = the address has no port (http://repo.local). Port 80 busy? Change PORT below,
 REM but do it BEFORE printing labels: the port becomes part of the QR address.
 setlocal
-cd /d "%~dp0.."
+cd /d "%~dp0..\backend"
 call "%~dp0find-php.bat" || (pause & exit /b 1)
 set "HOST=0.0.0.0"
 set "PORT=80"

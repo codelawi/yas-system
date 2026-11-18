@@ -21,6 +21,8 @@ if errorlevel 1 (
   exit /b 1
 )
 REM The extensions the system needs (zip: backups and Word/Excel forms)
-"%PHP%" -r "$m = array_filter(['pdo_mysql', 'mbstring', 'zip', 'fileinfo', 'openssl'], fn ($e) => ! extension_loaded($e)); if ($m) { echo '[!] PHP extensions missing: '.implode(', ', $m).PHP_EOL.'    php.ini: '.(php_ini_loaded_file() ?: 'NONE - copy php.ini-production to php.ini in the PHP folder').PHP_EOL.'    In php.ini remove the ; before  extension=pdo_mysql  extension=mbstring  extension=zip  extension=fileinfo  extension=openssl'.PHP_EOL; exit(1); }"
+REM No "!" in this PHP code: START.bat and the .ps1 scripts call this file with delayed
+REM expansion on (cmd /v:on), which would eat every "!" and break the PHP code.
+"%PHP%" -r "$m = array_filter(['pdo_mysql', 'mbstring', 'zip', 'fileinfo', 'openssl'], fn ($e) => extension_loaded($e) === false); if ($m) { echo '['.chr(33).'] PHP extensions missing: '.implode(', ', $m).PHP_EOL.'    php.ini: '.(php_ini_loaded_file() ?: 'NONE - copy php.ini-production to php.ini in the PHP folder').PHP_EOL.'    In php.ini remove the ; before  extension=pdo_mysql  extension=mbstring  extension=zip  extension=fileinfo  extension=openssl'.PHP_EOL; exit(1); }"
 if errorlevel 1 exit /b 1
 exit /b 0
