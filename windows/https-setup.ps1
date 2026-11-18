@@ -68,7 +68,9 @@ Ok $openssl
 # Runs a program; its normal messages on stderr (OpenSSL, Apache) must not stop the script
 function Invoke-Native {
     $ErrorActionPreference = 'Continue'
-    $program, $rest = $args
+    # $rest must stay a list: "$program, $rest = $args" made a single argument (httpd -t) a plain string
+    $program = $args[0]
+    $rest = @($args | Select-Object -Skip 1)
     & $program @rest
 }
 
