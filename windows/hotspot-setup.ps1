@@ -9,7 +9,7 @@
 
   -Name     Computer name to use (default: repo  ->  http://repo.local)
   -Port     Web port (default 80)
-  -AppPath  System folder (default: the folder above this windows folder)
+  -AppPath  System folder (default: the backend folder next to this windows folder)
 
   Run it, restart when asked, then run it again: everything must be [OK].
 #>
@@ -19,7 +19,7 @@ param(
     [int]$Port = 80,
     [string]$AppPath = ''
 )
-if (-not $AppPath) { $AppPath = Split-Path -Parent $PSScriptRoot }
+if (-not $AppPath) { $AppPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'backend' }
 
 $ErrorActionPreference = 'Stop'
 function Step($text) { Write-Host ''; Write-Host "== $text" -ForegroundColor Cyan }
@@ -114,7 +114,7 @@ if (Test-Path (Join-Path $AppPath 'storage\https\repo.crt')) { $qrUrl = "https:/
 Step "6. QR address = $qrUrl"
 # The same PHP 8.3+ the other scripts use (find-php.bat: PATH, C:\php, Program Files\PHP)
 Push-Location $PSScriptRoot
-$php = cmd /v:on /c "call find-php.bat >nul 2>&1 && echo !PHP!" | Select-Object -Last 1
+$php = cmd /v:on /c "call `"$PSScriptRoot\find-php.bat`" >nul 2>&1 && echo !PHP!" | Select-Object -Last 1
 Pop-Location
 if (-not $php -or -not (Test-Path $php)) { Fail 'PHP 8.3+ not found (run find-php.bat to see why) - set the QR address on the Network page instead.'; exit 1 }
 & $php "$AppPath\artisan" repo:qr-address $qrUrl

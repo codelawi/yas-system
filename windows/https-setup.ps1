@@ -19,7 +19,7 @@
     powershell -ExecutionPolicy Bypass -File .\https-setup.ps1
 
   -Name     Computer name (default: repo  ->  https://repo.local)
-  -AppPath  System folder (default: the folder above this windows folder)
+  -AppPath  System folder (default: the backend folder next to this windows folder)
   -Xampp    XAMPP folder (default: C:\xampp)
 
   Safe to run again: the authority is kept (phones keep trusting it) and the certificate is
@@ -33,7 +33,7 @@ param(
     [string]$AppPath = '',
     [string]$Xampp = 'C:\xampp'
 )
-if (-not $AppPath) { $AppPath = Split-Path -Parent $PSScriptRoot }
+if (-not $AppPath) { $AppPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'backend' }
 
 $ErrorActionPreference = 'Stop'
 # Windows PowerShell 5.1 may still try old TLS versions, which Apache refuses
@@ -260,7 +260,7 @@ if (Test-Url "$qrUrl/api/network/ping") {
 Step "8. QR address = $qrUrl"
 # The same PHP 8.3+ the other scripts use (find-php.bat)
 Push-Location $PSScriptRoot
-$php = cmd /v:on /c "call find-php.bat >nul 2>&1 && echo !PHP!" | Select-Object -Last 1
+$php = cmd /v:on /c "call `"$PSScriptRoot\find-php.bat`" >nul 2>&1 && echo !PHP!" | Select-Object -Last 1
 Pop-Location
 if (-not $php -or -not (Test-Path $php)) { Fail "PHP 8.3+ not found (run find-php.bat to see why) - set the QR address to $qrUrl on the QR codes page instead."; exit 1 }
 & $php "$AppPath\artisan" repo:qr-address $qrUrl
