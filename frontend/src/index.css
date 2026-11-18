@@ -2047,3 +2047,121 @@ h5,
 .offline-tips li + li {
   margin-top: 6px;
 }
+
+/* ---------- Live QR / Data Matrix scanner (components/CodeScanner.jsx) ---------- */
+.code-scanner {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: #000;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.code-scanner-top,
+.code-scanner-bottom {
+  position: absolute;
+  inset-inline: 0;
+  z-index: 2;
+  padding: 12px 16px;
+  padding-top: max(12px, env(safe-area-inset-top));
+}
+.code-scanner-top {
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(rgba(0, 0, 0, 0.7), transparent);
+}
+.code-scanner-title {
+  flex: 1;
+  font-size: 17px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.code-scanner-bottom {
+  bottom: 0;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.code-scanner-view {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.code-scanner-view video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: center;
+}
+/* The aiming square: same size as the part read at full detail */
+.code-scanner-aim {
+  position: absolute;
+  width: min(60vw, 60vh);
+  aspect-ratio: 1;
+  border-radius: 16px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+  outline: 3px solid rgba(255, 255, 255, 0.9);
+}
+.code-scanner-hint {
+  position: absolute;
+  bottom: calc(50% - min(30vw, 30vh) - 40px);
+  font-size: 14px;
+  text-shadow: 0 1px 2px #000;
+}
+.code-scanner-nolive {
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  text-align: center;
+  font-size: 15px;
+}
+.code-scanner-feedback {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 16px;
+  text-align: center;
+  word-break: break-all;
+}
+.code-scanner-feedback.is-success {
+  background: #16a34a;
+}
+.code-scanner-feedback.is-warning {
+  background: #d97706;
+}
+.code-scanner-feedback.is-error {
+  background: #dc2626;
+}
+.code-scanner-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.code-scanner-zoom {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.code-scanner-zoom .ant-slider {
+  flex: 1;
+}
+
+/* ---------- Scan documents ---------- */
+.scan-doc-table .ant-input {
+  min-width: 120px;
+}
+.scan-doc-table .scan-doc-code {
+  min-width: 200px;
+  font-family: 'JetBrains Mono Variable', monospace;
+}

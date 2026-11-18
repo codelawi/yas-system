@@ -17,6 +17,7 @@ import {
   LockOutlined,
   MenuOutlined,
   QrcodeOutlined,
+  ScanOutlined,
   SettingOutlined,
   TeamOutlined,
   UnlockOutlined,
@@ -47,6 +48,7 @@ import { GroupDetail, GroupsPage } from './pages/GroupPages'
 import BoxLabelsPrint from './pages/BoxLabelsPrint'
 import BoxReport from './pages/BoxReport'
 import OfflinePage from './pages/OfflinePage'
+import { ScanDocumentPage, ScanDocumentsPage } from './pages/ScanDocumentPages'
 import OfflineBanner from './components/OfflineBanner'
 
 // Latin letters and digits come from Inter, Arabic letters from IBM Plex Sans Arabic
@@ -101,6 +103,7 @@ function Shell() {
     { key: '/import', icon: <FileWordOutlined />, label: <Link to="/import">{t('import')}</Link> },
     { key: '/custody', icon: <UserSwitchOutlined />, label: <Link to="/custody">{t('custodies')}</Link> },
     { key: '/stocktakes', icon: <AuditOutlined />, label: <Link to="/stocktakes">{t('stocktake')}</Link> },
+    { key: '/scan-documents', icon: <ScanOutlined />, label: <Link to="/scan-documents">{t('scan_docs')}</Link> },
     { key: '/qr', icon: <QrcodeOutlined />, label: <Link to="/qr">{t('qr_codes')}</Link> },
     { key: '/history', icon: <HistoryOutlined />, label: <Link to="/history">{t('history')}</Link> },
     { key: '/network', icon: <WifiOutlined />, label: <Link to="/network">{t('network')}</Link> },
@@ -176,6 +179,8 @@ function Shell() {
             <Route path="/custody/forms/:id" element={<CustodyFormPage />} />
             <Route path="/stocktakes" element={<StocktakesPage />} />
             <Route path="/stocktakes/:id" element={<StocktakePage />} />
+            <Route path="/scan-documents" element={<ScanDocumentsPage />} />
+            <Route path="/scan-documents/:id" element={<ScanDocumentPage />} />
             <Route path="/network" element={<NetworkPage />} />
             <Route path="/users" element={isAdmin ? <UsersPage /> : <Navigate to="/" />} />
             <Route path="/settings" element={isAdmin ? <SettingsPage /> : <Navigate to="/" />} />

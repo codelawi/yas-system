@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\IssueController;
 use App\Http\Controllers\Api\MaintenanceController;
 use App\Http\Controllers\Api\NetworkController;
 use App\Http\Controllers\Api\OfflineController;
+use App\Http\Controllers\Api\ScanDocumentController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\StocktakeController;
 use App\Http\Controllers\Api\UserController;
@@ -57,6 +58,10 @@ Route::get('/issues/{issue}/photo', [IssueController::class, 'photo']);
 Route::get('/network/ping', [NetworkController::class, 'ping']);
 Route::get('/network/check-address', [NetworkController::class, 'checkAddress'])->middleware('throttle:30,1');
 Route::post('/labels/printed', [SettingController::class, 'labelsPrinted'])->middleware('throttle:30,1');
+
+// Scan documents: anyone can read them; scanning and editing need a PIN
+Route::get('/scan-documents', [ScanDocumentController::class, 'index']);
+Route::get('/scan-documents/{scanDocument}', [ScanDocumentController::class, 'show'])->whereNumber('scanDocument');
 
 // Phones download everything once, then open scanned labels without a connection
 Route::get('/offline/snapshot', [OfflineController::class, 'snapshot'])->middleware('throttle:10,1');
@@ -117,6 +122,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/stocktakes/{stocktake}/scans/{scan}', [StocktakeController::class, 'destroyScan']);
     Route::post('/stocktakes/{stocktake}/close', [StocktakeController::class, 'close']);
     Route::get('/stocktakes/{stocktake}/export', [StocktakeController::class, 'export']);
+
+    Route::post('/scan-documents', [ScanDocumentController::class, 'store']);
+    Route::put('/scan-documents/{scanDocument}', [ScanDocumentController::class, 'update']);
+    Route::delete('/scan-documents/{scanDocument}', [ScanDocumentController::class, 'destroy']);
+    Route::post('/scan-documents/{scanDocument}/scan', [ScanDocumentController::class, 'scan']);
+    Route::post('/scan-documents/{scanDocument}/rows', [ScanDocumentController::class, 'storeRow']);
+    Route::put('/scan-documents/{scanDocument}/rows/{row}', [ScanDocumentController::class, 'updateRow']);
+    Route::delete('/scan-documents/{scanDocument}/rows/{row}', [ScanDocumentController::class, 'destroyRow']);
 
     Route::post('/imports/preview', [ImportController::class, 'preview']);
     Route::post('/imports/check', [ImportController::class, 'check']);
