@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, Slider } from 'antd'
-import { CameraOutlined, CloseOutlined, ThunderboltFilled, ThunderboltOutlined } from '@ant-design/icons'
+import { CameraOutlined, CloseOutlined, PlayCircleOutlined, ReloadOutlined, ThunderboltFilled, ThunderboltOutlined } from '@ant-design/icons'
 import { useLang } from '../i18n'
 import { canUseLiveCamera, centerSquare, decodeFile, decodeRegion } from '../barcode'
 
@@ -8,6 +8,11 @@ import { canUseLiveCamera, centerSquare, decodeFile, decodeRegion } from '../bar
 const PAUSE_MS = 1200
 /** The same text read again within this time is ignored. */
 const SAME_CODE_MS = 3000
+/** Camera settings: the sharpest picture first, plain settings if the phone refuses or shows black. */
+const CONSTRAINTS = {
+  high: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+  basic: { facingMode: { ideal: 'environment' } },
+}
 /** Size of the aiming square, as a part of the shorter side of the picture. */
 const AIM = 0.6
 
@@ -31,6 +36,8 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
   const [zoom, setZoom] = useState(null) // { min, max, step, value, hardware }
   const [torch, setTorch] = useState(null) // null = not available
   const [reading, setReading] = useState(false)
+  const [status, setStatus] = useState('starting') // starting | tap | running
+  const [attempt, setAttempt] = useState(0) // bumped by "try again" to restart the camera
   // Read inside the camera loop without restarting the camera
   const zoomRef = useRef(zoom)
   zoomRef.current = zoom
@@ -66,21 +73,67 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
     let stream = null
     let frame = 0
 
-    const start = async () => {
+    const stopStream = () => {
+      stream?.getTracks().forEach((tr) => tr.stop())
+      stream = null
+      track.current = null
+    }
+
+    /** True once the video shows real frames; false if it stays black for `ms`. */
+    const waitForFrames = async (el, ms) => {
+      const until = Date.now() + ms
+      while (!stopped && Date.now() < until) {
+        if (el.readyState >= 2 && el.videoWidth > 0 && el.currentTime > 0) return true
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+      return false
+    }
+
+    /** Opens the camera: the highest quality first, then plain settings if the phone can't (or shows black). */
+    const start = async (quality = 'high') => {
       setError(null)
+      setStatus('starting')
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30 } },
-        })
+        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: CONSTRAINTS[quality] })
       } catch (e) {
-        setError(e?.name === 'NotAllowedError' ? 'camera_denied' : 'camera_failed')
+        if (stopped) return
+        if (quality === 'high' && e?.name !== 'NotAllowedError' && e?.name !== 'SecurityError') return start('basic')
+        setError({ key: e?.name === 'NotAllowedError' || e?.name === 'SecurityError' ? 'camera_denied' : 'camera_failed', detail: e?.name || String(e) })
         return
       }
       if (stopped) {
-        stream.getTracks().forEach((tr) => tr.stop())
+        stopStream()
         return
       }
+
+      const el = video.current
+      if (!el) {
+        stopStream()
+        return
+      }
+      // iPhone plays a camera video only when it is muted and inline
+      el.muted = true
+      el.setAttribute('muted', '')
+      el.setAttribute('playsinline', '')
+      el.srcObject = stream
+      let playing = true
+      try {
+        await el.play()
+      } catch {
+        // The browser wants a tap before playing: show a button for it
+        playing = false
+        setStatus('tap')
+      }
+      const ok = await waitForFrames(el, playing ? 5000 : 120000)
+      if (stopped) return
+      if (!ok) {
+        stopStream()
+        if (quality === 'high') return start('basic')
+        setError({ key: 'camera_black', detail: 'no frames' })
+        return
+      }
+      setStatus('running')
+
       const [videoTrack] = stream.getVideoTracks()
       track.current = videoTrack
       const caps = videoTrack.getCapabilities?.() || {}
@@ -103,10 +156,6 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
         setZoom({ min: 1, max: 4, step: 0.1, value: 1.5, hardware: false })
       }
       setTorch(caps.torch ? false : null)
-
-      const el = video.current
-      el.srcObject = stream
-      await el.play().catch(() => {})
       loop()
     }
 
@@ -137,13 +186,13 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
     start()
     return () => {
       stopped = true
-      track.current = null
-      stream?.getTracks().forEach((tr) => tr.stop())
+      stopStream()
       setTorch(null)
       setZoom(null)
       setFeedback(null)
+      setStatus('starting')
     }
-  }, [open, live, handleText])
+  }, [open, live, handleText, attempt])
 
   const changeZoom = async (value) => {
     setZoom((z) => ({ ...z, value }))
@@ -201,18 +250,32 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
       {live && !error ? (
         <div className="code-scanner-view">
           <video ref={video} playsInline muted autoPlay style={{ transform: `scale(${digitalZoom})` }} />
-          <div className="code-scanner-aim" />
-          <div className="code-scanner-hint">{t('scanner_hint')}</div>
+          {status === 'running' && <div className="code-scanner-aim" />}
+          {status === 'running' && <div className="code-scanner-hint">{t('scanner_hint')}</div>}
+          {status === 'starting' && <div className="code-scanner-status">{t('camera_starting')}</div>}
+          {status === 'tap' && (
+            <div className="code-scanner-status">
+              <Button type="primary" size="large" icon={<PlayCircleOutlined />} onClick={() => video.current?.play().catch(() => {})}>
+                {t('camera_tap_start')}
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="code-scanner-view code-scanner-nolive">
-          <p>{error ? t(error) : t('scanner_http_hint')}</p>
-          <input ref={photo} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
+          <p>{error ? t(error.key) : t('scanner_http_hint')}</p>
+          {error?.detail && <p className="code-scanner-detail" dir="ltr">{error.detail}</p>}
           <Button type="primary" size="large" icon={<CameraOutlined />} loading={reading} onClick={() => photo.current?.click()}>
             {t('scan_photo')}
           </Button>
+          {error && (
+            <Button size="large" icon={<ReloadOutlined />} onClick={() => setAttempt((a) => a + 1)}>
+              {t('try_again')}
+            </Button>
+          )}
         </div>
       )}
+      <input ref={photo} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
       <canvas ref={canvas} hidden />
 
       <div className="code-scanner-bottom">
@@ -225,6 +288,7 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
                 <Slider min={zoom.min} max={zoom.max} step={zoom.step} value={zoom.value} onChange={changeZoom} tooltip={{ open: false }} />
               </div>
             )}
+            <Button shape="circle" size="large" icon={<CameraOutlined />} loading={reading} onClick={() => photo.current?.click()} aria-label={t('scan_photo')} />
             {torch !== null && (
               <Button shape="circle" size="large" icon={torch ? <ThunderboltFilled /> : <ThunderboltOutlined />} onClick={toggleTorch} aria-label={t('torch')} />
             )}

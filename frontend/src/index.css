@@ -2165,3 +2165,17 @@ h5,
   min-width: 200px;
   font-family: 'JetBrains Mono Variable', monospace;
 }
+.code-scanner-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  font-size: 15px;
+}
+.code-scanner-detail {
+  font-size: 12px;
+  opacity: 0.6;
+}
