@@ -14,7 +14,7 @@ class ScanDocument extends Model
 
     protected $fillable = ['title', 'columns', 'created_by', 'updated_by'];
 
-    protected $casts = ['columns' => 'array'];
+    protected $casts = ['columns' => 'array', 'revision' => 'integer'];
 
     /** @return list<array{key: string, label: string}> */
     public static function defaultColumns(): array

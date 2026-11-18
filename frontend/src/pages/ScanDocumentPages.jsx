@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { App, Button, Empty, Form, Input, Modal, Popconfirm, Result, Spin, Table, Typography } from 'antd'
 import {
@@ -20,6 +20,48 @@ import { beep } from '../download'
 import CodeScanner from '../components/CodeScanner'
 import { cellText, downloadScanDocDocx } from '../scanDocExport'
 
+/** How often open screens ask the server whether something changed (ms). */
+const POLL_MS = 1500
+/** How long a row added from another device stays highlighted (ms). */
+const FRESH_MS = 4000
+
+/**
+ * Live updates without any extra server: every POLL_MS asks `url` for the current revision and calls
+ * `onChange` when it differs from `known.current` (the caller sets it after each load).
+ * Pauses while the tab is hidden and checks at once when it is shown again.
+ */
+function useRevisionPoll(url, known, onChange) {
+  const callback = useRef(onChange)
+  callback.current = onChange
+
+  useEffect(() => {
+    let stopped = false
+    let busy = false
+    const check = async () => {
+      if (stopped || busy || document.visibilityState !== 'visible') return
+      busy = true
+      try {
+        const { data } = await api.get(url)
+        if (!stopped && data.revision !== known.current) {
+          known.current = data.revision
+          await callback.current()
+        }
+      } catch {
+        /* the server is busy or out of reach: try again next time */
+      } finally {
+        busy = false
+      }
+    }
+    const timer = setInterval(check, POLL_MS)
+    document.addEventListener('visibilitychange', check)
+    return () => {
+      stopped = true
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', check)
+    }
+  }, [url, known])
+}
+
 /** List of scan documents + "new document". */
 export function ScanDocumentsPage() {
   const { t } = useLang()
@@ -30,9 +72,13 @@ export function ScanDocumentsPage() {
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
 
+  const listRevision = useRef(null)
+  const loadList = useCallback(() => api.get('/scan-documents').then(({ data }) => setList(data)), [])
   useEffect(() => {
-    api.get('/scan-documents').then(({ data }) => setList(data))
-  }, [])
+    loadList()
+  }, [loadList])
+  // A document added, deleted or scanned into on another device shows up here by itself
+  useRevisionPoll('/scan-documents/revision', listRevision, loadList)
 
   const startNew = async () => {
     if (!(await requirePin())) return
@@ -89,15 +135,39 @@ export function ScanDocumentsPage() {
 /** A text box that saves when it loses focus (only if the text changed). */
 function CellInput({ value, onSave, multiline, className, dir }) {
   const [text, setText] = useState(value ?? '')
-  useEffect(() => setText(value ?? ''), [value])
+  // While typing, a change from another device does not replace the text; the last save wins
+  const focused = useRef(false)
+  const dirty = useRef(false)
+  useEffect(() => {
+    if (!focused.current) setText(value ?? '')
+  }, [value])
 
   const commit = async () => {
-    if (text === (value ?? '')) return
+    focused.current = false
+    if (!dirty.current || text === (value ?? '')) {
+      dirty.current = false
+      setText(value ?? '')
+      return
+    }
+    dirty.current = false
     const ok = await onSave(text)
     if (!ok) setText(value ?? '')
   }
 
-  const props = { value: text, onChange: (e) => setText(e.target.value), onBlur: commit, className, dir, variant: 'borderless' }
+  const props = {
+    value: text,
+    onChange: (e) => {
+      dirty.current = true
+      setText(e.target.value)
+    },
+    onFocus: () => {
+      focused.current = true
+    },
+    onBlur: commit,
+    className,
+    dir,
+    variant: 'borderless',
+  }
   return multiline ? <Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} {...props} /> : <Input {...props} onPressEnter={(e) => e.target.blur()} />
 }
 
@@ -115,20 +185,45 @@ export function ScanDocumentPage() {
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
 
+  const [fresh, setFresh] = useState([]) // ids of rows just added from another device
+  const revision = useRef(null)
+  const rowsRef = useRef(rows)
+  rowsRef.current = rows
+
   const load = useCallback(
-    () =>
-      api
-        .get(`/scan-documents/${id}`)
-        .then(({ data }) => {
-          setDoc(data.document)
-          setRows(data.rows)
-        })
-        .catch(() => setMissing(true)),
+    async ({ live = false } = {}) => {
+      try {
+        const { data } = await api.get(`/scan-documents/${id}`)
+        revision.current = data.document.revision
+        if (live) {
+          const known = new Set(rowsRef.current.map((r) => r.id))
+          const added = data.rows.filter((r) => !known.has(r.id)).map((r) => r.id)
+          if (added.length) {
+            beep(true)
+            setFresh((f) => [...f, ...added])
+            setTimeout(() => setFresh((f) => f.filter((x) => !added.includes(x))), FRESH_MS)
+          }
+        }
+        setDoc(data.document)
+        setRows(data.rows)
+      } catch (e) {
+        if (!live || e?.response?.status === 404) setMissing(true)
+      }
+    },
     [id],
   )
   useEffect(() => {
     load()
   }, [load])
+  // Rows scanned on a phone appear here within a second or two
+  const liveLoad = useCallback(() => load({ live: true }), [load])
+  useRevisionPoll(`/scan-documents/${id}/revision`, revision, liveLoad)
+
+  // Bring the newest row into view
+  const lastFresh = fresh[fresh.length - 1]
+  useEffect(() => {
+    if (lastFresh) document.querySelector(`.scan-doc-table [data-row-key="${lastFresh}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [lastFresh])
 
   if (missing) return <Result status="404" title={t('not_found')} extra={<Link to="/scan-documents">{t('scan_docs')}</Link>} />
   if (!doc) return <Spin size="large" className="page-spin" />
@@ -145,7 +240,7 @@ export function ScanDocumentPage() {
       const { data } = await api.post(`/scan-documents/${id}/scan`, { code })
       if (data.status === 'added') {
         beep(true)
-        setRows((rs) => [...rs, data.row])
+        setRows((rs) => (rs.some((r) => r.id === data.row.id) ? rs : [...rs, data.row]))
         return { type: 'success', text: t('scan_added_row', { n: data.row_number, code: data.row.code }) }
       }
       beep(false)
@@ -186,7 +281,7 @@ export function ScanDocumentPage() {
     if (!(await requirePin())) return
     try {
       const { data } = await api.post(`/scan-documents/${id}/rows`)
-      setRows((rs) => [...rs, data])
+      setRows((rs) => (rs.some((r) => r.id === data.id) ? rs : [...rs, data]))
     } catch (e) {
       fail(e)
     }
@@ -302,6 +397,7 @@ export function ScanDocumentPage() {
       <Table
         className="scan-doc-table"
         rowKey="id"
+        rowClassName={(r) => (fresh.includes(r.id) ? 'scan-doc-row-new' : '')}
         size="small"
         bordered
         dataSource={rows}
@@ -323,8 +419,11 @@ const newColumnKey = () => `c_${Math.random().toString(36).slice(2, 10)}`
 function ColumnsModal({ open, columns, onCancel, onSave }) {
   const { t } = useLang()
   const [draft, setDraft] = useState(columns)
+  // Start from the current columns each time the window opens (not while it is open)
+  const wasOpen = useRef(false)
   useEffect(() => {
-    if (open) setDraft(columns)
+    if (open && !wasOpen.current) setDraft(columns)
+    wasOpen.current = open
   }, [open, columns])
 
   const set = (index, label) => setDraft((d) => d.map((c, i) => (i === index ? { ...c, label } : c)))

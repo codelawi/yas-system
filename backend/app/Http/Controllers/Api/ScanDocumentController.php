@@ -38,6 +38,25 @@ class ScanDocumentController extends Controller
         ])->load('createdBy:id,name')->loadCount('rows');
     }
 
+    /**
+     * A short fingerprint of the whole list (changes when a document is added, deleted or edited).
+     * Open screens ask for it every few seconds and reload the list only when it changes.
+     *
+     * @return array{revision: string}
+     */
+    public function listRevision(): array
+    {
+        $summary = ScanDocument::query()->selectRaw('COUNT(*) as total, COALESCE(SUM(revision), 0) as revisions, COALESCE(MAX(id), 0) as last_id')->first();
+
+        return ['revision' => "{$summary->total}:{$summary->revisions}:{$summary->last_id}"];
+    }
+
+    /** @return array{revision: int} */
+    public function revision(ScanDocument $scanDocument): array
+    {
+        return ['revision' => $scanDocument->revision];
+    }
+
     public function show(ScanDocument $scanDocument): array
     {
         return $this->full($scanDocument);
@@ -53,7 +72,9 @@ class ScanDocumentController extends Controller
         if (array_key_exists('columns', $data)) {
             $data['columns'] = $this->validColumns($data['columns']);
         }
-        $scanDocument->update($data + ['updated_by' => $request->user()->id]);
+        $scanDocument->fill($data + ['updated_by' => $request->user()->id]);
+        $scanDocument->revision++;
+        $scanDocument->save();
 
         return $this->full($scanDocument);
     }
@@ -98,7 +119,7 @@ class ScanDocumentController extends Controller
 
             return ['status' => 'duplicate', 'row' => $existing, 'row_number' => $this->rowNumber($scanDocument, $existing)];
         }
-        $scanDocument->touch();
+        $scanDocument->increment('revision');
 
         return ['status' => 'added', 'row' => $row, 'row_number' => $this->rowNumber($scanDocument, $row)];
     }
@@ -107,7 +128,7 @@ class ScanDocumentController extends Controller
     public function storeRow(Request $request, ScanDocument $scanDocument): ScanDocumentRow
     {
         $row = $scanDocument->rows()->create(['position' => $this->nextPosition($scanDocument), 'cells' => []]);
-        $scanDocument->touch();
+        $scanDocument->increment('revision');
 
         return $row;
     }
@@ -135,7 +156,7 @@ class ScanDocumentController extends Controller
             $row->cells = array_merge($row->cells ?? [], array_intersect_key($data['cells'], $allowed));
         }
         $row->save();
-        $scanDocument->touch();
+        $scanDocument->increment('revision');
 
         return $row;
     }
@@ -144,7 +165,7 @@ class ScanDocumentController extends Controller
     {
         abort_unless($row->scan_document_id === $scanDocument->id, 404);
         $row->delete();
-        $scanDocument->touch();
+        $scanDocument->increment('revision');
 
         return response()->noContent();
     }

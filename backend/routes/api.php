@@ -61,7 +61,9 @@ Route::post('/labels/printed', [SettingController::class, 'labelsPrinted'])->mid
 
 // Scan documents: anyone can read them; scanning and editing need a PIN
 Route::get('/scan-documents', [ScanDocumentController::class, 'index']);
+Route::get('/scan-documents/revision', [ScanDocumentController::class, 'listRevision']);
 Route::get('/scan-documents/{scanDocument}', [ScanDocumentController::class, 'show'])->whereNumber('scanDocument');
+Route::get('/scan-documents/{scanDocument}/revision', [ScanDocumentController::class, 'revision'])->whereNumber('scanDocument');
 
 // Phones download everything once, then open scanned labels without a connection
 Route::get('/offline/snapshot', [OfflineController::class, 'snapshot'])->middleware('throttle:10,1');

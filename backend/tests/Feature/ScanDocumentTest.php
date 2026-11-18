@@ -94,4 +94,22 @@ class ScanDocumentTest extends TestCase
         $this->deleteJson("/api/scan-documents/{$id}")->assertNoContent();
         $this->assertDatabaseCount('scan_document_rows', 0);
     }
+
+    public function test_revision_changes_with_every_change_so_open_screens_can_refresh(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $id = $this->postJson('/api/scan-documents', ['title' => 'مسح'])->json('id');
+        $list = $this->getJson('/api/scan-documents/revision')->assertOk()->json('revision');
+        $this->getJson("/api/scan-documents/{$id}/revision")->assertExactJson(['revision' => 0]);
+
+        $this->postJson("/api/scan-documents/{$id}/scan", ['code' => 'A-1']);
+        $this->postJson("/api/scan-documents/{$id}/scan", ['code' => 'A-1']); // duplicate: nothing changes
+        $row = $this->postJson("/api/scan-documents/{$id}/rows")->json('id');
+        $this->putJson("/api/scan-documents/{$id}/rows/{$row}", ['cells' => ['notes' => 'x']]);
+        $this->putJson("/api/scan-documents/{$id}", ['title' => 'جديد']);
+
+        $this->getJson("/api/scan-documents/{$id}/revision")->assertExactJson(['revision' => 4]);
+        $this->getJson("/api/scan-documents/{$id}")->assertJsonPath('document.revision', 4);
+        $this->assertNotSame($list, $this->getJson('/api/scan-documents/revision')->json('revision'));
+    }
 }
