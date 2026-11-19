@@ -63,7 +63,8 @@ export async function loadFormPages(form, scale = 1.5) {
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
     pages.push({ w: Math.round(base.width * MM_PER_PT * 10) / 10, h: Math.round(base.height * MM_PER_PT * 10) / 10, src: URL.createObjectURL(blob) })
   }
-  pdf.destroy()
+  // pdf.js 6 moved destroy() from the document to its loading task
+  pdf.loadingTask.destroy()
   return pages
 }
 
