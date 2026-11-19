@@ -8,9 +8,9 @@
 # ("ScriptContainedMaliciousContent").
 # ------------------------------------------------------------------ settings
 $Xampp     = 'C:\xampp'
-$Root      = Split-Path -Parent $PSScriptRoot   # the system folder (v), above this windows folder
+$Root      = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)   # the system folder, two levels above this start\windows folder
 $App       = Join-Path $Root 'backend'
-$Win       = Join-Path $Root 'windows'
+$Win       = $PSScriptRoot
 $Https     = Join-Path $App 'storage\https'
 $IpPrefix  = '172.20.10.'      # preferred network (phone hotspot); any other IPv4 is used if missing
 $SetQr     = $true             # print QR labels with https://<this IP>
@@ -37,7 +37,7 @@ Step '1. PHP and network address'
 Push-Location $Win
 $Php = cmd /v:on /c "call `"$Win\find-php.bat`" >nul 2>&1 && echo !PHP!" | Select-Object -Last 1
 Pop-Location
-if (-not $Php -or -not (Test-Path $Php)) { Fail 'PHP 8.3+ not found - run windows\find-php.bat to see why.' }
+if (-not $Php -or -not (Test-Path $Php)) { Fail 'PHP 8.3+ not found - run start\windows\find-php.bat to see why.' }
 Ok $Php
 $ips = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |

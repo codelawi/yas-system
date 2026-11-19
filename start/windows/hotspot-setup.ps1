@@ -3,13 +3,13 @@
   The QR codes get the laptop's own name  http://repo.local  which follows the laptop on
   ANY hotspot, whatever IP it receives (Windows announces its name with mDNS).
 
-  Run in PowerShell AS ADMINISTRATOR, from the windows folder:
+  Run in PowerShell AS ADMINISTRATOR, from the start\windows folder:
 
     powershell -ExecutionPolicy Bypass -File .\hotspot-setup.ps1
 
   -Name     Computer name to use (default: repo  ->  http://repo.local)
   -Port     Web port (default 80)
-  -AppPath  System folder (default: the backend folder next to this windows folder)
+  -AppPath  System folder (default: the backend folder of this system, ..\..\backend from here)
 
   Run it, restart when asked, then run it again: everything must be [OK].
 #>
@@ -19,7 +19,7 @@ param(
     [int]$Port = 80,
     [string]$AppPath = ''
 )
-if (-not $AppPath) { $AppPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'backend' }
+if (-not $AppPath) { $AppPath = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'backend' }
 
 $ErrorActionPreference = 'Stop'
 function Step($text) { Write-Host ''; Write-Host "== $text" -ForegroundColor Cyan }

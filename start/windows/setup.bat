@@ -1,7 +1,7 @@
 @echo off
 REM First-time setup. Safe to run again: it never deletes or re-creates data.
 setlocal
-cd /d "%~dp0..\backend"
+cd /d "%~dp0..\..\backend"
 call "%~dp0find-php.bat" || (pause & exit /b 1)
 echo Using %PHP%
 

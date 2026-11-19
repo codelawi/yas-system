@@ -1,3 +1,6 @@
-# Certificates and keys made by the scripts in windows\ - never commit them.
+# Certificates and keys made by the scripts in start\ - never commit them.
 # The system's own files are in backend\storage (see backend\.gitignore).
 /storage/
+
+# macOS Finder files
+.DS_Store

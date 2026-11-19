@@ -56,7 +56,7 @@ Laravel 13 (API) + React (Vite, Ant Design) + MySQL. It runs fully offline on th
   - **مسح ملصق (Scan label)** reads any label from a photo and opens its equipment, even if the label holds an old address.
 - **Work offline (phones)**: on the **Work offline** page a phone downloads all equipment, accessories, boxes, maintenance dates and problem reports, with photos if you tick it. Later, with no connection to the system, scanning a label with the phone camera still opens the equipment or box page, with a yellow **Offline** bar and the date of the data.
   - View only: changes and problem reports need the connection. History and custody holders are never stored on the phone.
-  - Phones allow this only on **https**: run `windows/https-setup.ps1` once and install its certificate once on each phone (the page shows how). The QR address becomes `https://repo.local`, and only labels printed with it open without a connection.
+  - Phones allow this only on **https**: run `start/windows/https-setup.ps1` on Windows or `start/macOS/START.command` on a Mac, and install its certificate once on each phone (the page shows how). The QR address becomes `https://repo.local`, and only labels printed with it open without a connection.
   - Download again before each trip. On iPhone, Safari may clear the data if the system is not opened for about a week.
 - **PIN per person**: viewing is open to everyone. Any change asks for the person's PIN, and the history log records who changed what.
 - Arabic (RTL) and English interface.
@@ -66,19 +66,19 @@ Laravel 13 (API) + React (Vite, Ant Design) + MySQL. It runs fully offline on th
 ```
 backend/    Laravel API + serves the built dashboard (backend/public/app)
 frontend/   React source (only needed to change the UI)
-windows/    setup scripts for the Windows PC
+start/       scripts that start the system: start/windows (Windows PC), start/macOS (Mac)
 ```
 
 ## Install on the Windows laptop (XAMPP, phone hotspots)
 
-Follow **`windows/START-HERE.txt`** (in Arabic) step by step: install, network, phone test, https, backups, printing.
+Follow **`start/windows/START-HERE.txt`** (in Arabic) step by step: install, network, phone test, https, backups, printing.
 
 - **XAMPP**: MySQL comes from XAMPP; the system lives in `C:\repo` and runs on PHP 8.3+ from `C:\php` through `start-server.bat`. After `https-setup.ps1`, XAMPP's Apache sits in front of it for http and https.
 - **Laragon**: an alternative, in the appendix at the end of the guide.
 
 The QR codes contain the laptop's name, **`https://repo.local`** (mDNS). It works on any phone hotspot even when the IP changes. Plan B, if a phone can't open `.local`: the laptop is the hotspot, with the fixed address `192.168.137.1`.
 
-| File in `windows/` | What it does |
+| File in `start/windows/` | What it does |
 |---|---|
 | `START-HERE.txt` | The setup-day guide |
 | `setup.bat` | Installs the system: database, tables (only adds, never re-creates), first admin, first backup |
@@ -97,6 +97,18 @@ The QR codes contain the laptop's name, **`https://repo.local`** (mDNS). It work
 - **Restore**: `php artisan repo:restore`. The current data is backed up first, so a restore never loses anything.
 - With `APP_ENV=production`, Laravel refuses `migrate:fresh`, `migrate:refresh`, `migrate:reset` and `db:wipe`.
 - Deleted equipment is soft-deleted, and every change is in the history log.
+
+## Run on a Mac (https, phone hotspots)
+
+Double-click the files in `start/macOS/` in Finder. They need PHP 8.3+ (`brew install php`) and MySQL from XAMPP, Homebrew or DBngin. The web server is the Apache built into macOS, so XAMPP's own Apache is not used (`START.command` stops it if it holds ports 80/443).
+
+| File in `start/macOS/` | What it does |
+|---|---|
+| `START.command` | Starts everything. Keep its Terminal window open; closing it stops the system. MySQL, the https certificate, Apache on http 80 + https 443 in front of the system, database changes, then the system on `127.0.0.1:8000`. The first time, it creates `backend/.env` |
+| `network-setup.command` | Once, with `START.command` running: names the Mac `repo` on the network (Bonjour), so phones open **`https://repo.local`** on any hotspot whatever the IP. Also allows Apache through the macOS firewall and sets that address as the QR address |
+| `common.sh` | Used by the two files above (finds PHP and Apache) |
+
+The certificate is in `backend/storage/https`, as on Windows. Copy that folder between the PC and the Mac and the phones need nothing new.
 
 ## Printing labels
 Use the **QR codes** page (or select items in **Equipment** → **Print labels**). Each label prints as one page sized like your label (set on the QR codes page). In the browser print dialog choose the label printer, set margins to *None* and scale to 100%. If the printer driver has its own paper size setting, set it to the same label size.
