@@ -2158,6 +2158,29 @@ h5,
 }
 
 /* ---------- Scan documents ---------- */
+.scan-breadcrumb {
+  margin-bottom: 8px;
+}
+/* "No duplicates: within this document / within the whole folder" above the table */
+.scan-doc-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+.scan-doc-options > .ant-typography {
+  line-height: 32px;
+}
+.scan-dup-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.scan-dup-help {
+  font-size: 12px;
+}
 .scan-doc-table .ant-input {
   min-width: 120px;
 }

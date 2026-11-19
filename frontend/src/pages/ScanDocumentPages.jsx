@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { App, Button, Empty, Form, Input, Modal, Popconfirm, Result, Spin, Table, Typography } from 'antd'
+import { App, Breadcrumb, Button, Empty, Form, Input, Modal, Popconfirm, Result, Segmented, Spin, Table, Tag, Typography } from 'antd'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
   DeleteOutlined,
+  FileTextOutlined,
   FileWordOutlined,
+  FolderAddOutlined,
+  FolderOutlined,
   InsertRowBelowOutlined,
   PlusOutlined,
   ScanOutlined,
@@ -62,8 +65,56 @@ function useRevisionPoll(url, known, onChange) {
   }, [url, known])
 }
 
-/** List of scan documents + "new document". */
-export function ScanDocumentsPage() {
+const folderPath = (folderId) => `/scan-documents/folders/${folderId}`
+const formatTime = (value) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '—')
+
+/** "Scan documents › <folder>": links back to the pages above this one. */
+function ScanBreadcrumb({ folder }) {
+  const { t } = useLang()
+  const items = [
+    {
+      title: (
+        <Link to="/scan-documents">
+          <ScanOutlined /> {t('scan_docs')}
+        </Link>
+      ),
+    },
+  ]
+  if (folder) {
+    items.push({
+      title: (
+        <Link to={folderPath(folder.id)}>
+          <FolderOutlined /> {folder.name}
+        </Link>
+      ),
+    })
+  }
+  return <Breadcrumb className="scan-breadcrumb" items={items} />
+}
+
+/** "Within this document" / "Within the whole folder": where a scanned code must not repeat. */
+function DuplicateScopeChoice({ value, onChange, folderName, block }) {
+  const { t } = useLang()
+  return (
+    <div className="scan-dup-scope">
+      <Segmented
+        block={block}
+        value={value}
+        onChange={onChange}
+        options={[
+          { value: 'document', label: t('scan_dup_document'), icon: <FileTextOutlined /> },
+          { value: 'folder', label: t('scan_dup_folder'), icon: <FolderOutlined /> },
+        ]}
+      />
+      <Typography.Text type="secondary" className="scan-dup-help">
+        {value === 'folder' ? t('scan_dup_folder_help', { folder: folderName }) : t('scan_dup_document_help')}
+      </Typography.Text>
+    </div>
+  )
+}
+
+/** The folders of scan documents + "new folder". A folder is made first, then documents inside it. */
+export function ScanFoldersPage() {
   const { t } = useLang()
   const { requirePin } = useAuth()
   const { message } = App.useApp()
@@ -73,24 +124,24 @@ export function ScanDocumentsPage() {
   const [form] = Form.useForm()
 
   const listRevision = useRef(null)
-  const loadList = useCallback(() => api.get('/scan-documents').then(({ data }) => setList(data)), [])
+  const loadList = useCallback(() => api.get('/scan-folders').then(({ data }) => setList(data)), [])
   useEffect(() => {
     loadList()
   }, [loadList])
-  // A document added, deleted or scanned into on another device shows up here by itself
-  useRevisionPoll('/scan-documents/revision', listRevision, loadList)
+  // A folder or document added, deleted or scanned into on another device shows up here by itself
+  useRevisionPoll('/scan-folders/revision', listRevision, loadList)
 
   const startNew = async () => {
     if (!(await requirePin())) return
-    form.setFieldsValue({ title: `${t('scan_docs')} ${dayjs().format('YYYY-MM-DD HH:mm')}` })
+    form.setFieldsValue({ name: `${t('scan_docs')} ${dayjs().format('YYYY-MM-DD')}` })
     setOpen(true)
   }
 
   const create = async () => {
     const v = await form.validateFields()
     try {
-      const { data } = await api.post('/scan-documents', v)
-      navigate(`/scan-documents/${data.id}`)
+      const { data } = await api.post('/scan-folders', v)
+      navigate(folderPath(data.id))
     } catch (e) {
       message.error(t(errorKey(e) || 'error'))
     }
@@ -102,8 +153,8 @@ export function ScanDocumentsPage() {
         <Typography.Title level={3}>
           <ScanOutlined /> {t('scan_docs')}
         </Typography.Title>
-        <Button type="primary" size="large" icon={<PlusOutlined />} onClick={startNew}>
-          {t('new_scan_doc')}
+        <Button type="primary" size="large" icon={<FolderAddOutlined />} onClick={startNew}>
+          {t('new_scan_folder')}
         </Button>
       </div>
       <Typography.Paragraph type="secondary">{t('scan_docs_intro')}</Typography.Paragraph>
@@ -111,20 +162,171 @@ export function ScanDocumentsPage() {
         rowKey="id"
         loading={!list}
         dataSource={list || []}
+        onRow={(r) => ({ onClick: () => navigate(folderPath(r.id)), style: { cursor: 'pointer' } })}
+        pagination={false}
+        scroll={{ x: 'max-content' }}
+        locale={{ emptyText: <Empty description={t('scan_folders_empty')} /> }}
+        columns={[
+          {
+            title: t('scan_folder_name'),
+            dataIndex: 'name',
+            render: (v, r) => (
+              <Link to={folderPath(r.id)}>
+                <FolderOutlined /> {v}
+              </Link>
+            ),
+          },
+          { title: t('scan_folder_docs'), dataIndex: 'documents_count', align: 'center' },
+          { title: t('scan_doc_rows'), dataIndex: 'rows_count', align: 'center' },
+          { title: t('updated_at'), dataIndex: 'last_change_at', render: formatTime },
+          { title: t('by'), dataIndex: ['created_by', 'name'], render: (v) => v || '—' },
+        ]}
+      />
+      <Modal open={open} title={t('new_scan_folder')} okText={t('confirm')} cancelText={t('cancel')} onOk={create} onCancel={() => setOpen(false)} forceRender>
+        <Form form={form} layout="vertical" onFinish={create}>
+          <Form.Item name="name" label={t('scan_folder_name')} rules={[{ required: true, whitespace: true }]}>
+            <Input autoFocus maxLength={191} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  )
+}
+
+/** One folder: its documents + "new document". */
+export function ScanFolderPage() {
+  const { folderId } = useParams()
+  const { t } = useLang()
+  const { user, requirePin } = useAuth()
+  const { message } = App.useApp()
+  const navigate = useNavigate()
+  const [folder, setFolder] = useState(null)
+  const [documents, setDocuments] = useState([])
+  const [missing, setMissing] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [form] = Form.useForm()
+
+  const revision = useRef(null)
+  const load = useCallback(
+    async ({ live = false } = {}) => {
+      try {
+        const { data } = await api.get(`/scan-folders/${folderId}`)
+        setFolder(data.folder)
+        setDocuments(data.documents)
+      } catch (e) {
+        if (!live || e?.response?.status === 404) setMissing(true)
+      }
+    },
+    [folderId],
+  )
+  useEffect(() => {
+    load()
+  }, [load])
+  // Documents added, renamed or scanned into on another device show up here by themselves
+  const liveLoad = useCallback(() => load({ live: true }), [load])
+  useRevisionPoll(`/scan-folders/${folderId}/revision`, revision, liveLoad)
+
+  if (missing) return <Result status="404" title={t('not_found')} extra={<Link to="/scan-documents">{t('scan_docs')}</Link>} />
+  if (!folder) return <Spin size="large" className="page-spin" />
+
+  const fail = (e) => message.error(t(errorKey(e) || 'error'))
+  const canEdit = !!user
+
+  const rename = async (name) => {
+    if (!name.trim() || name === folder.name || !(await requirePin())) return
+    try {
+      const { data } = await api.put(`/scan-folders/${folderId}`, { name })
+      setFolder(data)
+    } catch (e) {
+      fail(e)
+    }
+  }
+
+  const removeFolder = async () => {
+    if (!(await requirePin())) return
+    try {
+      await api.delete(`/scan-folders/${folderId}`)
+      message.success(t('deleted'))
+      navigate('/scan-documents')
+    } catch (e) {
+      fail(e)
+    }
+  }
+
+  const startNew = async () => {
+    if (!(await requirePin())) return
+    form.setFieldsValue({ title: `${folder.name} ${documents.length + 1}`, duplicate_scope: 'document' })
+    setOpen(true)
+  }
+
+  const create = async () => {
+    const v = await form.validateFields()
+    try {
+      const { data } = await api.post('/scan-documents', { ...v, scan_folder_id: folder.id })
+      navigate(`/scan-documents/${data.id}`)
+    } catch (e) {
+      fail(e)
+    }
+  }
+
+  return (
+    <div className="page">
+      <ScanBreadcrumb />
+      <div className="page-head">
+        <Typography.Title level={3} style={{ margin: 0 }} editable={canEdit ? { onChange: rename, triggerType: ['icon'], maxLength: 191 } : false}>
+          {folder.name}
+        </Typography.Title>
+        <div className="page-actions">
+          <Button type="primary" size="large" icon={<PlusOutlined />} onClick={startNew}>
+            {t('new_scan_doc')}
+          </Button>
+          {canEdit ? (
+            <Popconfirm title={t('delete_scan_folder_confirm', { n: documents.length })} okText={t('delete')} okButtonProps={{ danger: true }} cancelText={t('cancel')} onConfirm={removeFolder}>
+              <Button danger icon={<DeleteOutlined />}>
+                {t('delete')}
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Button icon={<UnlockOutlined />} onClick={requirePin}>
+              {t('unlock_to_edit')}
+            </Button>
+          )}
+        </div>
+      </div>
+      <Table
+        rowKey="id"
+        dataSource={documents}
         onRow={(r) => ({ onClick: () => navigate(`/scan-documents/${r.id}`), style: { cursor: 'pointer' } })}
         pagination={false}
         scroll={{ x: 'max-content' }}
+        locale={{ emptyText: <Empty description={t('scan_folder_empty')} /> }}
         columns={[
-          { title: t('scan_doc_title'), dataIndex: 'title', render: (v, r) => <Link to={`/scan-documents/${r.id}`}>{v}</Link> },
+          {
+            title: t('scan_doc_title'),
+            dataIndex: 'title',
+            render: (v, r) => (
+              <Link to={`/scan-documents/${r.id}`}>
+                <FileTextOutlined /> {v}
+              </Link>
+            ),
+          },
           { title: t('scan_doc_rows'), dataIndex: 'rows_count', align: 'center' },
-          { title: t('updated_at'), dataIndex: 'updated_at', render: (v) => dayjs(v).format('YYYY-MM-DD HH:mm') },
+          {
+            title: t('scan_dup_scope'),
+            dataIndex: 'duplicate_scope',
+            render: (v) => (v === 'folder' ? <Tag color="blue">{t('scan_dup_folder')}</Tag> : <Tag>{t('scan_dup_document')}</Tag>),
+          },
+          { title: t('updated_at'), dataIndex: 'updated_at', render: formatTime },
           { title: t('by'), dataIndex: ['created_by', 'name'], render: (v) => v || '—' },
         ]}
       />
       <Modal open={open} title={t('new_scan_doc')} okText={t('confirm')} cancelText={t('cancel')} onOk={create} onCancel={() => setOpen(false)} forceRender>
         <Form form={form} layout="vertical" onFinish={create}>
           <Form.Item name="title" label={t('scan_doc_title')} rules={[{ required: true, whitespace: true }]}>
-            <Input autoFocus />
+            <Input autoFocus maxLength={191} />
+          </Form.Item>
+          <Form.Item name="duplicate_scope" label={t('scan_dup_scope')} initialValue="document">
+            <DuplicateScopeChoice block folderName={folder.name} />
           </Form.Item>
         </Form>
       </Modal>
@@ -244,7 +446,14 @@ export function ScanDocumentPage() {
         return { type: 'success', text: t('scan_added_row', { n: data.row_number, code: data.row.code }) }
       }
       beep(false)
-      return { type: 'warning', text: t('scan_duplicate_row', { n: data.row_number, code: data.row.code }) }
+      // With "within the whole folder" the code may be in another document of the folder
+      const elsewhere = data.document && data.document.id !== doc.id
+      return {
+        type: 'warning',
+        text: elsewhere
+          ? t('scan_duplicate_in_doc', { title: data.document.title, n: data.row_number, code: data.row.code })
+          : t('scan_duplicate_row', { n: data.row_number, code: data.row.code }),
+      }
     } catch (e) {
       beep(false)
       return { type: 'error', text: t(errorKey(e) || 'error') }
@@ -301,11 +510,22 @@ export function ScanDocumentPage() {
     try {
       await api.delete(`/scan-documents/${id}`)
       message.success(t('deleted'))
-      navigate('/scan-documents')
+      navigate(doc.folder ? folderPath(doc.folder.id) : '/scan-documents')
     } catch (e) {
       fail(e)
     }
   }
+
+  const saveScope = async (duplicate_scope) => {
+    if (duplicate_scope === doc.duplicate_scope || !(await requirePin())) return
+    try {
+      const { data } = await api.put(`/scan-documents/${id}`, { duplicate_scope })
+      setDoc(data.document)
+    } catch (e) {
+      fail(e)
+    }
+  }
+  const scopeLabel = t(doc.duplicate_scope === 'folder' ? 'scan_dup_folder' : 'scan_dup_document')
 
   const saveColumns = async (columns) => {
     try {
@@ -361,6 +581,7 @@ export function ScanDocumentPage() {
 
   return (
     <div className="page">
+      <ScanBreadcrumb folder={doc.folder} />
       <div className="page-head">
         <Typography.Title level={3} style={{ margin: 0 }} editable={canEdit ? { onChange: saveTitle, triggerType: ['icon'] } : false}>
           {doc.title}
@@ -394,6 +615,11 @@ export function ScanDocumentPage() {
         </div>
       </div>
 
+      <div className="scan-doc-options">
+        <Typography.Text strong>{t('scan_dup_scope')}:</Typography.Text>
+        <DuplicateScopeChoice value={doc.duplicate_scope} onChange={saveScope} folderName={doc.folder?.name} />
+      </div>
+
       <Table
         className="scan-doc-table"
         rowKey="id"
@@ -408,7 +634,7 @@ export function ScanDocumentPage() {
       />
 
       <ColumnsModal open={columnsOpen} columns={doc.columns} onCancel={() => setColumnsOpen(false)} onSave={saveColumns} />
-      <CodeScanner open={scanning} onClose={closeScanner} onCode={onCode} title={t('scan_doc_scanner_title', { title: doc.title })} />
+      <CodeScanner open={scanning} onClose={closeScanner} onCode={onCode} title={`${t('scan_doc_scanner_title', { title: doc.title })} · ${t('scan_dup_scope')}: ${scopeLabel}`} />
     </div>
   )
 }

@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\MaintenanceController;
 use App\Http\Controllers\Api\NetworkController;
 use App\Http\Controllers\Api\OfflineController;
 use App\Http\Controllers\Api\ScanDocumentController;
+use App\Http\Controllers\Api\ScanFolderController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\StocktakeController;
 use App\Http\Controllers\Api\UserController;
@@ -59,9 +60,11 @@ Route::get('/network/ping', [NetworkController::class, 'ping']);
 Route::get('/network/check-address', [NetworkController::class, 'checkAddress'])->middleware('throttle:30,1');
 Route::post('/labels/printed', [SettingController::class, 'labelsPrinted'])->middleware('throttle:30,1');
 
-// Scan documents: anyone can read them; scanning and editing need a PIN
-Route::get('/scan-documents', [ScanDocumentController::class, 'index']);
-Route::get('/scan-documents/revision', [ScanDocumentController::class, 'listRevision']);
+// Scan documents, in folders: anyone can read them; scanning and editing need a PIN
+Route::get('/scan-folders', [ScanFolderController::class, 'index']);
+Route::get('/scan-folders/revision', [ScanFolderController::class, 'listRevision']);
+Route::get('/scan-folders/{scanFolder}', [ScanFolderController::class, 'show'])->whereNumber('scanFolder');
+Route::get('/scan-folders/{scanFolder}/revision', [ScanFolderController::class, 'revision'])->whereNumber('scanFolder');
 Route::get('/scan-documents/{scanDocument}', [ScanDocumentController::class, 'show'])->whereNumber('scanDocument');
 Route::get('/scan-documents/{scanDocument}/revision', [ScanDocumentController::class, 'revision'])->whereNumber('scanDocument');
 
@@ -125,6 +128,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/stocktakes/{stocktake}/close', [StocktakeController::class, 'close']);
     Route::get('/stocktakes/{stocktake}/export', [StocktakeController::class, 'export']);
 
+    Route::post('/scan-folders', [ScanFolderController::class, 'store']);
+    Route::put('/scan-folders/{scanFolder}', [ScanFolderController::class, 'update']);
+    Route::delete('/scan-folders/{scanFolder}', [ScanFolderController::class, 'destroy']);
     Route::post('/scan-documents', [ScanDocumentController::class, 'store']);
     Route::put('/scan-documents/{scanDocument}', [ScanDocumentController::class, 'update']);
     Route::delete('/scan-documents/{scanDocument}', [ScanDocumentController::class, 'destroy']);
