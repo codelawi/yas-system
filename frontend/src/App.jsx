@@ -48,7 +48,7 @@ import { GroupDetail, GroupsPage } from './pages/GroupPages'
 import BoxLabelsPrint from './pages/BoxLabelsPrint'
 import BoxReport from './pages/BoxReport'
 import OfflinePage from './pages/OfflinePage'
-import { ScanDocumentPage, ScanDocumentsPage } from './pages/ScanDocumentPages'
+import { ScanDocumentPage, ScanFolderPage, ScanFoldersPage } from './pages/ScanDocumentPages'
 import OfflineBanner from './components/OfflineBanner'
 
 // Latin letters and digits come from Inter, Arabic letters from IBM Plex Sans Arabic
@@ -179,7 +179,8 @@ function Shell() {
             <Route path="/custody/forms/:id" element={<CustodyFormPage />} />
             <Route path="/stocktakes" element={<StocktakesPage />} />
             <Route path="/stocktakes/:id" element={<StocktakePage />} />
-            <Route path="/scan-documents" element={<ScanDocumentsPage />} />
+            <Route path="/scan-documents" element={<ScanFoldersPage />} />
+            <Route path="/scan-documents/folders/:folderId" element={<ScanFolderPage />} />
             <Route path="/scan-documents/:id" element={<ScanDocumentPage />} />
             <Route path="/network" element={<NetworkPage />} />
             <Route path="/users" element={isAdmin ? <UsersPage /> : <Navigate to="/" />} />

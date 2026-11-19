@@ -5,50 +5,39 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ScanDocument;
 use App\Models\ScanDocumentRow;
+use App\Models\ScanFolder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Scan documents (مستندات المسح): a phone scans QR / Data Matrix codes and each code
  * becomes a row of the document's table. The table can then be edited and saved as Word.
+ * Every document is in a folder (ScanFolderController lists them).
  */
 class ScanDocumentController extends Controller
 {
-    public function index(): Collection
-    {
-        return ScanDocument::with('createdBy:id,name')->withCount('rows')->latest('updated_at')->limit(200)->get();
-    }
-
     public function store(Request $request): ScanDocument
     {
         $data = $request->validate([
+            'scan_folder_id' => ['required', 'integer', 'exists:scan_folders,id'],
             'title' => ['required', 'string', 'max:191'],
             'columns' => ['nullable', 'array'],
+            'duplicate_scope' => ['sometimes', Rule::in(ScanDocument::DUPLICATE_SCOPES)],
         ]);
 
         return ScanDocument::create([
+            'scan_folder_id' => $data['scan_folder_id'],
             'title' => $data['title'],
             'columns' => isset($data['columns']) ? $this->validColumns($data['columns']) : ScanDocument::defaultColumns(),
+            'duplicate_scope' => $data['duplicate_scope'] ?? 'document',
             'created_by' => $request->user()->id,
             'updated_by' => $request->user()->id,
         ])->load('createdBy:id,name')->loadCount('rows');
-    }
-
-    /**
-     * A short fingerprint of the whole list (changes when a document is added, deleted or edited).
-     * Open screens ask for it every few seconds and reload the list only when it changes.
-     *
-     * @return array{revision: string}
-     */
-    public function listRevision(): array
-    {
-        $summary = ScanDocument::query()->selectRaw('COUNT(*) as total, COALESCE(SUM(revision), 0) as revisions, COALESCE(MAX(id), 0) as last_id')->first();
-
-        return ['revision' => "{$summary->total}:{$summary->revisions}:{$summary->last_id}"];
     }
 
     /** @return array{revision: int} */
@@ -62,12 +51,13 @@ class ScanDocumentController extends Controller
         return $this->full($scanDocument);
     }
 
-    /** Title and columns (add, rename, reorder, remove). */
+    /** Title, columns (add, rename, reorder, remove) and where duplicates are checked. */
     public function update(Request $request, ScanDocument $scanDocument): array
     {
         $data = $request->validate([
             'title' => ['sometimes', 'required', 'string', 'max:191'],
             'columns' => ['sometimes', 'array'],
+            'duplicate_scope' => ['sometimes', Rule::in(ScanDocument::DUPLICATE_SCOPES)],
         ]);
         if (array_key_exists('columns', $data)) {
             $data['columns'] = $this->validColumns($data['columns']);
@@ -87,10 +77,11 @@ class ScanDocumentController extends Controller
     }
 
     /**
-     * Adds one scanned code as a new row. A code already in the document is not added again:
-     * the answer then says which row has it.
+     * Adds one scanned code as a new row. A code already there is not added again: "there" is the
+     * document, or every document of its folder (duplicate_scope). The answer then says which
+     * document and row have it.
      *
-     * @return array{status: string, row: ScanDocumentRow, row_number: int}
+     * @return array{status: string, row: ScanDocumentRow, row_number: int, document: array{id: int, title: string}}
      */
     public function scan(Request $request, ScanDocument $scanDocument): array
     {
@@ -100,28 +91,39 @@ class ScanDocumentController extends Controller
             throw ValidationException::withMessages(['code' => 'scan_empty']);
         }
 
-        $existing = $scanDocument->rows()->where('code', $code)->first();
-        if ($existing) {
-            return ['status' => 'duplicate', 'row' => $existing, 'row_number' => $this->rowNumber($scanDocument, $existing)];
-        }
-
         try {
-            $row = DB::transaction(fn () => $scanDocument->rows()->create([
-                'position' => $this->nextPosition($scanDocument),
-                'code' => $code,
-                'cells' => [],
-                'scanned_at' => now(),
-                'scanned_by' => $request->user()->id,
-            ]));
+            [$status, $row] = DB::transaction(function () use ($request, $scanDocument, $code) {
+                // One scan at a time per folder, so two phones cannot add the same code to two of its documents
+                ScanFolder::query()->whereKey($scanDocument->scan_folder_id)->lockForUpdate()->first();
+
+                $existing = $scanDocument->duplicateCandidates()->where('code', $code)->first();
+                if ($existing) {
+                    return ['duplicate', $existing];
+                }
+
+                return ['added', $scanDocument->rows()->create([
+                    'position' => $this->nextPosition($scanDocument),
+                    'code' => $code,
+                    'cells' => [],
+                    'scanned_at' => now(),
+                    'scanned_by' => $request->user()->id,
+                ])];
+            });
         } catch (UniqueConstraintViolationException) {
-            // Two phones scanned the same code at the same moment
-            $existing = $scanDocument->rows()->where('code', $code)->firstOrFail();
-
-            return ['status' => 'duplicate', 'row' => $existing, 'row_number' => $this->rowNumber($scanDocument, $existing)];
+            // Two phones scanned the same code into this document at the same moment
+            [$status, $row] = ['duplicate', $scanDocument->rows()->where('code', $code)->firstOrFail()];
         }
-        $scanDocument->increment('revision');
+        if ($status === 'added') {
+            $scanDocument->increment('revision');
+        }
+        $rowDocument = $row->scan_document_id === $scanDocument->id ? $scanDocument : $row->document;
 
-        return ['status' => 'added', 'row' => $row, 'row_number' => $this->rowNumber($scanDocument, $row)];
+        return [
+            'status' => $status,
+            'row' => $row,
+            'row_number' => $this->rowNumber($rowDocument, $row),
+            'document' => ['id' => $rowDocument->id, 'title' => $rowDocument->title],
+        ];
     }
 
     /** An empty row typed by hand, at the end of the table. */
@@ -146,8 +148,8 @@ class ScanDocumentController extends Controller
         if (array_key_exists('code', $data)) {
             $code = trim((string) $data['code']);
             $code = $code === '' ? null : $code;
-            if ($code !== null && $scanDocument->rows()->where('code', $code)->whereKeyNot($row->id)->exists()) {
-                throw ValidationException::withMessages(['code' => 'scan_duplicate']);
+            if ($code !== null && $scanDocument->duplicateCandidates()->where('code', $code)->whereKeyNot($row->id)->exists()) {
+                throw ValidationException::withMessages(['code' => $scanDocument->duplicate_scope === 'folder' ? 'scan_duplicate_folder' : 'scan_duplicate']);
             }
             $row->code = $code;
         }
@@ -174,7 +176,7 @@ class ScanDocumentController extends Controller
     private function full(ScanDocument $scanDocument): array
     {
         return [
-            'document' => $scanDocument->load('createdBy:id,name'),
+            'document' => $scanDocument->load(['createdBy:id,name', 'folder:id,name']),
             'rows' => $scanDocument->rows()->with('scannedBy:id,name')->get(),
         ];
     }

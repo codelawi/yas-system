@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,7 +13,10 @@ class ScanDocument extends Model
     /** Columns every document starts with. `no` (ت) and `scanned_at` are filled by the system. */
     public const BUILT_IN_COLUMNS = ['no', 'code', 'scanned_at', 'notes'];
 
-    protected $fillable = ['title', 'columns', 'created_by', 'updated_by'];
+    /** Where a scanned code must not repeat: this document only, or any document of its folder. */
+    public const DUPLICATE_SCOPES = ['document', 'folder'];
+
+    protected $fillable = ['scan_folder_id', 'title', 'columns', 'duplicate_scope', 'created_by', 'updated_by'];
 
     protected $casts = ['columns' => 'array', 'revision' => 'integer'];
 
@@ -40,6 +44,21 @@ class ScanDocument extends Model
     public function rows(): HasMany
     {
         return $this->hasMany(ScanDocumentRow::class)->orderBy('position')->orderBy('id');
+    }
+
+    public function folder(): BelongsTo
+    {
+        return $this->belongsTo(ScanFolder::class, 'scan_folder_id');
+    }
+
+    /** The rows a newly scanned code is checked against: this document's, or its whole folder's. */
+    public function duplicateCandidates(): Builder
+    {
+        if ($this->duplicate_scope === 'folder' && $this->scan_folder_id) {
+            return ScanDocumentRow::query()->whereIn('scan_document_id', self::query()->select('id')->where('scan_folder_id', $this->scan_folder_id));
+        }
+
+        return ScanDocumentRow::query()->where('scan_document_id', $this->id);
     }
 
     public function createdBy(): BelongsTo
