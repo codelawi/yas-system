@@ -14,12 +14,12 @@
     7. tests http and https
     8. sets the QR address to  https://repo.local
 
-  Run in PowerShell AS ADMINISTRATOR, from the windows folder:
+  Run in PowerShell AS ADMINISTRATOR, from the start\windows folder:
 
     powershell -ExecutionPolicy Bypass -File .\https-setup.ps1
 
   -Name     Computer name (default: repo  ->  https://repo.local)
-  -AppPath  System folder (default: the backend folder next to this windows folder)
+  -AppPath  System folder (default: the backend folder of this system, ..\..\backend from here)
   -Xampp    XAMPP folder (default: C:\xampp)
 
   Safe to run again: the authority is kept (phones keep trusting it) and the certificate is
@@ -33,7 +33,7 @@ param(
     [string]$AppPath = '',
     [string]$Xampp = 'C:\xampp'
 )
-if (-not $AppPath) { $AppPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'backend' }
+if (-not $AppPath) { $AppPath = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'backend' }
 
 $ErrorActionPreference = 'Stop'
 # Windows PowerShell 5.1 may still try old TLS versions, which Apache refuses
@@ -200,7 +200,7 @@ if (Test-Path $httpdConf) {
         for ($i = 0; $i -lt $lines.Count; $i++) {
             if ($lines[$i] -match '^\s*Include\s+"?conf/extra/httpd-(vhosts|ssl)\.conf') { $at = $i; break }
         }
-        $lines.InsertRange($at, [string[]]@('# Equipment Repository (windows\https-setup.ps1)', 'Include "conf/extra/httpd-repo.conf"', ''))
+        $lines.InsertRange($at, [string[]]@('# Equipment Repository (start\windows\https-setup.ps1)', 'Include "conf/extra/httpd-repo.conf"', ''))
     }
     [IO.File]::WriteAllLines($httpdConf, $lines)
 
@@ -233,7 +233,7 @@ if (Test-Path $httpdConf) {
     Step "6. Laragon's Apache"
     $vhost = 'C:\laragon\etc\apache2\sites-enabled\00-repo.conf'
     if (-not (Test-Path $vhost) -or -not (Select-String -Path $vhost -Pattern 'SSLEngine' -Quiet)) {
-        Warn "Copy windows\apache-vhost.conf to $vhost (it has the https part), then Laragon > Apache > Reload."
+        Warn "Copy start\windows\apache-vhost.conf to $vhost (it has the https part), then Laragon > Apache > Reload."
     } else {
         Ok "$vhost has the https part."
     }

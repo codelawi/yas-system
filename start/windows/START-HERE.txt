@@ -31,7 +31,7 @@
 
 الجزء 0 - قبل الذهاب
 --------------------
-[ ] انسخ إلى الفلاشة: المجلد backend والمجلد windows
+[ ] انسخ إلى الفلاشة مجلد النظام كله (فيه المجلدان backend و start)
 [ ] خذ شاحن الحاسوب (يجب أن يبقى موصولاً بالكهرباء)
 
 
@@ -65,14 +65,14 @@
     - تأكد، يجب أن تظهر في القائمة: pdo_mysql و mbstring و zip و fileinfo و openssl
           C:\php\php.exe -m
 
-3)  انسخ من الفلاشة:
-        backend  ->  C:\repo              (يجب أن يوجد المجلد C:\repo\public)
-        windows  ->  C:\repo\windows
+3)  انسخ من الفلاشة مجلد النظام كله:
+        مجلد النظام  ->  C:\repo
+    يجب أن يوجد المجلدان  C:\repo\backend\public  و  C:\repo\start\windows
     لا تضعه داخل C:\xampp\htdocs : لو عمل Apache قبل الجزء 4 لعرض ما في htdocs
     للشبكة كما هو، ومنه الملف .env الذي فيه أسرار النظام.
 
 4)  انقر مرتين على:
-        C:\repo\windows\setup.bat
+        C:\repo\start\windows\setup.bat
     - أول مرة يفتح الملف .env في Notepad. تأكد من هذه الأسطر (إعدادات XAMPP الافتراضية):
           APP_ENV=production
           DB_DATABASE=equipment_repo
@@ -83,7 +83,7 @@
     - يجب أن ينتهي بكلمة Done.
 
 5)  انقر مرتين على الملف التالي، واترك نافذته مفتوحة:
-        C:\repo\windows\start-server.bat
+        C:\repo\start\windows\start-server.bat
     افتح في المتصفح:
         http://localhost
     - اضغط «إدخال الرمز» واكتب 1234
@@ -91,7 +91,7 @@
 
 6)  تشغيل النظام تلقائياً مع Windows:
     اضغط Win+R واكتب  shell:startup  ثم Enter. في المجلد الذي يفتح:
-    زر يمين > New > Shortcut > Browse > اختر الملف C:\repo\windows\start-server.bat
+    زر يمين > New > Shortcut > Browse > اختر الملف C:\repo\start\windows\start-server.bat
 
 
 الجزء 2 - الشبكة (حوالي 15 دقيقة)
@@ -99,7 +99,7 @@
 7)  صِل الحاسوب بنقطة اتصال هاتف (Wi-Fi). نافذة start-server.bat مفتوحة.
 
 8)  قائمة Start > اكتب PowerShell > زر يمين > Run as administrator، ثم:
-        cd C:\repo\windows
+        cd C:\repo\start\windows
         powershell -ExecutionPolicy Bypass -File .\hotspot-setup.ps1
     - اكتب YES عندما يطلب تغيير اسم الحاسوب إلى repo
     - يطلب إعادة التشغيل: أعد تشغيل الحاسوب.
@@ -130,7 +130,7 @@
     صِل الحاسوب أولاً بأي نقطة اتصال هاتف، ثم شغّل Mobile hotspot.
   - الهواتف تتصل بشبكة الحاسوب.
   - في موجه الأوامر (cmd):
-        cd C:\repo
+        cd C:\repo\backend
         C:\php\php.exe artisan repo:qr-address http://192.168.137.1
   - كرّر تجربة الهواتف بالعنوان  http://192.168.137.1
   - بعد الجزء 4 اجعل عنوان QR بـ https، والهواتف تنزّل البيانات من
@@ -148,11 +148,11 @@
 11) أغلق نافذة start-server.bat ، فـ Apache يأخذ المنفذ 80 من الآن.
 
 12) PowerShell كمسؤول:
-        cd C:\repo\windows
+        cd C:\repo\start\windows
         powershell -ExecutionPolicy Bypass -File .\https-setup.ps1
     (XAMPP في مجلد غير C:\xampp ؟ أضف في آخر الأمر:  -Xampp D:\xampp )
     السكربت:
-      - ينشئ شهادة النظام مرة واحدة، في المجلد C:\repo\storage\https
+      - ينشئ شهادة النظام مرة واحدة، في المجلد C:\repo\backend\storage\https
       - يضبط Apache في XAMPP أمام النظام، ويحفظ httpd.conf الأصلي باسم
             C:\xampp\apache\conf\httpd.conf.before-repo
       - يطلب منك: في XAMPP Control Panel اضغط Stop ثم Start بجانب Apache حتى يصبح
@@ -181,7 +181,7 @@
 التغييرات بعد آخر تنزيل لا تظهر على الهاتف.
 على الآيفون قد يحذف Safari البيانات إذا لم يُفتح النظام نحو أسبوع.
 
-احتفظ بنسخة من المجلد C:\repo\storage\https مع النسخ الاحتياطية. جهاز جديد معه
+احتفظ بنسخة من المجلد C:\repo\backend\storage\https مع النسخ الاحتياطية. جهاز جديد معه
 المجلد نفسه لا يحتاج شيئاً جديداً على الهواتف. شهادة جديدة تعني تثبيتها على كل هاتف.
 
 
@@ -192,7 +192,7 @@
       - مجلد النسخ الاحتياطية: مثلاً  E:\RepoBackups  (حرف الفلاشة) > حفظ
       - اضغط «نسخة احتياطية الآن»، ويجب أن تظهر في القائمة.
 
-17) انقر مرتين على  windows\schedule-backup.bat  (نسخة يومية الساعة 14:00).
+17) انقر مرتين على  start\windows\schedule-backup.bat  (نسخة يومية الساعة 14:00).
     النظام يأخذ أيضاً نسخة وحده مرة كل يوم أثناء استخدامه.
 
 18) مرة في الأسبوع: الإعدادات > النسخ الاحتياطي > نزّل أحدث نسخة واحفظها في مكان
@@ -226,7 +226,7 @@
 - صِل الحاسوب بأي نقطة اتصال هاتف، والهواتف تمسح الملصقات.
 - ملصق لا يفتح؟ في النظام اضغط «مسح ملصق» وصوّره، فهذا يعمل مع أي ملصق.
 - لمعرفة عنوان QR الحالي:
-      cd C:\repo
+      cd C:\repo\backend
       C:\php\php.exe artisan repo:qr-address
 
 
@@ -239,13 +239,13 @@
 - لا تغيّر اسم الحاسوب بعد الطباعة، فالاسم داخل رموز QR.
 - لا تنقل مجلد النظام من C:\repo بعد الجزء 4 (إعدادات Apache تشير إليه).
   إن نقلته فشغّل https-setup.ps1 مرة أخرى.
-- إصدار جديد من النظام: انسخ الملفات الجديدة فوق C:\repo مع الإبقاء على الملف .env
-  والمجلد storage ، ثم انقر مرتين على  windows\update.bat
+- إصدار جديد من النظام: انسخ الملفات الجديدة فوق C:\repo مع الإبقاء على الملف backend\.env
+  والمجلد backend\storage ، ثم انقر مرتين على  start\windows\update.bat
 - استرجاع نسخة احتياطية (تُحفظ البيانات الحالية أولاً، فلا يضيع شيء):
-      cd C:\repo
+      cd C:\repo\backend
       C:\php\php.exe artisan repo:restore
 - حاسوب جديد يوماً ما: XAMPP و PHP، ثم الجزء 1 والجزء 2 (بالاسم نفسه repo).
-  انسخ المجلد storage\https القديم إلى C:\repo\storage\https قبل الجزء 4،
+  انسخ المجلد storage\https القديم إلى C:\repo\backend\storage\https قبل الجزء 4،
   فلا تحتاج الهواتف شهادة جديدة. ثم:
       C:\php\php.exe artisan repo:restore <أحدث ملف zip>
 
@@ -291,16 +291,16 @@
 ملحق - جهاز عليه Laragon بدل XAMPP
 ----------------------------------
 Laragon فيه Apache و MySQL و PHP 8.3+، فلا حاجة لـ C:\php ولا لـ start-server.bat.
-- انسخ:
-      backend  ->  C:\laragon\www\repo
-      windows  ->  C:\laragon\www\repo\windows
+- انسخ مجلد النظام كله:
+      مجلد النظام  ->  C:\laragon\www\repo
+  (يجب أن يوجد المجلدان C:\laragon\www\repo\backend\public و C:\laragon\www\repo\start\windows)
 - إعدادات PHP: قائمة Laragon > PHP > php.ini (الأحجام كما في الخطوة 2).
-- انسخ الملف windows\apache-vhost.conf إلى:
+- انسخ الملف start\windows\apache-vhost.conf إلى:
       C:\laragon\etc\apache2\sites-enabled\00-repo.conf
 - Laragon > Start All ، ثم setup.bat ، ثم افتح http://localhost
 - Laragon > Preferences > General: علّم  Run Laragon when Windows starts
   و  Start All automatically
-- الشبكة والهواتف: الجزء 2 والجزء 3 (المسار C:\laragon\www\repo\windows).
+- الشبكة والهواتف: الجزء 2 والجزء 3 (المسار C:\laragon\www\repo\start\windows).
 - https: قائمة Laragon > Apache > SSL > Enabled ، ثم شغّل https-setup.ps1 ،
   ثم Laragon > Apache > Reload ، ثم شغّل https-setup.ps1 مرة أخرى حتى تنتهي كل
   الأسطر بـ [OK]. بعدها الهواتف كالخطوة 14.
