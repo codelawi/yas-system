@@ -69,7 +69,7 @@ self.addEventListener('fetch', (event) => {
   if (path.startsWith('/app/')) return event.respondWith(asset(request))
   if (/^\/api\/equipment\/\d+\/photo$/.test(path)) return event.respondWith(photo(request))
   if (path.startsWith('/api/')) {
-    const answer = routeFor(path)
+    const answer = routeFor(url)
     if (answer) return event.respondWith(data(request, answer))
     // Anything else (history, custody, lists...) is not in the copy
     if (isOffline()) event.respondWith(json(503, { message: 'offline_no_edit' }))
@@ -169,12 +169,14 @@ const ROUTES = [
   [/^\/api\/equipment\/(\d+)\/issues$/, (copy, id) => (copy.equipment.has(Number(id)) ? copy.data.issues[id] || [] : undefined)],
   [/^\/api\/boxes\/number\/(.+)$/, (copy, number) => copy.boxByNumber(decode(number))],
   [/^\/api\/boxes\/(\d+)$/, (copy, id) => copy.boxes.get(Number(id))],
+  [/^\/api\/lookup$/, (copy, query) => copy.lookup(query.get('code') || '')],
 ]
 
-function routeFor(path) {
+/** Handlers get the parts of the path in brackets, then the query (?code=...). */
+function routeFor(url) {
   for (const [pattern, handler] of ROUTES) {
-    const match = path.match(pattern)
-    if (match) return (copy) => handler(copy, ...match.slice(1))
+    const match = url.pathname.match(pattern)
+    if (match) return (copy) => handler(copy, ...match.slice(1), url.searchParams)
   }
   return null
 }
@@ -204,11 +206,61 @@ async function readSnapshot() {
   const boxNumbers = new Map()
   for (const box of data.boxes) if (!boxNumbers.has(loose(box.number))) boxNumbers.set(loose(box.number), box)
 
+  // Main equipment before accessories, as a scanned label does
+  const ordered = [...data.equipment].sort((a, b) => (a.parent ? 1 : 0) - (b.parent ? 1 : 0) || a.id - b.id)
+
   return {
     data,
     equipment,
     boxes,
     equipmentBySerial: (serial) => equipment.get(serials.get(serial) ?? looseSerials.get(loose(serial))),
     boxByNumber: (number) => boxNumbers.get(loose(number)),
+    lookup: (code) => lookup(ordered, data.boxes, code),
   }
+}
+
+/** At most this many equipment and this many boxes; shorter codes are only looked up exactly. Same as the server. */
+const LOOKUP_LIMIT = 30
+const MIN_CONTAINS = 3
+
+/**
+ * What a scanned code that is not one of the system's labels belongs to (a maker's Data Matrix...):
+ * as LookupController on the server. Equipment whose serial number or any field is the code, and
+ * boxes whose number or name is; only when there are none, those that contain it.
+ */
+function lookup(equipment, boxes, raw) {
+  const code = raw.trim()
+  if (!code) return { code: '', matches: [] }
+  const wanted = code.toLowerCase()
+  const exact = (value) => value != null && loose(value) === wanted
+  const contains = (value) => value != null && String(value).toLowerCase().includes(wanted)
+
+  let matches = find(equipment, boxes, exact)
+  if (!matches.length && [...code].length >= MIN_CONTAINS) matches = find(equipment, boxes, contains)
+  return { code, matches }
+}
+
+function find(equipment, boxes, test) {
+  const found = []
+  for (const e of equipment) {
+    if (found.length >= LOOKUP_LIMIT) break
+    const bySerial = test(e.serial_number)
+    const field = bySerial ? null : e.fields.find((f) => test(f.value))
+    if (!bySerial && !field) continue
+    found.push({
+      type: 'equipment',
+      id: e.id,
+      serial_number: e.serial_number,
+      display_name: e.display_name,
+      category: e.category,
+      parent: e.parent,
+      photo_url: e.photo_url,
+      match: field ? { by: 'field', key: field.key } : { by: 'serial', key: null },
+    })
+  }
+  const inBoxes = boxes
+    .filter((b) => test(b.number) || test(b.name))
+    .slice(0, LOOKUP_LIMIT)
+    .map((b) => ({ type: 'box', id: b.id, number: b.number, name: b.name, match: { by: test(b.number) ? 'number' : 'name', key: null } }))
+  return [...found, ...inBoxes]
 }

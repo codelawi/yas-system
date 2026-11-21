@@ -69,6 +69,7 @@ export default function App() {
             <Routes>
               {/* Opened by phones scanning a QR code */}
               <Route path="/eq/:serial" element={<ScanPage />} />
+              <Route path="/item/:id" element={<ScanPage />} />
               <Route path="/box/:number" element={<ScanBoxPage />} />
               <Route path="/labels" element={<LabelsPrint />} />
               <Route path="/boxes/labels" element={<BoxLabelsPrint />} />
