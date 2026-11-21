@@ -1,7 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { App, Button, Input, Popconfirm, Segmented, Spin, Table, Tag, Typography } from 'antd'
-import { ApartmentOutlined, ClusterOutlined, DeleteOutlined, ExportOutlined, EditOutlined, FileExcelOutlined, FilePdfOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons'
+import { App, Button, Empty, Input, Modal, Pagination, Popconfirm, Segmented, Spin, Table, Tag, Typography } from 'antd'
+import {
+  AppstoreOutlined,
+  ApartmentOutlined,
+  CheckSquareOutlined,
+  ClusterOutlined,
+  DeleteOutlined,
+  DownOutlined,
+  ExportOutlined,
+  EditOutlined,
+  FileExcelOutlined,
+  FilePdfOutlined,
+  FilterOutlined,
+  PlusOutlined,
+  PrinterOutlined,
+  UnorderedListOutlined,
+} from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api, { errorKey } from '../api'
 import { useLang } from '../i18n'
@@ -11,6 +26,8 @@ import FieldFilter, { CATEGORY_KEY, filterLabel } from '../components/FieldFilte
 import { useLargeDelete } from '../largeDelete'
 import BulkEditModal from '../components/BulkEditModal'
 import { downloadFile } from '../download'
+import { usePhone } from '../nav'
+import { ChipRow, Fab, PhoneHeader, PhoneList, PhoneRow, PhoneSearch, PhoneSkeleton, SelectionBar } from '../components/PhoneUI'
 
 function parseFilters(params) {
   let filters = []
@@ -58,6 +75,86 @@ function GroupRows({ group, listParams, columns, selected, setSelected, reloadKe
   )
 }
 
+/** Phones: one row of the list (main equipment or accessory). */
+function PhoneUnit({ unit, selecting, selected, onSelect }) {
+  const { t } = useLang()
+  const details = unit.fields.slice(0, 2).map((f) => `${f.key}: ${f.value.split('\n')[0]}`)
+  return (
+    <PhoneRow
+      to={`/equipment/${unit.id}`}
+      icon={unit.parent ? <ApartmentOutlined /> : <AppstoreOutlined />}
+      tone={unit.parent ? 'violet' : 'blue'}
+      title={unit.display_name || <span className="serial">{unit.serial_number || '—'}</span>}
+      subtitle={
+        <>
+          {unit.display_name && <span className="serial">{unit.serial_number || '—'}</span>}
+          {unit.row_no != null && <span className="phone-row-dot">{`${t('row_no')} ${unit.row_no}`}</span>}
+        </>
+      }
+      meta={
+        (unit.parent || unit.accessories_count > 0 || details.length > 0) && (
+          <>
+            {unit.parent ? (
+              <Tag color="purple">
+                {t('accessory_of')} <span className="serial">{unit.parent.serial_number}</span>
+              </Tag>
+            ) : (
+              unit.accessories_count > 0 && <Tag>{t('accessories_n', { n: unit.accessories_count })}</Tag>
+            )}
+            {details.length > 0 && <bdi className="phone-row-details">{details.join(' · ')}</bdi>}
+          </>
+        )
+      }
+      selecting={selecting}
+      selected={selected}
+      onSelect={onSelect}
+    />
+  )
+}
+
+/** Phones: a group of the grouped list, opening in place to its units that match the search / filters. */
+function PhoneGroup({ group, listParams, reloadKey, selecting, selected, toggleSelected }) {
+  const { t } = useLang()
+  const [open, setOpen] = useState(false)
+  const [rows, setRows] = useState(null)
+  const paramsKey = JSON.stringify(listParams)
+
+  useEffect(() => {
+    if (!open) return
+    api.get('/equipment', { params: { ...JSON.parse(paramsKey), group_id: group.id, per_page: 200 } }).then(({ data }) => setRows(data))
+  }, [open, group.id, paramsKey, reloadKey])
+
+  return (
+    <div className={`phone-group${open ? ' is-open' : ''}`}>
+      <PhoneRow
+        onClick={() => setOpen(!open)}
+        icon={<ClusterOutlined />}
+        tone="cyan"
+        title={group.name}
+        subtitle={t('n_items', { n: group.count })}
+        end={<DownOutlined className="phone-group-arrow" />}
+        chevron={false}
+      />
+      {open && (
+        <div className="phone-group-units">
+          {!rows ? (
+            <Spin size="small" className="phone-group-spin" />
+          ) : (
+            <>
+              {rows.data.map((unit) => (
+                <PhoneUnit key={unit.id} unit={unit} selecting={selecting} selected={selected.includes(unit.id)} onSelect={() => toggleSelected(unit.id)} />
+              ))}
+              <Link to={`/groups/${group.id}`} className="phone-group-all">
+                {rows.total > rows.data.length ? t('group_show_all', { n: rows.total }) : t('open_group')} <ExportOutlined />
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function EquipmentList() {
   const { t } = useLang()
   const { requirePin } = useAuth()
@@ -75,6 +172,9 @@ export default function EquipmentList() {
   const [groups, setGroups] = useState([])
   const [expanded, setExpanded] = useState([])
   const [reloadKey, setReloadKey] = useState(0)
+  const phone = usePhone()
+  const [selecting, setSelecting] = useState(false)
+  const [filtering, setFiltering] = useState(false)
 
   const page = Number(params.get('page') || 1)
   const perPage = Number(params.get('per_page') || 20)
@@ -256,6 +356,141 @@ export default function EquipmentList() {
   }))
   const rows = grouped && page === 1 ? [...groups.map((g) => ({ ...g, isGroup: true })), ...data.data] : data.data
 
+  const printSelected = () => window.open(`/labels?ids=${selected.join(',')}`, '_blank')
+  const modals = (
+    <>
+      <BulkEditModal
+        ids={selected}
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        onDone={() => {
+          setBulkOpen(false)
+          load()
+        }}
+      />
+      <EquipmentForm
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSaved={(eq) => {
+          setFormOpen(false)
+          navigate(`/equipment/${eq.id}`)
+        }}
+      />
+    </>
+  )
+
+  if (phone) {
+    const toggleSelected = (id) => setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
+    const stopSelecting = () => {
+      setSelecting(false)
+      setSelected([])
+    }
+    return (
+      <div className="page">
+        <PhoneHeader
+          title={t('equipment')}
+          subtitle={loading && !data.total ? '\u00a0' : grouped && groups.length ? `${t('n_items', { n: data.total })} · ${t('groups_n', { n: groups.length })}` : t('n_items', { n: data.total })}
+          more={[
+            { key: 'select', icon: <CheckSquareOutlined />, label: t('select_items'), onClick: () => setSelecting(true), hidden: selecting },
+            {
+              key: 'view',
+              icon: grouped ? <UnorderedListOutlined /> : <ClusterOutlined />,
+              label: t(grouped ? 'show_flat' : 'show_grouped'),
+              onClick: () => setParam({ view: grouped ? 'flat' : null, page: null }),
+              hidden: type === 'accessory',
+            },
+            { key: 'excel', icon: <FileExcelOutlined />, label: t('export_excel'), onClick: exportExcel },
+            { key: 'pdf', icon: <FilePdfOutlined />, label: t('print_pdf'), onClick: printList },
+          ]}
+        />
+        <PhoneSearch value={search} placeholder={t('search')} onChange={setSearch} onSearch={(v) => setParam({ q: v, page: null })} />
+        <ChipRow>
+          <Segmented
+            value={type}
+            onChange={(v) => setParam({ type: v === 'all' ? null : v, page: null })}
+            options={['all', 'main', 'accessory'].map((v) => ({ value: v, label: t(`type_${v}`) }))}
+          />
+          <button type="button" className={`phone-chip${filters.length ? ' is-on' : ''}`} onClick={() => setFiltering(true)}>
+            <FilterOutlined /> {filters.length ? `${t('filter_short')} (${filters.length})` : t('filter_short')}
+          </button>
+        </ChipRow>
+        {(filters.length > 0 || importId) && (
+          <div className="phone-filter-tags">
+            {filters.map((f) => (
+              <Tag key={f.key} color={f.key === CATEGORY_KEY ? 'blue' : 'geekblue'} closable onClose={() => setFilters(filters.filter((x) => x.key !== f.key))}>
+                <bdi>{filterLabel(f, t)}</bdi>
+              </Tag>
+            ))}
+            {importId && (
+              <Tag closable onClose={() => setParam({ import_id: null })}>
+                {t('import')} #{importId}
+              </Tag>
+            )}
+            {filters.length > 1 && (
+              <Button size="small" type="link" onClick={() => setFilters([])}>
+                {t('clear_filters')}
+              </Button>
+            )}
+          </div>
+        )}
+
+        {loading && !rows.length ? (
+          <PhoneSkeleton />
+        ) : rows.length ? (
+          <PhoneList className={loading ? 'is-busy' : ''}>
+            {rows.map((r) =>
+              r.isGroup ? (
+                <PhoneGroup key={`g${r.id}`} group={r} listParams={listParams} reloadKey={reloadKey} selecting={selecting} selected={selected} toggleSelected={toggleSelected} />
+              ) : (
+                <PhoneUnit key={r.id} unit={r} selecting={selecting} selected={selected.includes(r.id)} onSelect={() => toggleSelected(r.id)} />
+              ),
+            )}
+          </PhoneList>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('no_data')} />
+        )}
+
+        {data.total > perPage && (
+          <Pagination simple className="phone-pagination" current={page} pageSize={perPage} total={data.total} onChange={(p) => setParam({ page: p > 1 ? p : null })} />
+        )}
+
+        <Modal open={filtering} title={t('filter_field')} footer={null} onCancel={() => setFiltering(false)} destroyOnHidden>
+          <div className="phone-filter-sheet">
+            <FieldFilter
+              onAdd={(f) => {
+                setFilters([...filters.filter((x) => x.key !== f.key), f])
+                setFiltering(false)
+              }}
+            />
+          </div>
+        </Modal>
+
+        {selecting ? (
+          <SelectionBar
+            count={selected.length}
+            onClose={stopSelecting}
+            actions={[
+              { key: 'labels', icon: <PrinterOutlined />, label: t('print_label'), onClick: printSelected },
+              { key: 'edit', icon: <EditOutlined />, label: t('edit'), onClick: bulkEdit },
+              {
+                key: 'delete',
+                icon: <DeleteOutlined />,
+                label: t('delete'),
+                danger: true,
+                loading: deleting,
+                onClick: removeSelected,
+                confirm: { title: t('delete_selected_confirm', { n: selected.length }), description: t('delete_selected_hint') },
+              },
+            ]}
+          />
+        ) : (
+          <Fab icon={<PlusOutlined />} label={t('add_equipment')} onClick={add} />
+        )}
+        {modals}
+      </div>
+    )
+  }
+
   return (
     <div className="page">
       <div className="page-head">
@@ -388,23 +623,7 @@ export default function EquipmentList() {
         scroll={{ x: 'max-content' }}
       />
 
-      <BulkEditModal
-        ids={selected}
-        open={bulkOpen}
-        onClose={() => setBulkOpen(false)}
-        onDone={() => {
-          setBulkOpen(false)
-          load()
-        }}
-      />
-      <EquipmentForm
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        onSaved={(eq) => {
-          setFormOpen(false)
-          navigate(`/equipment/${eq.id}`)
-        }}
-      />
+      {modals}
     </div>
   )
 }

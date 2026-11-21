@@ -1,0 +1,2415 @@
+/* ==========================================================================
+   Phones: the app layout (components/PhoneShell.jsx) and every page fitted to a phone.
+   Page rules are under .phone-app, so tablets, computers and printed pages keep their look.
+   ========================================================================== */
+
+:root {
+  --ink: #0f172a;
+  --muted: #64748b;
+  --brand: #1d4ed8;
+  --brand-soft: #e8efff;
+  --line: rgba(15, 23, 42, 0.08);
+  --surface: #f4f6fb;
+  --top-h: 58px;
+  --tab-h: 64px;
+  --gutter: 14px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* +1: "ahead" is to the right; right-to-left flips it */
+  --fwd: 1;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-soft: cubic-bezier(0.2, 0.9, 0.3, 1.12);
+}
+
+[dir='rtl'] {
+  --fwd: -1;
+}
+
+.phone-app {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--surface);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- Top bar: logo and name, the sections menu, the account ---------- */
+.phone-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  padding-top: var(--safe-top);
+  background: rgba(255, 255, 255, 0.8);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  backdrop-filter: saturate(180%) blur(18px);
+  border-bottom: 1px solid transparent;
+  transition:
+    box-shadow 0.25s,
+    border-color 0.25s,
+    background 0.25s;
+}
+
+.phone-topbar.is-raised {
+  background: rgba(255, 255, 255, 0.9);
+  border-bottom-color: var(--line);
+  box-shadow: 0 10px 30px -18px rgba(15, 23, 42, 0.28);
+}
+
+.phone-topbar-row {
+  height: var(--top-h);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline: 12px 8px;
+}
+
+.phone-brand {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+}
+
+.phone-brand:hover,
+.phone-brand:active {
+  color: var(--ink);
+}
+
+.phone-brand .app-logo {
+  flex: none;
+  filter: drop-shadow(0 4px 8px rgba(29, 78, 216, 0.28));
+  transition: transform 0.2s var(--ease-out);
+}
+
+.phone-brand:active .app-logo {
+  transform: scale(0.92);
+}
+
+.phone-brand-name {
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-icon-btn {
+  flex: none;
+  position: relative;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #334155;
+  font-size: 20px;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    transform 0.15s var(--ease-out);
+}
+
+.phone-icon-btn:active {
+  transform: scale(0.88);
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.phone-icon-btn.is-open {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* A page from the menu is open: a dot under its button */
+.phone-icon-btn.is-current::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.phone-gear .anticon {
+  transition: transform 0.5s var(--spring);
+}
+
+.phone-gear.is-open .anticon {
+  transform: rotate(90deg);
+}
+
+/* Signed in */
+.phone-badge {
+  position: absolute;
+  top: 9px;
+  inset-inline-end: 9px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.phone-back {
+  margin-inline-start: -6px;
+  font-size: 22px;
+  color: var(--ink);
+  animation: phone-back-in 0.3s var(--ease-out) backwards;
+}
+
+[dir='rtl'] .phone-back svg {
+  transform: scaleX(-1);
+}
+
+@keyframes phone-back-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--fwd) * 10px));
+  }
+}
+
+/* Nine dots that turn into a cross */
+.menu-icon {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+}
+
+.menu-icon svg {
+  position: absolute;
+  inset: 0;
+  transition:
+    transform 0.4s var(--spring),
+    opacity 0.2s;
+}
+
+.menu-icon-dots {
+  transform: scale(0.88);
+}
+
+.menu-icon-close {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.4);
+}
+
+.menu-icon.is-open .menu-icon-dots {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.4);
+}
+
+.menu-icon.is-open .menu-icon-close {
+  opacity: 1;
+  transform: none;
+}
+
+/* Working from the saved copy: a thin strip under the bar */
+.phone-topbar .offline-banner {
+  position: static;
+  padding: 4px var(--gutter);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.phone-topbar .offline-banner .ant-alert-icon {
+  font-size: 14px;
+}
+
+/* ---------- The page, and how it comes in ---------- */
+.phone-main {
+  padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 8px);
+  /* Pages slide in from the side without a sideways scroll */
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
+/* "backwards": once in, the page keeps no transform (fixed and sticky parts work as usual) */
+.phone-view {
+  animation-duration: 0.34s;
+  animation-timing-function: var(--ease-out);
+  animation-fill-mode: backwards;
+}
+
+.phone-view-first {
+  animation-name: phone-fade;
+  animation-duration: 0.25s;
+}
+
+.phone-view-ahead {
+  animation-name: phone-ahead;
+}
+
+.phone-view-back {
+  animation-name: phone-back;
+}
+
+.phone-view-rise {
+  animation-name: phone-rise;
+}
+
+@keyframes phone-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes phone-ahead {
+  from {
+    opacity: 0;
+    transform: translate3d(calc(var(--fwd) * 40px), 0, 0);
+  }
+}
+
+@keyframes phone-back {
+  from {
+    opacity: 0;
+    transform: translate3d(calc(var(--fwd) * -40px), 0, 0);
+  }
+}
+
+@keyframes phone-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.985);
+  }
+}
+
+/* ---------- Bottom tabs ---------- */
+.phone-tabbar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 6px 8px calc(6px + var(--safe-bottom));
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  backdrop-filter: saturate(180%) blur(18px);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -10px 30px -20px rgba(15, 23, 42, 0.3);
+  transition:
+    transform 0.32s var(--ease-out),
+    opacity 0.2s;
+}
+
+/* Out of the way while typing (the keyboard is up) */
+.phone-tabbar.is-hidden {
+  transform: translateY(110%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.phone-tab {
+  position: relative;
+  z-index: 1;
+  height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-top: 3px;
+  color: var(--muted);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.phone-tab:hover,
+.phone-tab:focus {
+  color: var(--muted);
+}
+
+.phone-tab-icon {
+  width: 58px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  font-size: 23px;
+  transition: transform 0.2s var(--ease-out);
+}
+
+.phone-tab:active .phone-tab-icon {
+  transform: scale(0.84);
+}
+
+.phone-tab-label {
+  max-width: 100%;
+  padding-inline: 2px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.2s;
+}
+
+.phone-tab.is-active,
+.phone-tab.is-active:hover,
+.phone-tab.is-active:focus {
+  color: var(--brand);
+}
+
+.phone-tab.is-active .phone-tab-label {
+  font-weight: 700;
+}
+
+.phone-tab.is-active .phone-tab-icon svg {
+  animation: phone-tab-pop 0.55s var(--spring);
+}
+
+@keyframes phone-tab-pop {
+  0% {
+    transform: scale(0.6) rotate(calc(var(--fwd) * -8deg));
+  }
+  60% {
+    transform: scale(1.14);
+  }
+}
+
+/* The pill behind the open tab's icon, sliding from tab to tab */
+.phone-tab-indicator {
+  position: absolute;
+  top: 9px;
+  inset-inline-start: 8px;
+  width: calc((100% - 16px) / 4);
+  height: 30px;
+  transform: translateX(calc(var(--i) * 100% * var(--fwd)));
+  transition: transform 0.5s var(--spring);
+  pointer-events: none;
+}
+
+.phone-tab-indicator::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 60px;
+  margin-left: -30px;
+  border-radius: 15px;
+  background: linear-gradient(180deg, #edf2ff, #dfe8ff);
+  box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.06);
+  transition:
+    opacity 0.25s,
+    transform 0.35s var(--spring);
+}
+
+.phone-tab-indicator.is-off::before {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+/* ---------- The two menus under the top bar ---------- */
+.phone-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(15, 23, 42, 0.3);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  touch-action: none;
+  animation: phone-fade 0.22s var(--ease-out);
+}
+
+.phone-backdrop:not(.is-open) {
+  animation: phone-fade-out 0.22s var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+@keyframes phone-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.phone-sheet {
+  position: fixed;
+  z-index: 58;
+  top: calc(var(--safe-top) + var(--top-h) + 4px);
+  inset-inline: 10px;
+  max-height: calc(100dvh - var(--safe-top) - var(--top-h) - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+  background: #fff;
+  border-radius: 24px;
+  box-shadow:
+    0 30px 70px -20px rgba(15, 23, 42, 0.45),
+    0 0 0 1px rgba(15, 23, 42, 0.05);
+  transform-origin: top right;
+  animation: phone-sheet-in 0.36s var(--spring-soft) backwards;
+}
+
+[dir='rtl'] .phone-sheet {
+  transform-origin: top left;
+}
+
+.phone-sheet:not(.is-open) {
+  animation: phone-sheet-out 0.2s var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+@keyframes phone-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.92);
+  }
+}
+
+@keyframes phone-sheet-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
+.phone-sheet-title {
+  padding: 0 6px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.phone-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.phone-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 4px 10px;
+  border-radius: 18px;
+  color: var(--ink);
+  text-align: center;
+  animation: phone-tile-in 0.42s var(--ease-out) backwards;
+  animation-delay: var(--d);
+  transition:
+    background 0.15s,
+    transform 0.15s var(--ease-out);
+}
+
+.phone-menu-item:hover {
+  color: var(--ink);
+}
+
+.phone-menu-item:active {
+  transform: scale(0.93);
+  background: #f1f5f9;
+}
+
+.phone-menu-item.is-current {
+  background: var(--c-soft);
+}
+
+.phone-menu-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  font-size: 21px;
+  color: var(--c);
+  background: var(--c-soft);
+  transition: transform 0.2s;
+}
+
+.phone-menu-item.is-current .phone-menu-icon {
+  color: #fff;
+  background: var(--c);
+  box-shadow: 0 10px 20px -10px var(--c);
+}
+
+.phone-menu-label {
+  min-height: 2.7em;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@keyframes phone-tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+  }
+}
+
+.phone-account {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 16px 16px;
+}
+
+.phone-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.phone-avatar {
+  flex: none;
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 21px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #3b82f6, #4f46e5);
+  box-shadow: 0 10px 22px -12px #4f46e5;
+}
+
+.phone-avatar.is-admin {
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 5px #f5b301;
+}
+
+.phone-avatar.is-locked {
+  color: var(--muted);
+  background: #eef2f7;
+  box-shadow: none;
+}
+
+.phone-user-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.phone-user-text b {
+  font-size: 16.5px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-user-text span {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.phone-account .ant-btn-lg {
+  height: 46px;
+  border-radius: 14px;
+  font-weight: 600;
+}
+
+.phone-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid #eef1f5;
+}
+
+.phone-setting-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* ==========================================================================
+   Phone page parts (components/PhoneUI.jsx)
+   ========================================================================== */
+
+.phone-head {
+  margin: 2px 0 14px;
+}
+
+.phone-head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.phone-head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.phone-kicker {
+  margin-bottom: 2px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.phone-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.phone-title-icon {
+  flex: none;
+  display: inline-flex;
+  font-size: 20px;
+  color: var(--brand);
+}
+
+.phone-title-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.phone-subtitle {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.phone-more {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 13px;
+  background: #fff;
+  color: #334155;
+  font-size: 20px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 0 0 1px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+  transition: transform 0.15s var(--ease-out);
+}
+
+.phone-more:active,
+.phone-more.ant-dropdown-open {
+  transform: scale(0.92);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* Search box */
+.ant-input-affix-wrapper.phone-search {
+  height: 46px;
+  margin-bottom: 10px;
+  padding-inline: 14px;
+  border-color: transparent;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 0 0 1px rgba(15, 23, 42, 0.07);
+}
+
+.ant-input-affix-wrapper.phone-search:focus-within {
+  box-shadow:
+    0 0 0 1px var(--brand),
+    0 0 0 4px rgba(29, 78, 216, 0.12);
+}
+
+.phone-search .ant-input-prefix {
+  margin-inline-end: 8px;
+  font-size: 17px;
+  color: #94a3b8;
+}
+
+/* A row of filters that scrolls sideways */
+.phone-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 calc(var(--gutter) * -1) 12px;
+  padding: 2px var(--gutter);
+  scrollbar-width: none;
+}
+
+.phone-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.phone-chips > * {
+  flex: none;
+}
+
+.phone-chips .ant-segmented {
+  padding: 3px;
+  border-radius: 12px;
+  background: #e8ecf3;
+  overflow: visible;
+}
+
+.phone-chips .ant-segmented-item {
+  border-radius: 9px;
+}
+
+.phone-chips .ant-segmented-item-label {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 13.5px;
+  line-height: 30px;
+}
+
+.phone-chip {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: #334155;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+}
+
+.phone-chip.is-on {
+  background: var(--brand-soft);
+  color: var(--brand);
+  box-shadow: none;
+}
+
+.phone-filter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0 12px;
+}
+
+.phone-filter-tags .ant-tag {
+  margin: 0;
+}
+
+.phone-filter-sheet .field-filter {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.phone-filter-sheet .ant-select {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 44px;
+}
+
+/* Lists: rows on one card, with a line between them after the icon */
+.phone-list {
+  background: #fff;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 0 0 1px rgba(15, 23, 42, 0.05);
+  transition: opacity 0.2s;
+}
+
+.phone-list + .phone-list {
+  margin-top: 14px;
+}
+
+.phone-list.is-busy {
+  opacity: 0.55;
+}
+
+.phone-list > * {
+  position: relative;
+}
+
+.phone-list > * + *::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  inset-inline: 68px 0;
+  height: 1px;
+  background: #eef1f5;
+}
+
+.phone-row {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.phone-row:hover,
+.phone-row:focus {
+  color: var(--ink);
+}
+
+.phone-row:active {
+  background: #f2f5fa;
+}
+
+.phone-row.is-selected {
+  background: #f3f7ff;
+}
+
+.phone-row-icon {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  font-size: 19px;
+}
+
+.tone-blue {
+  color: #1d4ed8;
+  background: #e8efff;
+}
+
+.tone-violet {
+  color: #7c3aed;
+  background: #f1eaff;
+}
+
+.tone-cyan {
+  color: #0e7490;
+  background: #ddf4f9;
+}
+
+.tone-amber {
+  color: #b45309;
+  background: #fff1d6;
+}
+
+.tone-green {
+  color: #047857;
+  background: #e1f6ec;
+}
+
+.tone-slate {
+  color: #334155;
+  background: #eef2f7;
+}
+
+.tone-red {
+  color: #dc2626;
+  background: #fdecec;
+}
+
+.phone-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.phone-row-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-row-sub {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.phone-row-sub:empty {
+  display: none;
+}
+
+.phone-row-sub > * + *::before {
+  content: '·';
+  margin-inline-end: 6px;
+  color: #cbd5e1;
+}
+
+.phone-row-sub .serial {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.phone-row-meta {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.phone-row-meta .ant-tag {
+  margin: 0;
+  padding-inline: 6px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 19px;
+}
+
+.phone-row-details {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-row-end {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.phone-chevron {
+  flex: none;
+  display: inline-flex;
+  font-size: 11px;
+  color: #c3cad5;
+}
+
+.phone-row-check {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  margin-inline: 8px;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 13px;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.phone-row-check.is-on {
+  background: var(--brand);
+  border-color: var(--brand);
+  animation: phone-check-pop 0.35s var(--spring);
+}
+
+@keyframes phone-check-pop {
+  from {
+    transform: scale(0.6);
+  }
+}
+
+/* Loading: rows drawn in grey */
+.phone-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 64px;
+  padding: 0 14px;
+}
+
+.phone-skeleton > span,
+.phone-skeleton i {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #eef1f6 0%, #e3e8ef 40%, #eef1f6 80%) 0 0 / 300% 100%;
+  animation: phone-shimmer 1.3s linear infinite;
+}
+
+.phone-skeleton > span:first-child {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+}
+
+.phone-skeleton > span:last-child {
+  flex: 1;
+  background: none;
+  animation: none;
+}
+
+.phone-skeleton i {
+  height: 12px;
+  width: 62%;
+}
+
+.phone-skeleton i + i {
+  width: 38%;
+  margin-top: 8px;
+}
+
+@keyframes phone-shimmer {
+  to {
+    background-position: -300% 0;
+  }
+}
+
+/* A group in the list, opening in place */
+.phone-group-arrow {
+  font-size: 12px;
+  color: #94a3b8;
+  transition: transform 0.35s var(--spring);
+}
+
+.phone-group.is-open .phone-group-arrow {
+  transform: rotate(180deg);
+}
+
+.phone-group.is-open > .phone-row {
+  background: #f6fbfd;
+}
+
+.phone-group-units {
+  position: relative;
+  background: #fafbfd;
+  box-shadow: inset 0 1px 0 #eef1f5;
+  animation: phone-expand 0.3s var(--ease-out);
+}
+
+.phone-group-units .phone-row {
+  padding-inline-start: 24px;
+}
+
+.phone-group-units > * + .phone-row::before {
+  content: '';
+  position: absolute;
+  inset-inline: 78px 0;
+  height: 1px;
+  margin-top: -11px;
+  background: #eef1f5;
+}
+
+.phone-group-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 #eef1f5;
+}
+
+.phone-group-spin {
+  display: block !important;
+  padding: 18px;
+}
+
+@keyframes phone-expand {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.phone-pagination {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0 4px;
+}
+
+/* Tiles: a page's main actions */
+.phone-actions {
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.phone-action {
+  min-width: 0;
+  height: 70px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 0 0 1px rgba(15, 23, 42, 0.05);
+  cursor: pointer;
+  transition:
+    transform 0.15s var(--ease-out),
+    background 0.15s;
+}
+
+.phone-action:active {
+  transform: scale(0.94);
+}
+
+.phone-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.phone-action-icon {
+  display: inline-flex;
+  font-size: 20px;
+  color: var(--brand);
+}
+
+.phone-action-label {
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-action.is-primary {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  box-shadow: 0 10px 22px -12px rgba(29, 78, 216, 0.85);
+}
+
+.phone-action.is-primary .phone-action-icon {
+  color: #fff;
+}
+
+.phone-action.is-danger .phone-action-icon {
+  color: #dc2626;
+}
+
+/* Floating "add" button above the tabs (on the page body) */
+.phone-fab-space,
+.phone-bar-space {
+  height: 76px;
+}
+
+.phone-fab {
+  position: fixed;
+  z-index: 45;
+  inset-inline-end: 16px;
+  bottom: calc(var(--tab-h) + var(--safe-bottom) + 16px);
+  height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow:
+    0 14px 30px -12px rgba(29, 78, 216, 0.7),
+    0 4px 10px -4px rgba(29, 78, 216, 0.45);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: phone-fab-in 0.5s var(--spring) 0.12s backwards;
+  transition:
+    padding 0.3s var(--ease-out),
+    gap 0.3s var(--ease-out),
+    transform 0.15s var(--ease-out),
+    opacity 0.2s;
+}
+
+.phone-fab:active {
+  transform: scale(0.93);
+}
+
+.phone-fab-icon {
+  display: inline-flex;
+  font-size: 20px;
+}
+
+.phone-fab-label {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  transition:
+    max-width 0.3s var(--ease-out),
+    opacity 0.2s;
+}
+
+.phone-fab.is-folded {
+  gap: 0;
+  padding: 0 17px;
+}
+
+.phone-fab.is-folded .phone-fab-label {
+  max-width: 0;
+  opacity: 0;
+}
+
+@keyframes phone-fab-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.6);
+  }
+}
+
+/* Choosing rows: what to do with them */
+.phone-selection {
+  position: fixed;
+  z-index: 52;
+  inset-inline: 10px;
+  bottom: calc(var(--tab-h) + var(--safe-bottom) + 10px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 20px;
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 18px 40px -14px rgba(15, 23, 42, 0.65);
+  animation: phone-selection-in 0.42s var(--spring-soft);
+}
+
+.phone-selection-close {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.phone-selection-count {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-selection-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.phone-selection-btn {
+  min-width: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.phone-selection-btn .anticon {
+  font-size: 18px;
+}
+
+.phone-selection-btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.phone-selection-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.phone-selection-btn.is-danger {
+  color: #fca5a5;
+}
+
+@keyframes phone-selection-in {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.96);
+  }
+}
+
+/* A box's number as its icon */
+.phone-box-number {
+  max-width: 38px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: ltr;
+}
+
+.phone-row-time {
+  font-size: 12px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+/* Nothing yet: a short explanation in place of the list */
+.phone-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--muted);
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+.phone-empty b {
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.phone-empty-icon {
+  width: 56px;
+  height: 56px;
+  display: grid !important;
+  place-items: center;
+  margin-bottom: 6px;
+  border-radius: 18px;
+  font-size: 26px;
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+/* A title that can be renamed in place */
+.phone-title .phone-editable {
+  font: inherit;
+  color: inherit;
+}
+
+.phone-title .phone-editable .ant-typography-edit {
+  font-size: 15px;
+}
+
+.phone-title textarea.ant-input {
+  font-size: 18px !important;
+  font-weight: 600;
+}
+
+/* While typing, the floating parts step aside with the tabs */
+.phone-typing .phone-fab,
+.phone-typing .phone-selection {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A person's initial as their icon */
+.phone-user-initial {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* A progress line under a row's text */
+.phone-row-meta .phone-row-progress {
+  width: 100%;
+  margin: 2px 0 0;
+  line-height: 1;
+}
+
+.phone-row-progress .ant-progress-rail,
+.phone-row-progress .ant-progress-track {
+  height: 5px !important;
+  border-radius: 99px;
+}
+
+/* Tags under a page title */
+.phone-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.phone-tags .ant-tag {
+  margin: 0;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+/* A page's figures, three to a row */
+.phone-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.phone-stat {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: #fff;
+  border-radius: 15px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 0 0 1px rgba(15, 23, 42, 0.05);
+  animation: phone-stat-in 0.4s var(--ease-out) backwards;
+}
+
+.phone-stat:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.phone-stat:nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.phone-stat:nth-child(4) {
+  animation-delay: 120ms;
+}
+
+.phone-stat:nth-child(5) {
+  animation-delay: 160ms;
+}
+
+@keyframes phone-stat-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.phone-stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-stat-value {
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* A full-width choice above a list */
+.phone-select.ant-select {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.phone-select.ant-select .ant-select-selector,
+.phone-select.ant-select-outlined {
+  min-height: 44px;
+  border-radius: 13px;
+}
+
+/* An open custody: the row, and its buttons under it */
+.phone-custody .phone-row {
+  align-items: flex-start;
+  padding-bottom: 6px;
+}
+
+.phone-custody .phone-row .phone-chevron {
+  align-self: center;
+}
+
+.phone-custody-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px 12px;
+  padding-inline-start: 68px;
+}
+
+.phone-custody-actions .ant-btn {
+  height: 32px;
+  border-radius: 10px;
+}
+
+.phone-custody-actions > :last-child {
+  margin-inline-start: auto;
+}
+
+.phone-call {
+  display: inline-flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The equipment's photo */
+.phone-photo {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.phone-photo .ant-image {
+  display: block;
+  width: 100%;
+}
+
+.phone-photo-img {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.phone-photo-tools {
+  position: absolute;
+  top: 10px;
+  inset-inline-end: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.phone-photo-tools button {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.55);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.phone-photo-tools button.is-danger {
+  background: rgba(220, 38, 38, 0.8);
+}
+
+.phone-photo-tools button:active {
+  transform: scale(0.92);
+}
+
+.phone-photo-add {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px dashed #c7d2fe;
+  border-radius: 18px;
+  background: #fafbff;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    transform 0.15s var(--ease-out);
+}
+
+.phone-photo-add:active {
+  transform: scale(0.98);
+  background: var(--brand-soft);
+}
+
+.phone-photo-add-icon {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 19px;
+}
+
+.phone-photo-add-text {
+  display: flex;
+  flex-direction: column;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.phone-photo-add-text b {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--brand);
+}
+
+/* A list split by day (history) */
+.phone-day + .phone-day {
+  margin-top: 18px;
+}
+
+.phone-day-label {
+  position: sticky;
+  z-index: 2;
+  top: calc(var(--top-h) + var(--safe-top));
+  margin: 0 0 8px;
+  padding: 6px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: linear-gradient(var(--surface) 70%, transparent);
+}
+
+.phone-entry-action {
+  font-weight: 500;
+  color: #475569;
+}
+
+.phone-entry-caret {
+  font-size: 11px;
+  color: #c3cad5;
+  transition: transform 0.25s var(--ease-out);
+}
+
+.phone-entry.is-open .phone-entry-caret {
+  transform: rotate(180deg);
+  color: var(--brand);
+}
+
+.phone-entry.is-open > .phone-row {
+  background: #f8faff;
+}
+
+.phone-entry-changes {
+  padding: 4px 14px 14px;
+  padding-inline-start: 68px;
+  font-size: 13px;
+  background: #f8faff;
+  animation: phone-open-in 0.3s var(--ease-out);
+}
+
+.phone-entry-changes .history-changes {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.phone-entry-changes table {
+  width: 100%;
+  font-size: 12.5px;
+}
+
+.phone-entry-link {
+  display: inline-flex;
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+@keyframes phone-open-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+/* A filter that is on, beside the filter chip */
+.phone-chips .phone-chip-tag {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 13px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+/* Labelled fields in a filter sheet */
+.phone-filter-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.phone-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.phone-field .ant-picker {
+  width: 100%;
+  height: 44px;
+}
+
+.phone-field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.phone-filter-sheet > .ant-btn {
+  margin-top: 6px;
+}
+
+/* A heading between a page's parts, and a short line under it */
+.phone-section {
+  margin: 22px 4px 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.phone-section-help {
+  margin: 0 4px 10px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* Network: an address with its link and buttons */
+.phone-address {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.phone-address-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.phone-address-url.ant-typography {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 400;
+  direction: ltr;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.phone-address .page-actions {
+  flex-wrap: wrap !important;
+  gap: 6px;
+}
+
+.phone-address .page-actions .ant-btn {
+  height: 32px;
+  border-radius: 10px;
+}
+
+/* A device's state: a dot on its icon */
+.phone-row-icon:has(.phone-device-dot) {
+  position: relative;
+}
+
+.phone-device-dot {
+  position: absolute;
+  bottom: -2px;
+  inset-inline-end: -2px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.phone-device-dot.is-online {
+  background: #22c55e;
+}
+
+.phone-device-dot.is-blocked {
+  background: #ef4444;
+}
+
+/* A sheet of buttons (one thing's actions) */
+.phone-sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.phone-sheet-actions > p {
+  margin: -4px 0 4px;
+  color: var(--muted);
+}
+
+.phone-sheet-actions .ant-btn {
+  justify-content: flex-start;
+  height: 48px;
+  border-radius: 14px;
+}
+
+/* ==========================================================================
+   Pages on a phone
+   ========================================================================== */
+
+/* The scan pages' own bar: PhoneShell has one */
+.phone-app .scan-header {
+  display: none !important;
+}
+
+.phone-app .ant-layout {
+  min-height: 0 !important;
+  background: transparent;
+}
+
+.phone-app .app-content {
+  padding: 14px var(--gutter) 20px;
+}
+
+/* Titles sized for a phone */
+.phone-app h1.ant-typography {
+  font-size: 26px;
+}
+
+.phone-app h2.ant-typography {
+  font-size: 23px;
+  line-height: 1.3;
+}
+
+.phone-app h3.ant-typography {
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.phone-app h4.ant-typography {
+  font-size: 17px;
+}
+
+.phone-app h5.ant-typography {
+  font-size: 15px;
+}
+
+.phone-app .page-head {
+  flex-direction: column;
+  /* One line: wrapping would size the column by its widest content */
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.phone-app .page-head h3.ant-typography,
+.phone-app .page-head h2.ant-typography {
+  margin: 0;
+}
+
+/* A page's buttons: one row that scrolls sideways, the main one first */
+.phone-app .page-head > .page-actions {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin-inline: calc(var(--gutter) * -1);
+  padding: 2px var(--gutter) 4px;
+  scrollbar-width: none;
+}
+
+.phone-app .page-head > .page-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.phone-app .page-head > .page-actions > * {
+  flex: none;
+}
+
+.phone-app .page-head > .page-actions > .ant-btn-primary {
+  order: -1;
+}
+
+.phone-app .page-head > .page-actions .ant-btn {
+  height: 36px;
+  padding-inline: 14px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  box-shadow: none;
+}
+
+.phone-app .toolbar {
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.phone-app .toolbar > .ant-input-search,
+.phone-app .toolbar > .ant-input-affix-wrapper,
+.phone-app .toolbar > .ant-space-compact {
+  flex: 1 1 100%;
+  max-width: none !important;
+}
+
+/* Cards */
+.phone-app .ant-card {
+  border-radius: 18px;
+}
+
+.phone-app .ant-card .ant-card-head {
+  min-height: 50px;
+  padding: 0 var(--gutter);
+  font-size: 15.5px;
+}
+
+.phone-app .ant-card .ant-card-head-wrapper {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  padding-block: 8px;
+}
+
+.phone-app .ant-card .ant-card-extra {
+  margin-inline-start: auto;
+}
+
+.phone-app .ant-card .ant-card-extra .page-actions {
+  flex-wrap: nowrap;
+}
+
+.phone-app .ant-card .ant-card-body {
+  padding: var(--gutter);
+}
+
+/* Tables: smaller, and they scroll sideways inside their box instead of being cut */
+.phone-app .ant-table {
+  font-size: 13.5px;
+}
+
+.phone-app .ant-table-content {
+  overflow-x: auto;
+}
+
+.phone-app .ant-table-wrapper .ant-table-thead > tr > th {
+  padding: 10px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.phone-app .ant-table-wrapper .ant-table-tbody > tr > td {
+  padding: 10px;
+}
+
+.phone-app .ant-pagination {
+  justify-content: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.phone-app .ant-pagination .ant-pagination-options {
+  display: none;
+}
+
+.phone-app .ant-segmented {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.phone-app .ant-alert {
+  border-radius: 14px;
+}
+
+.phone-app .ant-alert-with-description {
+  padding: 12px 14px;
+}
+
+.phone-app .ant-alert-with-description .ant-alert-title {
+  margin-bottom: 2px;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.phone-app .ant-alert-with-description .ant-alert-icon {
+  font-size: 18px;
+}
+
+.phone-app .ant-alert-description {
+  font-size: 13px;
+}
+
+.phone-app .ant-empty-normal {
+  margin-block: 24px;
+}
+
+/* A title that is the first thing on the page */
+.phone-app .page > h3.ant-typography:first-child,
+.phone-app .page > h2.ant-typography:first-child {
+  margin: 2px 0 14px;
+}
+
+/* The equipment's serial: on the start side, its own width */
+.phone-app .page-head .eq-title {
+  width: fit-content;
+  max-width: 100%;
+  font-size: 24px;
+  overflow-wrap: anywhere;
+}
+
+/* A box's figures */
+.phone-app .box-stats {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.phone-app .box-stat {
+  padding: 12px 14px;
+  border-radius: 18px;
+}
+
+.phone-app .box-stat-label {
+  font-size: 13px;
+}
+
+.phone-app .box-stat-value {
+  font-size: 28px;
+}
+
+.phone-app .box-stat-weight .box-stat-value {
+  font-size: 32px;
+}
+
+.phone-app .box-stat-value small {
+  font-size: 14px;
+}
+
+/* Home: the four shortcuts as app icons in one row */
+.phone-app .quick-actions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.phone-app .quick-action {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 12px 4px 10px;
+  border: 0;
+  border-radius: 18px;
+  text-align: center;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 0 0 1px rgba(15, 23, 42, 0.05);
+  animation: phone-stat-in 0.4s var(--ease-out) backwards;
+}
+
+.phone-app .quick-action:hover {
+  transform: none;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+.phone-app .quick-action:active {
+  transform: scale(0.95);
+}
+
+.phone-app .quick-action-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  font-size: 21px;
+}
+
+.phone-app .quick-action b {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.phone-app .quick-action small {
+  display: none;
+}
+
+.phone-app .quick-action:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.phone-app .quick-action:nth-child(2) .quick-action-icon {
+  color: #7c3aed;
+  background: #f1eaff;
+}
+
+.phone-app .quick-action:nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.phone-app .quick-action:nth-child(3) .quick-action-icon {
+  color: #047857;
+  background: #e1f6ec;
+}
+
+.phone-app .quick-action:nth-child(4) {
+  animation-delay: 120ms;
+}
+
+.phone-app .quick-action:nth-child(4) .quick-action-icon {
+  color: #b45309;
+  background: #fff1d6;
+}
+
+/* Home: figures, smaller */
+.phone-app .dashboard > .ant-row:first-of-type {
+  row-gap: 10px !important;
+  margin-inline: -5px !important;
+}
+
+.phone-app .dashboard > .ant-row:first-of-type > .ant-col {
+  padding-inline: 5px !important;
+}
+
+.phone-app .stat-tile {
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+.phone-app .stat-tile:active {
+  background: #f8faff;
+}
+
+.phone-app .stat-label {
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-app .stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Stocktake: the code box across, the two buttons under it side by side */
+.phone-app .scan-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.phone-app .scan-bar .ant-input {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* The hint in the app's font (the code itself stays monospaced) */
+.phone-app .scan-bar .ant-input:placeholder-shown {
+  font-family: 'Inter Variable', 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+}
+
+.phone-app .scan-bar .ant-input::placeholder {
+  font-size: 14px;
+}
+
+.phone-app .scan-bar .ant-btn {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Scan document: "no repeats within" choice */
+.phone-app .scan-doc-options {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+/* ==========================================================================
+   Everything that opens over the page (outside the app layout in the page)
+   ========================================================================== */
+@media (max-width: 767.98px) {
+  /* 16px text boxes: phones zoom in on smaller ones */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Dialogs come up from the bottom, as a sheet */
+  .ant-modal-wrap {
+    display: flex;
+    flex-direction: column;
+    padding-top: 8vh;
+  }
+
+  .ant-modal-wrap.ant-modal-centered::before {
+    display: none;
+  }
+
+  .ant-modal-wrap .ant-modal {
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: auto 0 0 !important;
+    padding: 0;
+  }
+
+  .ant-modal-wrap .ant-modal-container {
+    padding: 26px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    border-radius: 24px 24px 0 0;
+    box-shadow: 0 -20px 50px -20px rgba(15, 23, 42, 0.35);
+  }
+
+  /* The sheet's grip */
+  .ant-modal-wrap .ant-modal-container::before {
+    content: '';
+    position: absolute;
+    top: 9px;
+    left: 50%;
+    width: 40px;
+    height: 4px;
+    margin-left: -20px;
+    border-radius: 2px;
+    background: #d6dce5;
+  }
+
+  .ant-modal-wrap .ant-modal-close {
+    top: 14px;
+  }
+
+  .ant-modal.ant-zoom-enter,
+  .ant-modal.ant-zoom-appear {
+    animation-name: phone-sheet-up !important;
+    animation-duration: 0.38s !important;
+    animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1) !important;
+  }
+
+  .ant-modal.ant-zoom-leave {
+    animation-name: phone-sheet-down !important;
+    animation-duration: 0.24s !important;
+    animation-timing-function: cubic-bezier(0.4, 0, 1, 1) !important;
+  }
+
+  .ant-modal-footer {
+    display: flex;
+    gap: 8px;
+  }
+
+  .ant-modal-footer > .ant-btn {
+    flex: 1;
+    height: 44px;
+    margin: 0 !important;
+    border-radius: 12px;
+  }
+
+  .ant-modal-confirm .ant-modal-confirm-btns {
+    display: flex;
+    gap: 8px;
+  }
+
+  .ant-modal-confirm .ant-modal-confirm-btns > .ant-btn {
+    flex: 1;
+    height: 44px;
+    margin: 0 !important;
+    border-radius: 12px;
+  }
+
+  /* Messages under the top bar */
+  .ant-message {
+    top: calc(env(safe-area-inset-top, 0px) + 62px) !important;
+  }
+}
+
+@keyframes phone-sheet-up {
+  from {
+    opacity: 1;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes phone-sheet-down {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phone-view,
+  .phone-sheet,
+  .phone-menu-item,
+  .phone-backdrop,
+  .phone-tab .phone-tab-icon svg {
+    animation-duration: 0.01s !important;
+  }
+
+  .phone-tab-indicator,
+  .phone-tabbar {
+    transition-duration: 0.01s !important;
+  }
+}

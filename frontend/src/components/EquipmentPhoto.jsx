@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react'
 import { App, Button, Card, Empty, Image, Popconfirm } from 'antd'
-import { CameraOutlined, DeleteOutlined, PictureOutlined } from '@ant-design/icons'
+import { CameraOutlined, DeleteOutlined, LoadingOutlined, PictureOutlined } from '@ant-design/icons'
 import api, { errorKey } from '../api'
 import { useLang } from '../i18n'
 import { useAuth } from '../auth'
+import { usePhone } from '../nav'
 
 /** Longest side of an uploaded photo: phone photos are shrunk before upload, so they are quick on a hotspot. */
 const MAX_SIDE = 1600
@@ -32,6 +33,7 @@ export default function EquipmentPhoto({ equipment, onChanged }) {
   const { message } = App.useApp()
   const [busy, setBusy] = useState(false)
   const input = useRef(null)
+  const phone = usePhone()
 
   const upload = async (file) => {
     if (!file || !(await requirePin())) return
@@ -59,21 +61,57 @@ export default function EquipmentPhoto({ equipment, onChanged }) {
     }
   }
 
+  const pick = () => input.current?.click()
+  const fileInput = (
+    <input
+      ref={input}
+      type="file"
+      accept="image/*"
+      hidden
+      onChange={(e) => {
+        upload(e.target.files?.[0])
+        e.target.value = ''
+      }}
+    />
+  )
+
+  // Phones: the photo edge to edge with its buttons on it, or one slim "add a photo" row
+  if (phone)
+    return (
+      <div className="phone-photo">
+        {equipment.photo_url ? (
+          <>
+            <Image src={equipment.photo_url} className="phone-photo-img" alt={equipment.serial_number} />
+            <div className="phone-photo-tools">
+              <button type="button" onClick={pick} disabled={busy} aria-label={t('change_photo')}>
+                {busy ? <LoadingOutlined /> : <CameraOutlined />}
+              </button>
+              <Popconfirm title={t('remove_photo_confirm')} okText={t('delete')} cancelText={t('cancel')} okButtonProps={{ danger: true }} onConfirm={remove}>
+                <button type="button" className="is-danger" aria-label={t('delete')}>
+                  <DeleteOutlined />
+                </button>
+              </Popconfirm>
+            </div>
+          </>
+        ) : (
+          <button type="button" className="phone-photo-add" onClick={pick} disabled={busy}>
+            <span className="phone-photo-add-icon">{busy ? <LoadingOutlined /> : <CameraOutlined />}</span>
+            <span className="phone-photo-add-text">
+              <b>{t('add_photo')}</b>
+              <span>{t('no_photo')}</span>
+            </span>
+          </button>
+        )}
+        {fileInput}
+      </div>
+    )
+
   const picker = (
     <>
-      <Button size="small" type="primary" ghost icon={<CameraOutlined />} loading={busy} onClick={() => input.current?.click()}>
+      <Button size="small" type="primary" ghost icon={<CameraOutlined />} loading={busy} onClick={pick}>
         {t(equipment.photo_url ? 'change_photo' : 'add_photo')}
       </Button>
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => {
-          upload(e.target.files?.[0])
-          e.target.value = ''
-        }}
-      />
+      {fileInput}
     </>
   )
 

@@ -22,6 +22,8 @@ import { useLang } from '../i18n'
 import { useAuth } from '../auth'
 import { qrPointsToLocalhost, useSettings } from '../settings'
 import QrCode from './QrCode'
+import { usePhone } from '../nav'
+import { PhoneActions, PhoneHeader } from './PhoneUI'
 import EquipmentForm from './EquipmentForm'
 import EquipmentPicker from './EquipmentPicker'
 import GroupSelect from './GroupSelect'
@@ -273,6 +275,28 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
     open?.(true)
   }
 
+  // Phones: the same choices as tiles under the title
+  const phone = usePhone() && !printMode
+  const choose = (key) => () => onMenu({ key })
+  const phoneActions = [
+    {
+      key: 'add',
+      icon: <PlusOutlined />,
+      label: t('act_add'),
+      primary: true,
+      menu: [
+        { key: 'new', icon: <PlusOutlined />, label: t('new_equipment_in_box'), onClick: choose('new') },
+        { key: 'pick', icon: <AppstoreAddOutlined />, label: t('choose_existing'), onClick: choose('pick') },
+        { key: 'group', icon: <ClusterOutlined />, label: t('add_group_to_box'), onClick: choose('group') },
+      ],
+    },
+    { key: 'manage', icon: <MinusCircleOutlined />, label: t('act_take_out'), onClick: choose('manage'), hidden: !box.equipment.length },
+    { key: 'edit', icon: <EditOutlined />, label: t('edit'), onClick: choose('edit') },
+    { key: 'report', icon: <FileTextOutlined />, label: t('print_report'), onClick: choose('report') },
+    { key: 'print', icon: <PrinterOutlined />, label: t('print_label'), onClick: choose('print') },
+    { key: 'delete', icon: <DeleteOutlined />, label: t('delete_box'), danger: true, onClick: choose('delete') },
+  ]
+
   const actions = (
     // Kept inside the screen even at its corner
     <Dropdown menu={{ items: menuItems, onClick: onMenu }} trigger={['click']} placement="bottom">
@@ -336,6 +360,12 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
               {box.name && <div className="box-print-name">{box.name}</div>}
             </div>
           </div>
+        </>
+      ) : phone ? (
+        <>
+          <PhoneHeader icon={<InboxOutlined />} title={`${t('box')} ${box.number}`} subtitle={box.name} />
+          {stats}
+          <PhoneActions actions={phoneActions} />
         </>
       ) : (
         <>
