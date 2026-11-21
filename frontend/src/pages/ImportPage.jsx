@@ -5,6 +5,7 @@ import { ApartmentOutlined, EditOutlined, EyeOutlined, FileWordOutlined, InboxOu
 import api, { errorKey } from '../api'
 import { useLang } from '../i18n'
 import { useAuth } from '../auth'
+import { usePhone } from '../nav'
 import FieldList from '../components/FieldList'
 import FieldEditor, { cleanFields } from '../components/FieldEditor'
 import WordEditor from '../components/WordEditor'
@@ -49,6 +50,7 @@ export default function ImportPage() {
   const { user, requirePin } = useAuth()
   const { message } = App.useApp()
   const [step, setStep] = useState(0)
+  const phone = usePhone()
   const [fileList, setFileList] = useState([])
   const [reading, setReading] = useState(false)
   const [readCount, setReadCount] = useState(0)
@@ -310,7 +312,15 @@ export default function ImportPage() {
   return (
     <div className="page">
       <Typography.Title level={3}>{t('import')}</Typography.Title>
-      <Steps current={step} items={[{ title: t('import_step_upload') }, { title: t('import_step_review') }, { title: t('import_step_done') }]} style={{ marginBottom: 24 }} />
+      <Steps
+        current={step}
+        items={[{ title: t('import_step_upload') }, { title: t('import_step_review') }, { title: t('import_step_done') }]}
+        // Phones: the three steps across, small, instead of one under the other
+        size={phone ? 'small' : undefined}
+        responsive={!phone}
+        titlePlacement={phone ? 'vertical' : undefined}
+        style={{ marginBottom: phone ? 16 : 24 }}
+      />
 
       {step === 0 && (
         <Card>

@@ -17,6 +17,8 @@ import MaintenanceCard from './MaintenanceCard'
 import CustodyCard from './CustodyCard'
 import IssuesCard, { ReportProblemModal } from './IssuesCard'
 import EquipmentPhoto from './EquipmentPhoto'
+import { usePhone } from '../nav'
+import { PhoneActions } from './PhoneUI'
 
 /** Full equipment page, shared by the dashboard and the phone scan page. */
 const HISTORY_OPEN_KEY = 'history_open'
@@ -55,8 +57,11 @@ function HistoryCard({ logs }) {
   )
 }
 
-export default function EquipmentView({ equipment, onChange, onDeleted, onReload, mobile }) {
+export default function EquipmentView({ equipment, onChange, onDeleted, onReload, mobile: scanPage }) {
   const { t } = useLang()
+  // Phones lay the page out the same way whether it was opened from a label or from the list
+  const phone = usePhone()
+  const mobile = scanPage || phone
   const { requirePin } = useAuth()
   const { settings } = useSettings()
   const { message } = App.useApp()
@@ -68,7 +73,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
   const accessories = equipment.accessories || []
   const isAccessory = !!equipment.parent
   // Phones stay on the scan pages, the dashboard uses its own pages
-  const linkTo = (eq) => (mobile ? `/eq/${encodeURIComponent(eq.serial_number)}` : `/equipment/${eq.id}`)
+  const linkTo = (eq) => (scanPage ? `/eq/${encodeURIComponent(eq.serial_number)}` : `/equipment/${eq.id}`)
 
   const edit = async () => {
     if (await requirePin()) setEditing(true)
@@ -126,6 +131,24 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
     </div>
   )
 
+  // Phones: the main actions as tiles under the title, the rest behind "more"
+  const accessoryLabels = accessories.filter((a) => a.serial_number).map((a) => a.id)
+  const phoneActions = [
+    { key: 'edit', icon: <EditOutlined />, label: t('edit'), primary: true, onClick: edit },
+    { key: 'label', icon: <PrinterOutlined />, label: t('act_label'), onClick: () => printLabels([equipment.id]), hidden: !equipment.serial_number },
+    { key: 'report', icon: <WarningOutlined />, label: t('act_report'), onClick: () => setReporting(true) },
+    { key: 'sheet', icon: <FilePdfOutlined />, label: t('equipment_sheet'), onClick: () => window.open(`/print/equipment/${equipment.id}`, '_blank') },
+    { key: 'labels', icon: <PrinterOutlined />, label: t('print_accessory_labels'), onClick: () => printLabels(accessoryLabels), hidden: !accessoryLabels.length },
+    {
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: t('delete'),
+      danger: true,
+      onClick: remove,
+      confirm: { title: accessories.length ? t('delete_confirm_accessories', { n: accessories.length }) : t('delete_confirm') },
+    },
+  ]
+
   // On phones the photo comes first, above the details
   const photo = <EquipmentPhoto equipment={equipment} onChanged={(photo_url) => onChange({ ...equipment, photo_url })} />
 
@@ -138,8 +161,8 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
       }
       extra={
         <div className="page-actions">
-          {!mobile && accessories.some((a) => a.serial_number) && (
-            <Button size="small" icon={<PrinterOutlined />} onClick={() => printLabels(accessories.filter((a) => a.serial_number).map((a) => a.id))}>
+          {!mobile && accessoryLabels.length > 0 && (
+            <Button size="small" icon={<PrinterOutlined />} onClick={() => printLabels(accessoryLabels)}>
               {t('print_accessory_labels')}
             </Button>
           )}
@@ -156,7 +179,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
             const quantity = a.fields.find((f) => f.key === 'عدد')?.value
             const details = a.fields.filter((f) => f.key !== 'عدد').slice(0, 2)
             return (
-              <Link key={a.id} to={mobile ? `/item/${a.id}` : `/equipment/${a.id}`} className="accessory-item">
+              <Link key={a.id} to={scanPage ? `/item/${a.id}` : `/equipment/${a.id}`} className="accessory-item">
                 <span className="accessory-name">{a.name || t('accessory')}</span>
                 {quantity && <span className="accessory-quantity">{`${t('accessory_quantity')} ${quantity}`}</span>}
                 <span className="serial">{a.serial_number || '—'}</span>
@@ -183,13 +206,13 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
             {isAccessory ? t('accessory') : t('serial_number')}
             {equipment.display_name && ` · ${equipment.display_name}`}
           </Typography.Text>
-          <Typography.Title level={mobile ? 2 : 3} className="serial" style={{ margin: 0 }} copyable={!!equipment.serial_number}>
+          <Typography.Title level={mobile ? 2 : 3} className="serial eq-title" style={{ margin: 0 }} copyable={!!equipment.serial_number}>
             {equipment.serial_number || equipment.display_name || t('accessory')}
           </Typography.Title>
           {equipment.row_no != null && <Tag title={t('row_no_long')}>{t('row_no')} {equipment.row_no}</Tag>}
           {equipment.category && <Tag color="blue">{equipment.category}</Tag>}
           {equipment.group &&
-            (mobile ? (
+            (scanPage ? (
               <Tag color="cyan" icon={<ClusterOutlined />}>
                 {equipment.group.name}
               </Tag>
@@ -201,7 +224,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
               </Link>
             ))}
           {(equipment.boxes || []).map((b) => (
-            <Link key={b.id} to={mobile ? `/box/${encodeURIComponent(b.number)}` : `/boxes/${b.id}`}>
+            <Link key={b.id} to={scanPage ? `/box/${encodeURIComponent(b.number)}` : `/boxes/${b.id}`}>
               <Tag color="purple" icon={<InboxOutlined />} style={{ cursor: 'pointer' }}>
                 {t('box')} {b.number}
                 {b.name && ` · ${b.name}`}
@@ -211,6 +234,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
         </div>
         {!mobile && actions}
       </div>
+      {phone && <PhoneActions actions={phoneActions} />}
 
       {isAccessory && (
         <Alert
@@ -255,7 +279,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
           {accessoriesCard}
           <CustodyCard equipment={equipment} mobile={mobile} onChanged={onReload} />
           <MaintenanceCard equipment={equipment} onChanged={onReload} />
-          {mobile && <div style={{ marginTop: 16 }}>{actions}</div>}
+          {mobile && !phone && <div style={{ marginTop: 16 }}>{actions}</div>}
         </Col>
         <Col xs={24} lg={8}>
           {!mobile && photo}

@@ -17,6 +17,8 @@ import { useLang } from '../i18n'
 import { useAuth } from '../auth'
 import EquipmentForm from '../components/EquipmentForm'
 import EquipmentPicker from '../components/EquipmentPicker'
+import { usePhone } from '../nav'
+import { Fab, PhoneActions, PhoneHeader, PhoneList, PhoneRow, PhoneSearch, PhoneSkeleton } from '../components/PhoneUI'
 
 /** Create (no `group`) or rename a group. */
 function GroupForm({ open, group, onClose, onSaved }) {
@@ -177,6 +179,7 @@ export function GroupsPage() {
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
   const [auto, setAuto] = useState(false)
+  const phone = usePhone()
 
   const load = () => api.get('/groups').then(({ data }) => setGroups(data))
   useEffect(() => {
@@ -189,6 +192,45 @@ export function GroupsPage() {
   }
 
   const shown = (groups || []).filter((g) => !q || g.name.includes(q.trim()))
+
+  const modals = (
+    <>
+      <GroupForm open={adding} onClose={() => setAdding(false)} onSaved={(g) => navigate(`/groups/${g.id}`)} />
+      <AutoGroupModal
+        open={auto}
+        onClose={() => setAuto(false)}
+        onDone={() => {
+          setAuto(false)
+          load()
+        }}
+      />
+    </>
+  )
+
+  if (phone)
+    return (
+      <div className="page">
+        <PhoneHeader
+          title={t('groups')}
+          subtitle={groups ? t('groups_n', { n: groups.length }) : '\u00a0'}
+          more={[{ key: 'auto', icon: <MergeCellsOutlined />, label: t('auto_group'), onClick: withPin(setAuto) }]}
+        />
+        <PhoneSearch value={q} placeholder={t('search_groups')} onChange={setQ} />
+        {!groups ? (
+          <PhoneSkeleton />
+        ) : shown.length ? (
+          <PhoneList>
+            {shown.map((g) => (
+              <PhoneRow key={g.id} to={`/groups/${g.id}`} icon={<ClusterOutlined />} tone="cyan" title={g.name} subtitle={t('n_items', { n: g.equipment_count })} />
+            ))}
+          </PhoneList>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('no_groups')} />
+        )}
+        <Fab icon={<PlusOutlined />} label={t('add_group')} onClick={withPin(setAdding)} />
+        {modals}
+      </div>
+    )
 
   return (
     <div className="page">
@@ -227,15 +269,7 @@ export function GroupsPage() {
           { title: t('count'), dataIndex: 'equipment_count', width: 120, render: (n) => t('n_items', { n }) },
         ]}
       />
-      <GroupForm open={adding} onClose={() => setAdding(false)} onSaved={(g) => navigate(`/groups/${g.id}`)} />
-      <AutoGroupModal
-        open={auto}
-        onClose={() => setAuto(false)}
-        onDone={() => {
-          setAuto(false)
-          load()
-        }}
-      />
+      {modals}
     </div>
   )
 }
@@ -252,6 +286,7 @@ export function GroupDetail() {
   const [renaming, setRenaming] = useState(false)
   const [picking, setPicking] = useState(false)
   const [creating, setCreating] = useState(false)
+  const phone = usePhone()
 
   const load = () =>
     api
@@ -295,48 +330,83 @@ export function GroupDetail() {
   }
 
   const ids = group.equipment.map((e) => e.id)
+  const printLabels = () => window.open(`/labels?ids=${ids.join(',')}`, '_blank')
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <Typography.Text type="secondary">
-            <ClusterOutlined /> {t('group')}
-          </Typography.Text>
-          <Typography.Title level={3} style={{ margin: 0 }}>
-            {group.name}
-          </Typography.Title>
-          <Tag>{t('n_items', { n: group.equipment.length })}</Tag>
-        </div>
-        <div className="page-actions">
-          <Button icon={<EditOutlined />} onClick={withPin(setRenaming)}>
-            {t('rename_group')}
-          </Button>
-          <Button icon={<PrinterOutlined />} disabled={!ids.length} onClick={() => window.open(`/labels?ids=${ids.join(',')}`, '_blank')}>
-            {t('print_labels', { n: ids.length })}
-          </Button>
-          <Popconfirm title={t('delete_group_confirm')} okText={t('delete')} cancelText={t('cancel')} okButtonProps={{ danger: true }} onConfirm={remove}>
-            <Button danger icon={<DeleteOutlined />}>
-              {t('delete')}
+      {phone ? (
+        <>
+          <PhoneHeader
+            kicker={
+              <span>
+                <ClusterOutlined /> {t('group')}
+              </span>
+            }
+            title={group.name}
+            subtitle={t('n_items', { n: group.equipment.length })}
+          />
+          <PhoneActions
+            actions={[
+              {
+                key: 'add',
+                icon: <PlusOutlined />,
+                label: t('act_add'),
+                primary: true,
+                menu: [
+                  { key: 'new', icon: <PlusOutlined />, label: t('new_equipment_in_box'), onClick: withPin(setCreating) },
+                  { key: 'pick', icon: <AppstoreAddOutlined />, label: t('choose_existing'), onClick: withPin(setPicking) },
+                  { key: 'import', icon: <FileWordOutlined />, label: t('import_into_group'), onClick: () => navigate(`/import?group=${group.id}`) },
+                ],
+              },
+              { key: 'rename', icon: <EditOutlined />, label: t('rename_group'), onClick: withPin(setRenaming) },
+              { key: 'labels', icon: <PrinterOutlined />, label: t('act_labels'), onClick: printLabels, disabled: !ids.length },
+              { key: 'delete', icon: <DeleteOutlined />, label: t('delete'), danger: true, onClick: remove, confirm: { title: t('delete_group_confirm') } },
+            ]}
+          />
+        </>
+      ) : (
+        <div className="page-head">
+          <div>
+            <Typography.Text type="secondary">
+              <ClusterOutlined /> {t('group')}
+            </Typography.Text>
+            <Typography.Title level={3} style={{ margin: 0 }}>
+              {group.name}
+            </Typography.Title>
+            <Tag>{t('n_items', { n: group.equipment.length })}</Tag>
+          </div>
+          <div className="page-actions">
+            <Button icon={<EditOutlined />} onClick={withPin(setRenaming)}>
+              {t('rename_group')}
             </Button>
-          </Popconfirm>
+            <Button icon={<PrinterOutlined />} disabled={!ids.length} onClick={printLabels}>
+              {t('print_labels', { n: ids.length })}
+            </Button>
+            <Popconfirm title={t('delete_group_confirm')} okText={t('delete')} cancelText={t('cancel')} okButtonProps={{ danger: true }} onConfirm={remove}>
+              <Button danger icon={<DeleteOutlined />}>
+                {t('delete')}
+              </Button>
+            </Popconfirm>
+          </div>
         </div>
-      </div>
+      )}
 
       <Card
         title={`${t('group_units')} (${group.equipment.length})`}
         extra={
-          <div className="page-actions">
-            <Button type="primary" icon={<PlusOutlined />} onClick={withPin(setCreating)}>
-              {t('new_equipment_in_box')}
-            </Button>
-            <Button icon={<AppstoreAddOutlined />} onClick={withPin(setPicking)}>
-              {t('choose_existing')}
-            </Button>
-            <Button icon={<FileWordOutlined />} onClick={() => navigate(`/import?group=${group.id}`)}>
-              {t('import_into_group')}
-            </Button>
-          </div>
+          !phone && (
+            <div className="page-actions">
+              <Button type="primary" icon={<PlusOutlined />} onClick={withPin(setCreating)}>
+                {t('new_equipment_in_box')}
+              </Button>
+              <Button icon={<AppstoreAddOutlined />} onClick={withPin(setPicking)}>
+                {t('choose_existing')}
+              </Button>
+              <Button icon={<FileWordOutlined />} onClick={() => navigate(`/import?group=${group.id}`)}>
+                {t('import_into_group')}
+              </Button>
+            </div>
+          )
         }
       >
         {group.equipment.length ? (

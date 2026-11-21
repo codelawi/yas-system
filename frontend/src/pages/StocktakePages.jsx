@@ -9,6 +9,8 @@ import { useAuth } from '../auth'
 import { beep, downloadFile } from '../download'
 import FieldFilter, { filterLabel } from '../components/FieldFilter'
 import { decodePhoto } from './ScanLabelPage'
+import { usePhone } from '../nav'
+import { Fab, PhoneActions, PhoneHeader, PhoneList, PhoneRow, PhoneSkeleton } from '../components/PhoneUI'
 
 function NeedPin() {
   const { t } = useLang()
@@ -38,6 +40,7 @@ export function StocktakesPage() {
   const [open, setOpen] = useState(false)
   const [filters, setFilters] = useState([])
   const [form] = Form.useForm()
+  const phone = usePhone()
 
   useEffect(() => {
     if (user) api.get('/stocktakes').then(({ data }) => setList(data))
@@ -65,21 +68,83 @@ export function StocktakesPage() {
     }
   }
 
+  const startNew = () => {
+    form.setFieldsValue({ name: `${t('stocktake')} ${dayjs().format('YYYY-MM-DD')}`, include_accessories: true })
+    setFilters([])
+    setOpen(true)
+  }
+
+  const newStocktake = (
+    <Modal open={open} title={t('new_stocktake')} okText={t('confirm')} cancelText={t('cancel')} onOk={create} onCancel={() => setOpen(false)} forceRender>
+      <Form form={form} layout="vertical">
+        <Form.Item name="name" label={t('stocktake_name')} rules={[{ required: true, whitespace: true }]}>
+          <Input />
+        </Form.Item>
+        <Form.Item label={t('stocktake_scope')}>
+          <FieldFilter onAdd={(f) => setFilters((fs) => [...fs.filter((x) => x.key !== f.key), f])} />
+          <div style={{ marginTop: 8 }}>
+            {filters.map((f) => (
+              <Tag key={f.key} closable onClose={() => setFilters((fs) => fs.filter((x) => x.key !== f.key))}>
+                <bdi>{filterLabel(f, t)}</bdi>
+              </Tag>
+            ))}
+          </div>
+        </Form.Item>
+        <Form.Item name="include_accessories" label={t('include_accessories')} valuePropName="checked">
+          <Switch />
+        </Form.Item>
+      </Form>
+    </Modal>
+  )
+
+  if (phone)
+    return (
+      <div className="page">
+        <PhoneHeader title={t('stocktake')} subtitle={list ? t('stocktakes_n', { n: list.length }) : '\u00a0'} />
+        {!list ? (
+          <PhoneSkeleton rows={3} />
+        ) : list.length ? (
+          <PhoneList>
+            {list.map((r) => {
+              const open = r.status === 'open'
+              const percent = r.expected_count ? Math.min(100, Math.round((r.scans_count / r.expected_count) * 100)) : 0
+              return (
+                <PhoneRow
+                  key={r.id}
+                  to={`/stocktakes/${r.id}`}
+                  icon={<AuditOutlined />}
+                  tone={open ? 'green' : 'slate'}
+                  title={r.name}
+                  subtitle={
+                    <>
+                      <span>{`${t('scanned')} ${r.scans_count} / ${r.expected_count}`}</span>
+                      <span>{dayjs(r.created_at).format('YYYY-MM-DD')}</span>
+                    </>
+                  }
+                  meta={<Progress percent={percent} size="small" showInfo={false} strokeColor={open ? '#16a34a' : '#94a3b8'} className="phone-row-progress" />}
+                  end={<Tag color={open ? 'green' : 'default'}>{t(open ? 'open_status' : 'closed_status')}</Tag>}
+                />
+              )
+            })}
+          </PhoneList>
+        ) : (
+          <div className="phone-empty">
+            <AuditOutlined className="phone-empty-icon" />
+            <b>{t('no_stocktakes')}</b>
+          </div>
+        )}
+        <Fab icon={<PlusOutlined />} label={t('new_stocktake')} onClick={startNew} />
+        {newStocktake}
+      </div>
+    )
+
   return (
     <div className="page">
       <div className="page-head">
         <Typography.Title level={3}>
           <AuditOutlined /> {t('stocktake')}
         </Typography.Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            form.setFieldsValue({ name: `${t('stocktake')} ${dayjs().format('YYYY-MM-DD')}`, include_accessories: true })
-            setFilters([])
-            setOpen(true)
-          }}
-        >
+        <Button type="primary" icon={<PlusOutlined />} onClick={startNew}>
           {t('new_stocktake')}
         </Button>
       </div>
@@ -109,26 +174,7 @@ export function StocktakesPage() {
           },
         ]}
       />
-      <Modal open={open} title={t('new_stocktake')} okText={t('confirm')} cancelText={t('cancel')} onOk={create} onCancel={() => setOpen(false)} forceRender>
-        <Form form={form} layout="vertical">
-          <Form.Item name="name" label={t('stocktake_name')} rules={[{ required: true, whitespace: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item label={t('stocktake_scope')}>
-            <FieldFilter onAdd={(f) => setFilters((fs) => [...fs.filter((x) => x.key !== f.key), f])} />
-            <div style={{ marginTop: 8 }}>
-              {filters.map((f) => (
-                <Tag key={f.key} closable onClose={() => setFilters((fs) => fs.filter((x) => x.key !== f.key))}>
-                  <bdi>{filterLabel(f, t)}</bdi>
-                </Tag>
-              ))}
-            </div>
-          </Form.Item>
-          <Form.Item name="include_accessories" label={t('include_accessories')} valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
+      {newStocktake}
     </div>
   )
 }
@@ -148,6 +194,7 @@ export function StocktakePage() {
   const [last, setLast] = useState(null)
   const input = useRef(null)
   const photo = useRef(null)
+  const phone = usePhone()
 
   const load = useCallback(() => api.get(`/stocktakes/${id}`).then(({ data }) => setReport(data)), [id])
   useEffect(() => {
@@ -241,59 +288,98 @@ export function StocktakePage() {
       : []),
   ]
 
+  const exportExcel = () => downloadFile(`/stocktakes/${id}/export`, {}, `stocktake-${id}.xlsx`)
+  const tags = (
+    <>
+      <Tag color={isOpen ? 'blue' : 'default'}>{t(isOpen ? 'open_status' : 'closed_status')}</Tag>
+      {(report.stocktake.filters || []).map((f) => (
+        <Tag key={f.key}>
+          <bdi>{filterLabel(f, t)}</bdi>
+        </Tag>
+      ))}
+    </>
+  )
+  const stats = [
+    ['expected', c.expected, null],
+    ['found', c.found, '#16a34a'],
+    ['missing', c.missing, '#dc2626'],
+    ['unexpected', c.unexpected, '#d97706'],
+    ['unknown', c.unknown, '#6b7280'],
+  ]
+
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <Typography.Title level={3} style={{ margin: 0 }}>
-            <AuditOutlined /> {report.stocktake.name}
-          </Typography.Title>
-          <div style={{ marginTop: 4 }}>
-            <Tag color={isOpen ? 'blue' : 'default'}>{t(isOpen ? 'open_status' : 'closed_status')}</Tag>
-            {(report.stocktake.filters || []).map((f) => (
-              <Tag key={f.key}>
-                <bdi>{filterLabel(f, t)}</bdi>
-              </Tag>
+      {phone && (
+        <>
+          <PhoneHeader icon={<AuditOutlined />} title={report.stocktake.name} subtitle={<div className="phone-tags">{tags}</div>} />
+          <PhoneActions
+            actions={[
+              { key: 'excel', icon: <FileExcelOutlined />, label: t('export_excel'), onClick: exportExcel },
+              {
+                key: 'close',
+                icon: <StopOutlined />,
+                label: t('close_stocktake'),
+                danger: true,
+                hidden: !isOpen,
+                onClick: close,
+                confirm: { title: t('close_stocktake_confirm'), okText: t('close_stocktake') },
+              },
+              { key: 'delete', icon: <DeleteOutlined />, label: t('delete'), danger: true, onClick: remove, confirm: { title: t('delete_stocktake_confirm') } },
+            ]}
+          />
+          <div className="phone-stats">
+            {stats.map(([key, value, color]) => (
+              <div key={key} className="phone-stat">
+                <span className="phone-stat-label">{t(key)}</span>
+                <span className="phone-stat-value" style={color ? { color } : undefined}>
+                  {value}
+                </span>
+              </div>
             ))}
           </div>
-        </div>
-        <div className="page-actions">
-          <Button icon={<FileExcelOutlined />} onClick={() => downloadFile(`/stocktakes/${id}/export`, {}, `stocktake-${id}.xlsx`)}>
-            {t('export_excel')}
-          </Button>
-          {isOpen && (
-            <Popconfirm title={t('close_stocktake_confirm')} okText={t('close_stocktake')} cancelText={t('cancel')} onConfirm={close}>
-              <Button danger icon={<StopOutlined />}>
-                {t('close_stocktake')}
+        </>
+      )}
+      {!phone && (
+        <div className="page-head">
+          <div>
+            <Typography.Title level={3} style={{ margin: 0 }}>
+              <AuditOutlined /> {report.stocktake.name}
+            </Typography.Title>
+            <div style={{ marginTop: 4 }}>{tags}</div>
+          </div>
+          <div className="page-actions">
+            <Button icon={<FileExcelOutlined />} onClick={exportExcel}>
+              {t('export_excel')}
+            </Button>
+            {isOpen && (
+              <Popconfirm title={t('close_stocktake_confirm')} okText={t('close_stocktake')} cancelText={t('cancel')} onConfirm={close}>
+                <Button danger icon={<StopOutlined />}>
+                  {t('close_stocktake')}
+                </Button>
+              </Popconfirm>
+            )}
+            <Popconfirm title={t('delete_stocktake_confirm')} okText={t('delete')} okButtonProps={{ danger: true }} cancelText={t('cancel')} onConfirm={remove}>
+              <Button danger icon={<DeleteOutlined />}>
+                {t('delete')}
               </Button>
             </Popconfirm>
-          )}
-          <Popconfirm title={t('delete_stocktake_confirm')} okText={t('delete')} okButtonProps={{ danger: true }} cancelText={t('cancel')} onConfirm={remove}>
-            <Button danger icon={<DeleteOutlined />}>
-              {t('delete')}
-            </Button>
-          </Popconfirm>
+          </div>
         </div>
-      </div>
-
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        {[
-          ['expected', c.expected, null],
-          ['found', c.found, '#16a34a'],
-          ['missing', c.missing, '#dc2626'],
-          ['unexpected', c.unexpected, '#d97706'],
-          ['unknown', c.unknown, '#6b7280'],
-        ].map(([key, value, color]) => (
-          <Col xs={12} md={8} lg={4} key={key} flex="1">
-            <div className="stat-tile">
-              <span className="stat-label">{t(key)}</span>
-              <span className="stat-value" style={color ? { color } : undefined}>
-                {value}
-              </span>
-            </div>
-          </Col>
-        ))}
-      </Row>
+      )}
+      {!phone && (
+        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+          {stats.map(([key, value, color]) => (
+            <Col xs={12} md={8} lg={4} key={key} flex="1">
+              <div className="stat-tile">
+                <span className="stat-label">{t(key)}</span>
+                <span className="stat-value" style={color ? { color } : undefined}>
+                  {value}
+                </span>
+              </div>
+            </Col>
+          ))}
+        </Row>
+      )}
       <Progress percent={c.expected ? Math.round((c.found / c.expected) * 100) : 0} style={{ marginBottom: 16 }} />
 
       {isOpen ? (

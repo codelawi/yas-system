@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Alert, Button, Card, Input, Layout, Tag, Typography } from 'antd'
 import { AppstoreOutlined, CameraOutlined, GlobalOutlined } from '@ant-design/icons'
@@ -8,6 +8,7 @@ import { useLang } from '../i18n'
 import { beep } from '../download'
 import CodeScanner from '../components/CodeScanner'
 import { noOfflineCopy } from '../components/OfflineBanner'
+import { SCAN_AGAIN_EVENT } from '../components/PhoneShell'
 
 /**
  * The page a system label opens (/eq/<serial>, /box/<number>, /item/<id>), whatever address
@@ -124,6 +125,12 @@ export default function ScanLabelPage() {
     setError(null)
     setScanning(true)
   }
+
+  // Phones: tapping the scan tab again opens the camera again
+  useEffect(() => {
+    window.addEventListener(SCAN_AGAIN_EVENT, startScan)
+    return () => window.removeEventListener(SCAN_AGAIN_EVENT, startScan)
+  }, [])
 
   const where = (m) => {
     if (m.type === 'box') return m.match.by === 'number' ? t('box_number') : t('box_name')

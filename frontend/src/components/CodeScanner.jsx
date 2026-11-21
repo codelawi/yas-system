@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button, Slider } from 'antd'
 import { CameraOutlined, CloseOutlined, PlayCircleOutlined, ReloadOutlined, ThunderboltFilled, ThunderboltOutlined } from '@ant-design/icons'
 import { useLang } from '../i18n'
@@ -242,7 +243,8 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
 
   const digitalZoom = zoom && !zoom.hardware ? zoom.value : 1
 
-  return (
+  // On the page body, above everything (the phone layout's sliding pages would carry it along)
+  return createPortal(
     <div className="code-scanner" role="dialog" aria-label={title || t('scan_title')}>
       <div className="code-scanner-top">
         <span className="code-scanner-title">{title || t('scan_title')}</span>
@@ -297,6 +299,7 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

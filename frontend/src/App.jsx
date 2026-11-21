@@ -1,32 +1,14 @@
 import { useState } from 'react'
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { App as AntApp, Button, ConfigProvider, Drawer, Grid, Layout, Menu, Tag } from 'antd'
 import arEG from 'antd/locale/ar_EG'
 import enUS from 'antd/locale/en_US'
-import {
-  AppstoreOutlined,
-  AuditOutlined,
-  ClusterOutlined,
-  CameraOutlined,
-  CloudDownloadOutlined,
-  DashboardOutlined,
-  FileWordOutlined,
-  GlobalOutlined,
-  HistoryOutlined,
-  InboxOutlined,
-  LockOutlined,
-  MenuOutlined,
-  QrcodeOutlined,
-  ScanOutlined,
-  SettingOutlined,
-  TeamOutlined,
-  UnlockOutlined,
-  UserSwitchOutlined,
-  WifiOutlined,
-} from '@ant-design/icons'
+import { AppstoreOutlined, CameraOutlined, GlobalOutlined, LockOutlined, MenuOutlined, UnlockOutlined } from '@ant-design/icons'
 import { useLang } from './i18n'
 import { AuthProvider, useAuth } from './auth'
 import { SettingsProvider } from './settings'
+import { SECTIONS, usePhone } from './nav'
+import PhoneShell from './components/PhoneShell'
 import Dashboard from './pages/Dashboard'
 import EquipmentList from './pages/EquipmentList'
 import EquipmentDetail from './pages/EquipmentDetail'
@@ -56,6 +38,7 @@ const FONT = '"Inter Variable", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Aria
 
 export default function App() {
   const { lang, dir } = useLang()
+  const phone = usePhone()
   return (
     <ConfigProvider
       direction={dir}
@@ -65,21 +48,25 @@ export default function App() {
       <AntApp>
         <SettingsProvider>
           <AuthProvider>
-            <OfflineBanner />
+            {/* On phones it is under the app's top bar */}
+            {!phone && <OfflineBanner />}
             <Routes>
-              {/* Opened by phones scanning a QR code */}
-              <Route path="/eq/:serial" element={<ScanPage />} />
-              <Route path="/item/:id" element={<ScanPage />} />
-              <Route path="/box/:number" element={<ScanBoxPage />} />
               <Route path="/labels" element={<LabelsPrint />} />
               <Route path="/boxes/labels" element={<BoxLabelsPrint />} />
               <Route path="/boxes/:id/report" element={<BoxReport />} />
-              <Route path="/scan" element={<ScanLabelPage />} />
-              <Route path="/offline" element={<OfflinePage />} />
               <Route path="/print/equipment/:id" element={<PrintSheet />} />
               <Route path="/print/list" element={<PrintList />} />
               <Route path="/print/custody/:custodyId" element={<PrintCustodyForm />} />
-              <Route path="/*" element={<Shell />} />
+              {/* Phones: every page except the printed ones in the app layout (bottom tabs) */}
+              <Route element={phone ? <PhoneShell /> : <Outlet />}>
+                {/* Opened by phones scanning a QR code */}
+                <Route path="/eq/:serial" element={<ScanPage />} />
+                <Route path="/item/:id" element={<ScanPage />} />
+                <Route path="/box/:number" element={<ScanBoxPage />} />
+                <Route path="/scan" element={<ScanLabelPage />} />
+                <Route path="/offline" element={<OfflinePage />} />
+                <Route path="/*" element={<Shell />} />
+              </Route>
             </Routes>
           </AuthProvider>
         </SettingsProvider>
@@ -93,29 +80,45 @@ function Shell() {
   const { user, isAdmin, requirePin, logout } = useAuth()
   const location = useLocation()
   const screens = Grid.useBreakpoint()
+  const phone = usePhone()
   const [drawer, setDrawer] = useState(false)
   const mobile = !screens.lg
 
-  const items = [
-    { key: '/', icon: <DashboardOutlined />, label: <Link to="/">{t('dashboard')}</Link> },
-    { key: '/equipment', icon: <AppstoreOutlined />, label: <Link to="/equipment">{t('equipment')}</Link> },
-    { key: '/groups', icon: <ClusterOutlined />, label: <Link to="/groups">{t('groups')}</Link> },
-    { key: '/boxes', icon: <InboxOutlined />, label: <Link to="/boxes">{t('boxes')}</Link> },
-    { key: '/import', icon: <FileWordOutlined />, label: <Link to="/import">{t('import')}</Link> },
-    { key: '/custody', icon: <UserSwitchOutlined />, label: <Link to="/custody">{t('custodies')}</Link> },
-    { key: '/stocktakes', icon: <AuditOutlined />, label: <Link to="/stocktakes">{t('stocktake')}</Link> },
-    { key: '/scan-documents', icon: <ScanOutlined />, label: <Link to="/scan-documents">{t('scan_docs')}</Link> },
-    { key: '/qr', icon: <QrcodeOutlined />, label: <Link to="/qr">{t('qr_codes')}</Link> },
-    { key: '/history', icon: <HistoryOutlined />, label: <Link to="/history">{t('history')}</Link> },
-    { key: '/network', icon: <WifiOutlined />, label: <Link to="/network">{t('network')}</Link> },
-    { key: '/offline', icon: <CloudDownloadOutlined />, label: <Link to="/offline">{t('offline_title')}</Link> },
-    ...(isAdmin
-      ? [
-          { key: '/users', icon: <TeamOutlined />, label: <Link to="/users">{t('users')}</Link> },
-          { key: '/settings', icon: <SettingOutlined />, label: <Link to="/settings">{t('settings')}</Link> },
-        ]
-      : []),
-  ]
+  const routes = (
+    <Routes>
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/equipment" element={<EquipmentList />} />
+      <Route path="/equipment/:id" element={<EquipmentDetail />} />
+      <Route path="/groups" element={<GroupsPage />} />
+      <Route path="/groups/:id" element={<GroupDetail />} />
+      <Route path="/boxes" element={<BoxesPage />} />
+      <Route path="/boxes/:id" element={<BoxDetail />} />
+      <Route path="/import" element={<ImportPage />} />
+      <Route path="/qr" element={<QrPage />} />
+      <Route path="/history" element={<HistoryPage />} />
+      <Route path="/custody" element={<CustodyPage />} />
+      <Route path="/custody/forms" element={<CustodyFormsPage />} />
+      <Route path="/custody/forms/:id" element={<CustodyFormPage />} />
+      <Route path="/stocktakes" element={<StocktakesPage />} />
+      <Route path="/stocktakes/:id" element={<StocktakePage />} />
+      <Route path="/scan-documents" element={<ScanFoldersPage />} />
+      <Route path="/scan-documents/folders/:folderId" element={<ScanFolderPage />} />
+      <Route path="/scan-documents/:id" element={<ScanDocumentPage />} />
+      <Route path="/network" element={<NetworkPage />} />
+      <Route path="/users" element={isAdmin ? <UsersPage /> : <Navigate to="/" />} />
+      <Route path="/settings" element={isAdmin ? <SettingsPage /> : <Navigate to="/" />} />
+      <Route path="*" element={<Navigate to="/" />} />
+    </Routes>
+  )
+
+  // Phones: the page only, PhoneShell has the bars
+  if (phone) return <div className="app-content">{routes}</div>
+
+  const items = SECTIONS.filter((s) => !s.admin || isAdmin).map(({ to, label, icon: Icon }) => ({
+    key: to,
+    icon: <Icon />,
+    label: <Link to={to}>{t(label)}</Link>,
+  }))
   const selected = items.map((i) => i.key).filter((k) => (k === '/' ? location.pathname === '/' : location.pathname.startsWith(k)))
 
   const menu = <Menu mode="inline" theme="dark" selectedKeys={selected} items={items} onClick={() => setDrawer(false)} />
@@ -163,32 +166,7 @@ function Shell() {
             </Button>
           )}
         </Layout.Header>
-        <Layout.Content className="app-content">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/equipment" element={<EquipmentList />} />
-            <Route path="/equipment/:id" element={<EquipmentDetail />} />
-            <Route path="/groups" element={<GroupsPage />} />
-            <Route path="/groups/:id" element={<GroupDetail />} />
-            <Route path="/boxes" element={<BoxesPage />} />
-            <Route path="/boxes/:id" element={<BoxDetail />} />
-            <Route path="/import" element={<ImportPage />} />
-            <Route path="/qr" element={<QrPage />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/custody" element={<CustodyPage />} />
-            <Route path="/custody/forms" element={<CustodyFormsPage />} />
-            <Route path="/custody/forms/:id" element={<CustodyFormPage />} />
-            <Route path="/stocktakes" element={<StocktakesPage />} />
-            <Route path="/stocktakes/:id" element={<StocktakePage />} />
-            <Route path="/scan-documents" element={<ScanFoldersPage />} />
-            <Route path="/scan-documents/folders/:folderId" element={<ScanFolderPage />} />
-            <Route path="/scan-documents/:id" element={<ScanDocumentPage />} />
-            <Route path="/network" element={<NetworkPage />} />
-            <Route path="/users" element={isAdmin ? <UsersPage /> : <Navigate to="/" />} />
-            <Route path="/settings" element={isAdmin ? <SettingsPage /> : <Navigate to="/" />} />
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </Layout.Content>
+        <Layout.Content className="app-content">{routes}</Layout.Content>
       </Layout>
     </Layout>
   )

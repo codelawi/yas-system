@@ -22,6 +22,8 @@ import { useAuth } from '../auth'
 import { beep } from '../download'
 import CodeScanner from '../components/CodeScanner'
 import { cellText, downloadScanDocDocx } from '../scanDocExport'
+import { usePhone } from '../nav'
+import { Fab, PhoneActions, PhoneHeader, PhoneList, PhoneRow, PhoneSkeleton } from '../components/PhoneUI'
 
 /** How often open screens ask the server whether something changed (ms). */
 const POLL_MS = 1500
@@ -67,6 +69,8 @@ function useRevisionPoll(url, known, onChange) {
 
 const folderPath = (folderId) => `/scan-documents/folders/${folderId}`
 const formatTime = (value) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '—')
+/** Phones: the time only for today, otherwise the date */
+const shortTime = (value) => (!value ? '' : dayjs(value).isSame(dayjs(), 'day') ? dayjs(value).format('HH:mm') : dayjs(value).format('YYYY-MM-DD'))
 
 /** "Scan documents › <folder>": links back to the pages above this one. */
 function ScanBreadcrumb({ folder }) {
@@ -119,6 +123,7 @@ export function ScanFoldersPage() {
   const { requirePin } = useAuth()
   const { message } = App.useApp()
   const navigate = useNavigate()
+  const phone = usePhone()
   const [list, setList] = useState(null)
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
@@ -146,6 +151,53 @@ export function ScanFoldersPage() {
       message.error(t(errorKey(e) || 'error'))
     }
   }
+
+  const newFolder = (
+    <Modal open={open} title={t('new_scan_folder')} okText={t('confirm')} cancelText={t('cancel')} onOk={create} onCancel={() => setOpen(false)} forceRender>
+      <Form form={form} layout="vertical" onFinish={create}>
+        <Form.Item name="name" label={t('scan_folder_name')} rules={[{ required: true, whitespace: true }]}>
+          <Input autoFocus maxLength={191} />
+        </Form.Item>
+      </Form>
+    </Modal>
+  )
+
+  if (phone)
+    return (
+      <div className="page">
+        <PhoneHeader title={t('scan_docs')} subtitle={list ? t('folders_n', { n: list.length }) : '\u00a0'} />
+        {!list ? (
+          <PhoneSkeleton rows={3} />
+        ) : list.length ? (
+          <PhoneList>
+            {list.map((f) => (
+              <PhoneRow
+                key={f.id}
+                to={folderPath(f.id)}
+                icon={<FolderOutlined />}
+                tone="amber"
+                title={f.name}
+                subtitle={
+                  <>
+                    <span>{t('docs_n', { n: f.documents_count })}</span>
+                    <span>{t('rows_n', { n: f.rows_count })}</span>
+                  </>
+                }
+                end={<span className="phone-row-time">{shortTime(f.last_change_at)}</span>}
+              />
+            ))}
+          </PhoneList>
+        ) : (
+          <div className="phone-empty">
+            <ScanOutlined className="phone-empty-icon" />
+            <b>{t('scan_folders_empty')}</b>
+            <span>{t('scan_docs_intro')}</span>
+          </div>
+        )}
+        <Fab icon={<FolderAddOutlined />} label={t('new_scan_folder')} onClick={startNew} />
+        {newFolder}
+      </div>
+    )
 
   return (
     <div className="page">
@@ -182,13 +234,7 @@ export function ScanFoldersPage() {
           { title: t('by'), dataIndex: ['created_by', 'name'], render: (v) => v || '—' },
         ]}
       />
-      <Modal open={open} title={t('new_scan_folder')} okText={t('confirm')} cancelText={t('cancel')} onOk={create} onCancel={() => setOpen(false)} forceRender>
-        <Form form={form} layout="vertical" onFinish={create}>
-          <Form.Item name="name" label={t('scan_folder_name')} rules={[{ required: true, whitespace: true }]}>
-            <Input autoFocus maxLength={191} />
-          </Form.Item>
-        </Form>
-      </Modal>
+      {newFolder}
     </div>
   )
 }
@@ -205,6 +251,7 @@ export function ScanFolderPage() {
   const [missing, setMissing] = useState(false)
   const [open, setOpen] = useState(false)
   const [form] = Form.useForm()
+  const phone = usePhone()
 
   const revision = useRef(null)
   const load = useCallback(
@@ -269,6 +316,73 @@ export function ScanFolderPage() {
     }
   }
 
+  const newDocument = (
+    <Modal open={open} title={t('new_scan_doc')} okText={t('confirm')} cancelText={t('cancel')} onOk={create} onCancel={() => setOpen(false)} forceRender>
+      <Form form={form} layout="vertical" onFinish={create}>
+        <Form.Item name="title" label={t('scan_doc_title')} rules={[{ required: true, whitespace: true }]}>
+          <Input autoFocus maxLength={191} />
+        </Form.Item>
+        <Form.Item name="duplicate_scope" label={t('scan_dup_scope')} initialValue="document">
+          <DuplicateScopeChoice block folderName={folder.name} />
+        </Form.Item>
+      </Form>
+    </Modal>
+  )
+
+  if (phone)
+    return (
+      <div className="page">
+        <PhoneHeader
+          kicker={
+            <span>
+              <FolderOutlined /> {t('scan_docs')}
+            </span>
+          }
+          title={
+            <Typography.Text className="phone-editable" editable={canEdit ? { onChange: rename, triggerType: ['icon', 'text'], maxLength: 191 } : false}>
+              {folder.name}
+            </Typography.Text>
+          }
+          subtitle={t('docs_n', { n: documents.length })}
+          more={[
+            canEdit
+              ? {
+                  key: 'delete',
+                  icon: <DeleteOutlined />,
+                  label: t('delete'),
+                  danger: true,
+                  onClick: removeFolder,
+                  confirm: { title: t('delete_scan_folder_confirm', { n: documents.length }) },
+                }
+              : { key: 'unlock', icon: <UnlockOutlined />, label: t('unlock_to_edit'), onClick: requirePin },
+          ]}
+        />
+        {documents.length ? (
+          <PhoneList>
+            {documents.map((d) => (
+              <PhoneRow
+                key={d.id}
+                to={`/scan-documents/${d.id}`}
+                icon={<FileTextOutlined />}
+                title={d.title}
+                subtitle={
+                  <>
+                    <span>{t('rows_n', { n: d.rows_count })}</span>
+                    <span>{t(d.duplicate_scope === 'folder' ? 'scan_dup_folder' : 'scan_dup_document')}</span>
+                  </>
+                }
+                end={<span className="phone-row-time">{shortTime(d.updated_at)}</span>}
+              />
+            ))}
+          </PhoneList>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('scan_folder_empty')} />
+        )}
+        <Fab icon={<PlusOutlined />} label={t('new_scan_doc')} onClick={startNew} />
+        {newDocument}
+      </div>
+    )
+
   return (
     <div className="page">
       <ScanBreadcrumb />
@@ -320,16 +434,7 @@ export function ScanFolderPage() {
           { title: t('by'), dataIndex: ['created_by', 'name'], render: (v) => v || '—' },
         ]}
       />
-      <Modal open={open} title={t('new_scan_doc')} okText={t('confirm')} cancelText={t('cancel')} onOk={create} onCancel={() => setOpen(false)} forceRender>
-        <Form form={form} layout="vertical" onFinish={create}>
-          <Form.Item name="title" label={t('scan_doc_title')} rules={[{ required: true, whitespace: true }]}>
-            <Input autoFocus maxLength={191} />
-          </Form.Item>
-          <Form.Item name="duplicate_scope" label={t('scan_dup_scope')} initialValue="document">
-            <DuplicateScopeChoice block folderName={folder.name} />
-          </Form.Item>
-        </Form>
-      </Modal>
+      {newDocument}
     </div>
   )
 }
@@ -386,6 +491,7 @@ export function ScanDocumentPage() {
   const [scanning, setScanning] = useState(false)
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const phone = usePhone()
 
   const [fresh, setFresh] = useState([]) // ids of rows just added from another device
   const revision = useRef(null)
@@ -579,41 +685,87 @@ export function ScanDocumentPage() {
       : []),
   ]
 
+  // Phones: scanning is the floating button, the rest are tiles
+  const phoneHead = phone && (
+    <>
+      <PhoneHeader
+        kicker={
+          doc.folder ? (
+            <Link to={folderPath(doc.folder.id)}>
+              <FolderOutlined /> {doc.folder.name}
+            </Link>
+          ) : (
+            t('scan_docs')
+          )
+        }
+        title={
+          <Typography.Text className="phone-editable" editable={canEdit ? { onChange: saveTitle, triggerType: ['icon', 'text'] } : false}>
+            {doc.title}
+          </Typography.Text>
+        }
+        subtitle={t('rows_n', { n: rows.length })}
+      />
+      <PhoneActions
+        actions={[
+          { key: 'word', icon: <FileWordOutlined />, label: t('download_word'), onClick: exportWord, loading: exporting, disabled: !rows.length },
+          { key: 'row', icon: <InsertRowBelowOutlined />, label: t('add_row'), onClick: addRow, hidden: !canEdit },
+          { key: 'columns', icon: <TableOutlined />, label: t('edit_columns'), onClick: () => setColumnsOpen(true), hidden: !canEdit },
+          {
+            key: 'delete',
+            icon: <DeleteOutlined />,
+            label: t('delete'),
+            danger: true,
+            onClick: removeDoc,
+            hidden: !canEdit,
+            confirm: { title: t('delete_scan_doc_confirm') },
+          },
+          { key: 'unlock', icon: <UnlockOutlined />, label: t('unlock_to_edit'), onClick: requirePin, hidden: canEdit },
+        ]}
+      />
+    </>
+  )
+
   return (
     <div className="page">
-      <ScanBreadcrumb folder={doc.folder} />
-      <div className="page-head">
-        <Typography.Title level={3} style={{ margin: 0 }} editable={canEdit ? { onChange: saveTitle, triggerType: ['icon'] } : false}>
-          {doc.title}
-        </Typography.Title>
-        <div className="page-actions">
-          <Button type="primary" size="large" icon={<ScanOutlined />} onClick={startScan}>
-            {t('scan_start')}
-          </Button>
-          <Button icon={<FileWordOutlined />} loading={exporting} onClick={exportWord} disabled={!rows.length}>
-            {t('download_word')}
-          </Button>
-          {canEdit ? (
-            <>
-              <Button icon={<InsertRowBelowOutlined />} onClick={addRow}>
-                {t('add_row')}
+      {phone ? (
+        phoneHead
+      ) : (
+        <>
+          <ScanBreadcrumb folder={doc.folder} />
+          <div className="page-head">
+            <Typography.Title level={3} style={{ margin: 0 }} editable={canEdit ? { onChange: saveTitle, triggerType: ['icon'] } : false}>
+              {doc.title}
+            </Typography.Title>
+            <div className="page-actions">
+              <Button type="primary" size="large" icon={<ScanOutlined />} onClick={startScan}>
+                {t('scan_start')}
               </Button>
-              <Button icon={<TableOutlined />} onClick={() => setColumnsOpen(true)}>
-                {t('edit_columns')}
+              <Button icon={<FileWordOutlined />} loading={exporting} onClick={exportWord} disabled={!rows.length}>
+                {t('download_word')}
               </Button>
-              <Popconfirm title={t('delete_scan_doc_confirm')} okText={t('delete')} okButtonProps={{ danger: true }} cancelText={t('cancel')} onConfirm={removeDoc}>
-                <Button danger icon={<DeleteOutlined />}>
-                  {t('delete')}
+              {canEdit ? (
+                <>
+                  <Button icon={<InsertRowBelowOutlined />} onClick={addRow}>
+                    {t('add_row')}
+                  </Button>
+                  <Button icon={<TableOutlined />} onClick={() => setColumnsOpen(true)}>
+                    {t('edit_columns')}
+                  </Button>
+                  <Popconfirm title={t('delete_scan_doc_confirm')} okText={t('delete')} okButtonProps={{ danger: true }} cancelText={t('cancel')} onConfirm={removeDoc}>
+                    <Button danger icon={<DeleteOutlined />}>
+                      {t('delete')}
+                    </Button>
+                  </Popconfirm>
+                </>
+              ) : (
+                <Button icon={<UnlockOutlined />} onClick={requirePin}>
+                  {t('unlock_to_edit')}
                 </Button>
-              </Popconfirm>
-            </>
-          ) : (
-            <Button icon={<UnlockOutlined />} onClick={requirePin}>
-              {t('unlock_to_edit')}
-            </Button>
-          )}
-        </div>
-      </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="scan-doc-options">
         <Typography.Text strong>{t('scan_dup_scope')}:</Typography.Text>
@@ -633,6 +785,7 @@ export function ScanDocumentPage() {
         locale={{ emptyText: <Empty description={t('scan_doc_empty')} /> }}
       />
 
+      {phone && <Fab icon={<ScanOutlined />} label={t('scan_start')} onClick={startScan} />}
       <ColumnsModal open={columnsOpen} columns={doc.columns} onCancel={() => setColumnsOpen(false)} onSave={saveColumns} />
       <CodeScanner open={scanning} onClose={closeScanner} onCode={onCode} title={`${t('scan_doc_scanner_title', { title: doc.title })} · ${t('scan_dup_scope')}: ${scopeLabel}`} />
     </div>
