@@ -8,9 +8,12 @@ import { useAuth } from '../auth'
 import EquipmentView from '../components/EquipmentView'
 import { OfflineNoCopy, noOfflineCopy } from '../components/OfflineBanner'
 
-/** Page opened by a phone after scanning the QR code on an equipment. */
+/**
+ * Page opened by a phone after scanning the QR code on an equipment (/eq/<serial>), or an
+ * equipment found on the scan page by id (/item/<id>: accessories, whose serial may repeat or be empty).
+ */
 export default function ScanPage() {
-  const { serial } = useParams()
+  const { serial, id } = useParams()
   const { t, toggle } = useLang()
   const { user, logout } = useAuth()
   const [equipment, setEquipment] = useState(null)
@@ -19,13 +22,13 @@ export default function ScanPage() {
   const load = useCallback(
     () =>
       api
-        .get(`/equipment/serial/${encodeURIComponent(serial)}`)
+        .get(id ? `/equipment/${id}` : `/equipment/serial/${encodeURIComponent(serial)}`)
         .then(({ data }) => {
           setEquipment(data)
           setState('ok')
         })
         .catch((e) => setState(noOfflineCopy(e) ? 'no_copy' : 'missing')),
-    [serial],
+    [serial, id],
   )
 
   useEffect(() => {
@@ -56,7 +59,7 @@ export default function ScanPage() {
           <Result
             status="404"
             title={t('not_found')}
-            subTitle={serial}
+            subTitle={serial ?? `#${id}`}
             extra={
               <Link to="/">
                 <Button>{t('open_dashboard')}</Button>

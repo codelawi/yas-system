@@ -156,7 +156,7 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
             const quantity = a.fields.find((f) => f.key === 'عدد')?.value
             const details = a.fields.filter((f) => f.key !== 'عدد').slice(0, 2)
             return (
-              <Link key={a.id} to={`/equipment/${a.id}`} className="accessory-item">
+              <Link key={a.id} to={mobile ? `/item/${a.id}` : `/equipment/${a.id}`} className="accessory-item">
                 <span className="accessory-name">{a.name || t('accessory')}</span>
                 {quantity && <span className="accessory-quantity">{`${t('accessory_quantity')} ${quantity}`}</span>}
                 <span className="serial">{a.serial_number || '—'}</span>

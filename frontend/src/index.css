@@ -391,6 +391,12 @@ h5,
   font-size: 12px;
 }
 
+/* Scan page results: what kind of item (accessory, box) */
+.scan-match-kind {
+  grid-column: 2;
+  margin: 0;
+}
+
 .field-filter {
   display: flex;
   flex-wrap: wrap;
@@ -2131,7 +2137,8 @@ h5,
   font-weight: 600;
   font-size: 16px;
   text-align: center;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  white-space: pre-line; /* a code on its own line */
 }
 .code-scanner-feedback.is-success {
   background: #16a34a;

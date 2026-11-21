@@ -53,8 +53,11 @@ Laravel 13 (API) + React (Vite, Ant Design) + MySQL. It runs fully offline on th
 - **A QR address that never changes after printing**:
   - The Network page has a printable **setup guide for IT**, filled in with this PC's name, IP, MAC and port: DHCP reservation, a DNS name (recommended, e.g. `http://repo`), the firewall command, and a phone test.
   - Every print job counts its labels per QR address. Once labels exist, changing the address shows how many labels would break and needs the new address typed to confirm.
-  - **مسح ملصق (Scan label)** reads any label from a photo and opens its equipment, even if the label holds an old address.
-- **Work offline (phones)**: on the **Work offline** page a phone downloads all equipment, accessories, boxes, maintenance dates and problem reports, with photos if you tick it. Later, with no connection to the system, scanning a label with the phone camera still opens the equipment or box page, with a yellow **Offline** bar and the date of the data.
+  - **مسح ملصق (Scan label)**: a live camera on https, a photo on plain http. It reads QR and Data Matrix codes:
+    - a system QR label opens its equipment or box page, even if the label holds an old address;
+    - any other code, such as the maker's Data Matrix on the equipment, is looked up in serial numbers, every field, and box numbers and names (equipment, accessories and boxes). One match opens at once, several are listed. Exact matches first; only if there are none, values that contain the code;
+    - the code or serial number can also be typed.
+- **Work offline (phones)**: on the **Work offline** page a phone downloads all equipment, accessories, boxes, maintenance dates and problem reports, with photos if you tick it. Later, with no connection to the system, scanning a label with the phone camera still opens the equipment or box page, with a yellow **Offline** bar and the date of the data. The **Scan label** page looks Data Matrix codes up in the data saved on the phone.
   - View only: changes and problem reports need the connection. History and custody holders are never stored on the phone.
   - Phones allow this only on **https**: run `start/windows/https-setup.ps1` on Windows or `start/macOS/START.command` on a Mac, and install its certificate once on each phone (the page shows how). The QR address becomes `https://repo.local`, and only labels printed with it open without a connection.
   - Download again before each trip. On iPhone, Safari may clear the data if the system is not opened for about a week.

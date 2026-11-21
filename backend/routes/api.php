@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\EquipmentPhotoController;
 use App\Http\Controllers\Api\FieldController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\IssueController;
+use App\Http\Controllers\Api\LookupController;
 use App\Http\Controllers\Api\MaintenanceController;
 use App\Http\Controllers\Api\NetworkController;
 use App\Http\Controllers\Api\OfflineController;
@@ -48,6 +49,9 @@ Route::get('/boxes', [BoxController::class, 'index']);
 Route::get('/boxes/labels', [BoxController::class, 'labels']);
 Route::get('/boxes/number/{number}', [BoxController::class, 'byNumber'])->where('number', '.*');
 Route::get('/boxes/{box}', [BoxController::class, 'show'])->whereNumber('box');
+
+// Scan page: any other code (e.g. a maker's Data Matrix) finds the equipment or box that holds it
+Route::get('/lookup', [LookupController::class, 'show']);
 
 // Maintenance dates and damage reports are visible to everyone; anyone can report a problem
 Route::get('/equipment/{equipment}/maintenance', [MaintenanceController::class, 'index'])->whereNumber('equipment');
