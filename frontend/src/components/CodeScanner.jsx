@@ -166,11 +166,13 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
           const w = el.videoWidth
           const h = el.videoHeight
           const digital = zoomRef.current && !zoomRef.current.hardware ? zoomRef.current.value : 1
-          // Mostly the aiming square at full detail (small engraved codes); sometimes the whole picture (big codes)
+          // Mostly the aiming square at full detail (small engraved codes); sometimes the whole picture (big codes).
+          // Codes almost the colour of their surface are boosted, half size and full size on alternate frames.
+          const faint = frame % 2 ? 'full' : 'half'
           const attempt =
             frame % 3 === 2 && digital === 1
-              ? { max: 1280 }
-              : { crop: centerSquare(w, h, (frame % 3 === 1 ? AIM : AIM * 0.7) / digital), max: 1200 }
+              ? { max: 1280, faint }
+              : { crop: centerSquare(w, h, (frame % 3 === 1 ? AIM : AIM * 0.7) / digital), max: 1200, faint }
           frame += 1
           try {
             const text = await decodeRegion(el, w, h, canvas.current, attempt)

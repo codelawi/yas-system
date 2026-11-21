@@ -3,6 +3,7 @@
 // no internet connection (by default the library would download it from a CDN).
 import { prepareZXingModule, readBarcodes } from 'zxing-wasm/reader'
 import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url'
+import { boostFaint } from './faintCodes'
 
 prepareZXingModule({
   overrides: {
@@ -30,8 +31,11 @@ export async function decodeImageData(imageData) {
 /**
  * Draws part of a picture (video frame, photo) into the canvas and reads it.
  * `crop` is the part to read, as fractions of the picture; `max` limits the longest side in pixels.
+ * `faint`: when nothing is found, read it again with faint marks made stronger (codes engraved in a
+ * surface of almost the same colour): 'half' (quick, medium and large codes), 'full' (small codes),
+ * 'both', or false.
  */
-export async function decodeRegion(source, width, height, canvas, { crop = [0, 0, 1, 1], max = 1600 } = {}) {
+export async function decodeRegion(source, width, height, canvas, { crop = [0, 0, 1, 1], max = 1600, faint = 'both' } = {}) {
   const [cx, cy, cw, ch] = crop
   const sx = Math.round(cx * width)
   const sy = Math.round(cy * height)
@@ -43,7 +47,14 @@ export async function decodeRegion(source, width, height, canvas, { crop = [0, 0
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
-  return decodeImageData(ctx.getImageData(0, 0, canvas.width, canvas.height))
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const text = await decodeImageData(image)
+  if (text || !faint) return text
+  if (faint !== 'full') {
+    const boosted = await decodeImageData(boostFaint(image))
+    if (boosted) return boosted
+  }
+  return faint === 'half' ? null : decodeImageData(boostFaint(image, { halfSize: false }))
 }
 
 /** The square in the middle of a picture, as fractions (the scanner's aiming frame). */
@@ -62,7 +73,7 @@ export async function decodeFile(file) {
       { max: 1600 },
       { crop: centerSquare(width, height, 0.5), max: 2400 },
       { crop: centerSquare(width, height, 0.25), max: 2400 },
-      { max: 3000 },
+      { max: 3000, faint: 'half' },
     ]
     for (const attempt of attempts) {
       const text = await decodeRegion(bitmap, width, height, canvas, attempt)
