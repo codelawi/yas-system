@@ -10,13 +10,16 @@
  * and ASSETS. Laravel serves it at /sw.js so it can answer every page.
  */
 
-const VERSION = "6818a525112d"
-const ASSETS = ["/app/assets/dist-CjWoxUJ5.js","/app/assets/es-BkxMLVLq.js","/app/assets/html2canvas-Jzwfyaaw.js","/app/assets/ibm-plex-sans-arabic-arabic-400-normal-CyU-ddYS.woff2","/app/assets/ibm-plex-sans-arabic-arabic-500-normal-C4MQITzh.woff2","/app/assets/ibm-plex-sans-arabic-arabic-600-normal-0pRdybE_.woff2","/app/assets/ibm-plex-sans-arabic-arabic-700-normal-DrtBj6UE.woff2","/app/assets/index-EOJfVjyZ.css","/app/assets/index-O0hboGFo.js","/app/assets/index.es-pzjbo5q9.js","/app/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2","/app/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2","/app/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2","/app/assets/inter-greek-wght-normal-CkhJZR-_.woff2","/app/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2","/app/assets/inter-latin-wght-normal-Dx4kXJAl.woff2","/app/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2","/app/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2","/app/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2","/app/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2","/app/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2","/app/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2","/app/assets/jspdf.es.min-BIbueXYY.js","/app/assets/pdf-D9w_HAjp.js","/app/assets/pdf.worker.min-BP1dpyXt.js","/app/assets/pdf.worker.min-C5HlG1St.js","/app/assets/purify.es-Dqk5qvad.js","/app/assets/zxing_reader-EOacYbLr.wasm","/app/favicon.svg"]
+const VERSION = "82c73f5418a4"
+const ASSETS = ["/app/assets/dist-CjWoxUJ5.js","/app/assets/es-BkxMLVLq.js","/app/assets/html2canvas-DHu-7mWb.js","/app/assets/ibm-plex-sans-arabic-arabic-400-normal-CyU-ddYS.woff2","/app/assets/ibm-plex-sans-arabic-arabic-500-normal-C4MQITzh.woff2","/app/assets/ibm-plex-sans-arabic-arabic-600-normal-0pRdybE_.woff2","/app/assets/ibm-plex-sans-arabic-arabic-700-normal-DrtBj6UE.woff2","/app/assets/index-BWQX0xo1.css","/app/assets/index-BeeHuziZ.js","/app/assets/index.es-iE9DLkFz.js","/app/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2","/app/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2","/app/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2","/app/assets/inter-greek-wght-normal-CkhJZR-_.woff2","/app/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2","/app/assets/inter-latin-wght-normal-Dx4kXJAl.woff2","/app/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2","/app/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2","/app/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2","/app/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2","/app/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2","/app/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2","/app/assets/jspdf.es.min-CONgAWyT.js","/app/assets/ocr.worker-CU1LH8SP.js","/app/assets/pdf-D9w_HAjp.js","/app/assets/pdf.worker.min-ClT6UGn4.js","/app/assets/pdf.worker.min-DxvEGz2v.js","/app/assets/purify.es-Dqk5qvad.js","/app/assets/zxing_reader-EOacYbLr.wasm","/app/favicon.svg"]
+/** The text reader's files (about 30 MB): kept once used or saved for offline, not with every app update. */
+const OCR_ASSETS = ["/app/assets/ch_ppocr_mobile_v2.0_cls_infer-CZsrcDcs.onnx","/app/assets/ort-wasm-simd-threaded-qh98TCA_.wasm","/app/assets/ppocr_det-BNVJyGmD.onnx","/app/assets/rec_en_PP-OCRv3_infer-ihNOzo5x.onnx"]
 
 // Keep these names in sync with offline.js
 const SHELL = `repo-shell-${VERSION}`
 const DATA = 'repo-offline-data'
 const PHOTOS = 'repo-offline-photos'
+const OCR = 'repo-ocr' // also in ocr/files.js
 const SNAPSHOT_KEY = '/__offline__/snapshot.json'
 const INDEX = '/app/index.html'
 
@@ -46,6 +49,7 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) => Promise.all(keys.filter((key) => key.startsWith('repo-shell-') && key !== SHELL).map((key) => caches.delete(key))))
+      .then(dropOldOcrFiles)
       .then(() => self.clients.claim()),
   )
 })
@@ -112,8 +116,27 @@ async function page(request) {
 
 /** App files have a hash in their name, so the saved one is always right. */
 async function asset(request) {
+  if (OCR_ASSETS.includes(new URL(request.url).pathname)) return ocrAsset(request)
   const cache = await caches.open(SHELL)
   return (await cache.match(request, MATCH)) || fetch(request)
+}
+
+/** The text reader's files: from the phone once saved, otherwise downloaded and saved. */
+async function ocrAsset(request) {
+  const cache = await caches.open(OCR)
+  const saved = await cache.match(request, MATCH)
+  if (saved) return saved
+  const response = await fetch(request)
+  if (response.ok) await cache.put(request, response.clone()).catch(() => {})
+  return response
+}
+
+/** Files of an older version of the text reader. */
+async function dropOldOcrFiles() {
+  const cache = await caches.open(OCR)
+  for (const request of await cache.keys()) {
+    if (!OCR_ASSETS.includes(new URL(request.url).pathname)) await cache.delete(request)
+  }
 }
 
 /** A photo's URL changes with every new photo, so a saved one never goes stale. */
@@ -163,6 +186,7 @@ const decode = (part) => {
 /** The GET requests the scan pages make, answered from the copy (undefined = not found). */
 const ROUTES = [
   [/^\/api\/settings$/, (copy) => copy.data.settings],
+  [/^\/api\/equipment\/serial-list$/, (copy) => ({ serials: Object.keys(copy.data.serials) })],
   [/^\/api\/equipment\/serial\/(.+)$/, (copy, serial) => copy.equipmentBySerial(decode(serial))],
   [/^\/api\/equipment\/(\d+)$/, (copy, id) => copy.equipment.get(Number(id))],
   [/^\/api\/equipment\/(\d+)\/maintenance$/, (copy, id) => (copy.equipment.has(Number(id)) ? copy.data.maintenance[id] || { schedules: [], records: [] } : undefined)],

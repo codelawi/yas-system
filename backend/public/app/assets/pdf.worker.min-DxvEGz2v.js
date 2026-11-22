@@ -1,0 +1,1 @@
+function e(e){return new Worker(`/app/assets/pdf.worker.min-ClT6UGn4.js`,{type:`module`,name:e?.name})}export{e as default};

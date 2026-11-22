@@ -137,6 +137,25 @@ class EquipmentController extends Controller
         return $this->detail($equipment);
     }
 
+    /**
+     * Every serial number (main equipment and accessories), for the camera's text mode to tell a
+     * number the system has, and to suggest it when a character was misread.
+     *
+     * @return array{serials: list<string>}
+     */
+    public function serialList(): array
+    {
+        $serials = Equipment::query()
+            ->whereNotNull('serial_number')
+            ->where('serial_number', '!=', '')
+            ->distinct()
+            ->orderBy('serial_number')
+            ->pluck('serial_number')
+            ->all();
+
+        return ['serials' => $serials];
+    }
+
     public function bySerial(string $serial)
     {
         $equipment = Equipment::forSerial($serial)->firstOrFail();

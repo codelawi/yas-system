@@ -1,9 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Button, Slider } from 'antd'
-import { CameraOutlined, CloseOutlined, PlayCircleOutlined, ReloadOutlined, ThunderboltFilled, ThunderboltOutlined } from '@ant-design/icons'
+import { Button, Progress, Segmented, Slider } from 'antd'
+import {
+  ArrowLeftOutlined,
+  CameraOutlined,
+  CloseOutlined,
+  FontSizeOutlined,
+  PlayCircleOutlined,
+  QrcodeOutlined,
+  ReloadOutlined,
+  ThunderboltFilled,
+  ThunderboltOutlined,
+} from '@ant-design/icons'
 import { useLang } from '../i18n'
 import { canUseLiveCamera, centerSquare, decodeFile, decodeRegion } from '../barcode'
+import { cropLine } from '../ocr/capture'
+import { cleanLine, matchSerial } from '../ocr/text'
+import useTextReader from './useTextReader'
+import TextPickModal from './TextPickModal'
 
 /** Pause after a code is read, so the same code is not sent again at once. */
 const PAUSE_MS = 1200
@@ -16,14 +30,28 @@ const CONSTRAINTS = {
 }
 /** Size of the aiming square, as a part of the shorter side of the picture. */
 const AIM = 0.6
+/** The last mode used (codes or text) is kept on the phone. */
+const MODE_KEY = 'scanner-mode'
+
+function savedMode() {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'text' ? 'text' : 'code'
+  } catch {
+    return 'code'
+  }
+}
 
 /**
  * Full-screen camera that reads QR and Data Matrix codes again and again.
- * `onCode(text)` is called for each new code and may return a promise of { type, text } to show
- * (type: success | warning | error). On plain http the live camera is not allowed, so a
- * "take a photo" button opens the phone's own camera instead.
+ * `onCode(text, { source, photo })` is called for each new code and may return a promise of
+ * { type, text } to show (type: success | warning | error). On plain http the live camera is not
+ * allowed, so a "take a photo" button opens the phone's own camera instead.
+ *
+ * Text mode (the bar at the bottom) reads printed or engraved text instead, for equipment with
+ * no code: the lines found are outlined on the picture, a tap freezes it, and a tap on a line
+ * asks to confirm it. Then onCode gets the text with source 'text' and a photo of the line.
  */
-export default function CodeScanner({ open, onClose, onCode, title }) {
+export default function CodeScanner({ open, onClose, onCode, title, textMode = true }) {
   const { t } = useLang()
   const video = useRef(null)
   const canvas = useRef(null)
@@ -39,21 +67,52 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
   const [reading, setReading] = useState(false)
   const [status, setStatus] = useState('starting') // starting | tap | running
   const [attempt, setAttempt] = useState(0) // bumped by "try again" to restart the camera
+  const [mode, setModeState] = useState(() => (textMode ? savedMode() : 'code')) // code | text
+  const [pick, setPick] = useState(null) // the line being confirmed: { id, text, photo, photoUrl }
+  const [videoSize, setVideoSize] = useState(null) // { w, h } of the camera picture
+  const liveOverlay = useRef(null)
   // Read inside the camera loop without restarting the camera
   const zoomRef = useRef(zoom)
   zoomRef.current = zoom
   const onCodeRef = useRef(onCode)
   onCodeRef.current = onCode
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+
+  const setMode = (value) => {
+    setModeState(value)
+    setFeedback(null)
+    try {
+      localStorage.setItem(MODE_KEY, value)
+    } catch {
+      /* private browsing: not remembered */
+    }
+  }
+
+  const digitalZoom = zoom && !zoom.hardware ? zoom.value : 1
+
+  const onPick = useCallback(async (line, frozenCanvas) => {
+    const photo = await cropLine(frozenCanvas, line.box).catch(() => null)
+    setPick({ id: Date.now(), text: cleanLine(line.text), photo, photoUrl: photo ? URL.createObjectURL(photo) : null })
+  }, [])
+
+  const reader = useTextReader({
+    active: open && mode === 'text',
+    video,
+    running: live && !error && status === 'running',
+    zoom: digitalZoom,
+    onPick,
+  })
 
   const handleText = useCallback(
-    async (text) => {
+    async (text, extra = { source: 'code' }) => {
       const now = Date.now()
       if (text === last.current.text && now - last.current.at < SAME_CODE_MS) return
       last.current = { text, at: now }
       busy.current = true
       try {
         navigator.vibrate?.(60)
-        const result = await onCodeRef.current(text)
+        const result = await onCodeRef.current(text, extra)
         if (result) {
           setFeedback(result)
           if (result.type !== 'success') navigator.vibrate?.([80, 60, 80])
@@ -134,6 +193,7 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
         return
       }
       setStatus('running')
+      setVideoSize({ w: el.videoWidth, h: el.videoHeight })
 
       const [videoTrack] = stream.getVideoTracks()
       track.current = videoTrack
@@ -163,7 +223,7 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
     const loop = async () => {
       while (!stopped) {
         const el = video.current
-        if (!busy.current && el && el.readyState >= 2 && el.videoWidth) {
+        if (!busy.current && modeRef.current === 'code' && el && el.readyState >= 2 && el.videoWidth) {
           const w = el.videoWidth
           const h = el.videoHeight
           const digital = zoomRef.current && !zoomRef.current.hardware ? zoomRef.current.value : 1
@@ -221,6 +281,11 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    if (mode === 'text') {
+      setFeedback(null)
+      reader.readPhoto(file).catch(() => setFeedback({ type: 'error', text: t('scan_failed') }))
+      return
+    }
     setReading(true)
     setFeedback(null)
     try {
@@ -239,9 +304,42 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
     }
   }
 
+  const closePick = () => {
+    if (pick?.photoUrl) URL.revokeObjectURL(pick.photoUrl)
+    setPick(null)
+  }
+
+  /** The confirmed line: used, then back to the live camera for the next one. */
+  const addPick = async (text) => {
+    const photo = pick?.photo
+    closePick()
+    reader.unfreeze()
+    last.current = { text: '', at: 0 } // always a deliberate choice
+    await handleText(text, { source: 'text', photo })
+  }
+
+  /** A tap on the live picture in text mode freezes it (the tapped line is picked when it can be). */
+  const onViewTap = (e) => {
+    if (mode !== 'text' || reader.frozen || reader.engine.status !== 'ready' || status !== 'running') return
+    let point = null
+    const svg = liveOverlay.current
+    const matrix = svg?.getScreenCTM?.()
+    if (matrix) {
+      const p = svg.createSVGPoint()
+      p.x = e.clientX
+      p.y = e.clientY
+      const inVideo = p.matrixTransform(matrix.inverse())
+      point = [inVideo.x, inVideo.y]
+    }
+    reader.freeze(point)
+  }
+
+  const lineClass = (line) => (matchSerial(cleanLine(line.text), reader.index) ? 'ocr-line is-known' : 'ocr-line')
+
   if (!open) return null
 
-  const digitalZoom = zoom && !zoom.hardware ? zoom.value : 1
+  const textOn = mode === 'text'
+  const frozen = reader.frozen
 
   // On the page body, above everything (the phone layout's sliding pages would carry it along)
   return createPortal(
@@ -252,10 +350,21 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
       </div>
 
       {live && !error ? (
-        <div className="code-scanner-view">
+        <div className={`code-scanner-view${textOn ? ' is-text' : ''}`} onClick={onViewTap}>
           <video ref={video} playsInline muted autoPlay style={{ transform: `scale(${digitalZoom})` }} />
-          {status === 'running' && <div className="code-scanner-aim" />}
-          {status === 'running' && <div className="code-scanner-hint">{t('scanner_hint')}</div>}
+          {textOn && status === 'running' && videoSize && (
+            <svg
+              ref={liveOverlay}
+              className="ocr-overlay"
+              viewBox={`0 0 ${videoSize.w} ${videoSize.h}`}
+              preserveAspectRatio="xMidYMid slice"
+              style={{ transform: `scale(${digitalZoom})` }}
+            >
+              {!frozen && reader.liveLines.map((line, i) => <polygon key={i} className={lineClass(line)} points={line.box.map((p) => p.join(',')).join(' ')} />)}
+            </svg>
+          )}
+          {!textOn && status === 'running' && <div className="code-scanner-aim" />}
+          {status === 'running' && !frozen && <div className="code-scanner-hint">{textOn ? t('ocr_hint_live') : t('scanner_hint')}</div>}
           {status === 'starting' && <div className="code-scanner-status">{t('camera_starting')}</div>}
           {status === 'tap' && (
             <div className="code-scanner-status">
@@ -264,10 +373,11 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
               </Button>
             </div>
           )}
+          {textOn && status === 'running' && <OcrEngineStatus engine={reader.engine} onRetry={reader.retry} />}
         </div>
       ) : (
         <div className="code-scanner-view code-scanner-nolive">
-          <p>{error ? t(error.key) : t('scanner_http_hint')}</p>
+          <p>{error ? t(error.key) : textOn ? t('ocr_http_hint') : t('scanner_http_hint')}</p>
           {error?.detail && <p className="code-scanner-detail" dir="ltr">{error.detail}</p>}
           <Button type="primary" size="large" icon={<CameraOutlined />} loading={reading} onClick={() => photo.current?.click()}>
             {t('scan_photo')}
@@ -277,6 +387,25 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
               {t('try_again')}
             </Button>
           )}
+          {textOn && <OcrEngineStatus inline engine={reader.engine} onRetry={reader.retry} />}
+        </div>
+      )}
+      {textOn && frozen && (
+        <div className="ocr-frozen">
+          <img src={frozen.url} alt="" />
+          <svg viewBox={`0 0 ${frozen.width} ${frozen.height}`} preserveAspectRatio="xMidYMid meet">
+            {frozen.lines.map((line, i) => (
+              <polygon
+                key={i}
+                className={`${lineClass(line)} is-pickable`}
+                points={line.box.map((p) => p.join(',')).join(' ')}
+                onClick={() => !frozen.reading && onPick(line, frozen.canvas)}
+              />
+            ))}
+          </svg>
+          <div className="code-scanner-hint">
+            {frozen.reading ? t('ocr_reading') : frozen.lines.length ? t('ocr_hint_pick') : t('ocr_none')}
+          </div>
         </div>
       )}
       <input ref={photo} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
@@ -284,22 +413,74 @@ export default function CodeScanner({ open, onClose, onCode, title }) {
 
       <div className="code-scanner-bottom">
         {feedback && <div className={`code-scanner-feedback is-${feedback.type}`}>{feedback.text}</div>}
-        {live && !error && (
+        {frozen ? (
           <div className="code-scanner-controls">
-            {zoom && (
-              <div className="code-scanner-zoom">
-                <span>{zoom.value.toFixed(1)}×</span>
-                <Slider min={zoom.min} max={zoom.max} step={zoom.step} value={zoom.value} onChange={changeZoom} tooltip={{ open: false }} />
-              </div>
-            )}
-            <Button shape="circle" size="large" icon={<CameraOutlined />} loading={reading} onClick={() => photo.current?.click()} aria-label={t('scan_photo')} />
-            {torch !== null && (
-              <Button shape="circle" size="large" icon={torch ? <ThunderboltFilled /> : <ThunderboltOutlined />} onClick={toggleTorch} aria-label={t('torch')} />
-            )}
+            <Button size="large" block icon={<ArrowLeftOutlined />} onClick={reader.unfreeze}>
+              {t('ocr_back_to_camera')}
+            </Button>
           </div>
+        ) : (
+          live &&
+          !error && (
+            <div className="code-scanner-controls">
+              {zoom && (
+                <div className="code-scanner-zoom">
+                  <span>{zoom.value.toFixed(1)}×</span>
+                  <Slider min={zoom.min} max={zoom.max} step={zoom.step} value={zoom.value} onChange={changeZoom} tooltip={{ open: false }} />
+                </div>
+              )}
+              <Button shape="circle" size="large" icon={<CameraOutlined />} loading={reading} onClick={() => photo.current?.click()} aria-label={t('scan_photo')} />
+              {torch !== null && (
+                <Button shape="circle" size="large" icon={torch ? <ThunderboltFilled /> : <ThunderboltOutlined />} onClick={toggleTorch} aria-label={t('torch')} />
+              )}
+            </div>
+          )
+        )}
+        {textMode && !frozen && (
+          <Segmented
+            block
+            size="large"
+            className="code-scanner-modes"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'code', label: t('scan_mode_code'), icon: <QrcodeOutlined /> },
+              { value: 'text', label: t('scan_mode_text'), icon: <FontSizeOutlined /> },
+            ]}
+          />
         )}
       </div>
+      <TextPickModal key={pick?.id || 'none'} pick={pick} index={reader.index} onAdd={addPick} onCancel={closePick} />
     </div>,
     document.body,
   )
+}
+
+/** Downloading the text reader (first time only), or why it failed. */
+function OcrEngineStatus({ engine, onRetry, inline = false }) {
+  const { t } = useLang()
+  const className = inline ? 'ocr-engine-status is-inline' : 'code-scanner-status ocr-engine-status'
+  if (engine.status === 'loading') {
+    return (
+      <div className={className}>
+        <div>
+          <p>{t('ocr_loading')}</p>
+          <Progress percent={Math.round(engine.progress * 100)} size="small" strokeColor="#fff" />
+        </div>
+      </div>
+    )
+  }
+  if (engine.status === 'failed') {
+    return (
+      <div className={className} onClick={(e) => e.stopPropagation()}>
+        <div>
+          <p>{t('ocr_failed')}</p>
+          <Button size="large" icon={<ReloadOutlined />} onClick={onRetry}>
+            {t('try_again')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+  return null
 }

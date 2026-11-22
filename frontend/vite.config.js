@@ -1,9 +1,16 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const BASE = '/app/'
+
+/**
+ * Text reading files (models and the ONNX runtime, about 30 MB): not saved on every phone with
+ * the app. The service worker keeps them once they are used, or saved for working offline.
+ */
+const isOcrFile = (file) => /\.onnx$/.test(file) || /(^|\/)ort-wasm[^/]*\.wasm$/.test(file)
 
 /**
  * Builds the service worker (src/sw.js) next to the app as sw.js, with the list of app
@@ -20,11 +27,13 @@ function serviceWorker() {
         // .woff is only a fallback for very old browsers; every phone uses .woff2
         .filter((file) => file !== 'index.html' && !file.endsWith('.map') && !file.endsWith('.woff'))
         .sort()
-      const assets = [...files, 'favicon.svg'].map((file) => BASE + file)
+      const assets = [...files.filter((file) => !isOcrFile(file)), 'favicon.svg'].map((file) => BASE + file)
+      const ocr = files.filter(isOcrFile).map((file) => BASE + file)
       const version = createHash('sha256').update(files.join('\n')).update(readFileSync('index.html')).digest('hex').slice(0, 12)
       const source = readFileSync('src/sw.js', 'utf8')
         .replace("'__VERSION__'", JSON.stringify(version))
         .replace('/* ASSETS */ []', JSON.stringify(assets))
+        .replace('/* OCR_ASSETS */ []', JSON.stringify(ocr))
       this.emitFile({ type: 'asset', fileName: 'sw.js', source })
     },
   }
@@ -35,6 +44,12 @@ function serviceWorker() {
 export default defineConfig(({ command }) => ({
   plugins: [react(), serviceWorker()],
   base: command === 'build' ? BASE : '/',
+  resolve: {
+    // The text direction model: its package only exports a Node entry
+    alias: { '@ocr-models': fileURLToPath(new URL('./node_modules/@gutenye/ocr-models/assets', import.meta.url)) },
+  },
+  // The text reading worker loads its models as separate files
+  worker: { format: 'es' },
   build: {
     outDir: '../backend/public/app',
     emptyOutDir: true,

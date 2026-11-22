@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { OCR_CACHE, saveOcrFiles } from './ocr/files'
 
 /*
  * Working without a connection: the "Work offline" page saves a copy of everything on the
@@ -81,6 +82,10 @@ export async function downloadOffline({ withPhotos, onProgress = () => {} }) {
   const registration = await navigator.serviceWorker.register('/sw.js')
   await whenActive(registration)
 
+  // The text reader, so the camera can copy printed numbers without a connection too
+  onProgress({ step: 'ocr' })
+  await saveOcrFiles()
+
   onProgress({ step: 'data' })
   const response = await fetch('/api/offline/snapshot', { headers: { Accept: 'application/json' }, cache: 'no-store' })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -144,7 +149,7 @@ export async function downloadOffline({ withPhotos, onProgress = () => {} }) {
 export async function clearOffline() {
   const registration = await navigator.serviceWorker.getRegistration('/')
   for (const key of await caches.keys()) {
-    if (key === DATA || key === PHOTOS || key.startsWith('repo-shell-')) await caches.delete(key)
+    if (key === DATA || key === PHOTOS || key === OCR_CACHE || key.startsWith('repo-shell-')) await caches.delete(key)
   }
   registration?.active?.postMessage('snapshot-changed')
   await registration?.unregister()

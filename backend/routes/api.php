@@ -37,6 +37,8 @@ Route::get('/groups', [EquipmentGroupController::class, 'index']);
 Route::get('/groups/{group}', [EquipmentGroupController::class, 'show'])->whereNumber('group');
 Route::get('/equipment/keys', [EquipmentController::class, 'keys']);
 Route::get('/equipment/values', [EquipmentController::class, 'values']);
+// Every serial number, so the camera's text mode can recognise what it reads
+Route::get('/equipment/serial-list', [EquipmentController::class, 'serialList'])->middleware('throttle:60,1');
 Route::get('/equipment/serial/{serial}', [EquipmentController::class, 'bySerial'])->where('serial', '.*');
 Route::get('/equipment/{equipment}', [EquipmentController::class, 'show'])->whereNumber('equipment');
 Route::get('/imports', [ImportController::class, 'index']);
@@ -71,6 +73,7 @@ Route::get('/scan-folders/{scanFolder}', [ScanFolderController::class, 'show'])-
 Route::get('/scan-folders/{scanFolder}/revision', [ScanFolderController::class, 'revision'])->whereNumber('scanFolder');
 Route::get('/scan-documents/{scanDocument}', [ScanDocumentController::class, 'show'])->whereNumber('scanDocument');
 Route::get('/scan-documents/{scanDocument}/revision', [ScanDocumentController::class, 'revision'])->whereNumber('scanDocument');
+Route::get('/scan-documents/{scanDocument}/rows/{row}/photo', [ScanDocumentController::class, 'rowPhoto'])->whereNumber(['scanDocument', 'row']);
 
 // Phones download everything once, then open scanned labels without a connection
 Route::get('/offline/snapshot', [OfflineController::class, 'snapshot'])->middleware('throttle:10,1');

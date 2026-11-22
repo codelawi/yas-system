@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Alert, App, Button, Card, Col, Form, Input, Modal, Popconfirm, Progress, Result, Row, Spin, Switch, Table, Tabs, Tag, Typography } from 'antd'
-import { AuditOutlined, CameraOutlined, DeleteOutlined, FileExcelOutlined, PlusOutlined, StopOutlined, UndoOutlined, UnlockOutlined } from '@ant-design/icons'
+import { AuditOutlined, CameraOutlined, DeleteOutlined, ScanOutlined, FileExcelOutlined, PlusOutlined, StopOutlined, UndoOutlined, UnlockOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api, { errorKey } from '../api'
 import { useLang } from '../i18n'
@@ -9,6 +9,7 @@ import { useAuth } from '../auth'
 import { beep, downloadFile } from '../download'
 import FieldFilter, { filterLabel } from '../components/FieldFilter'
 import { decodePhoto } from './ScanLabelPage'
+import CodeScanner from '../components/CodeScanner'
 import { usePhone } from '../nav'
 import { Fab, PhoneActions, PhoneHeader, PhoneList, PhoneRow, PhoneSkeleton } from '../components/PhoneUI'
 
@@ -192,6 +193,7 @@ export function StocktakePage() {
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [last, setLast] = useState(null)
+  const [scanning, setScanning] = useState(false)
   const input = useRef(null)
   const photo = useRef(null)
   const phone = usePhone()
@@ -235,6 +237,20 @@ export function StocktakePage() {
     else {
       beep(false)
       message.error(t('scan_failed'))
+    }
+  }
+
+  /** The live camera (codes, or numbers read as text): each one is scanned, the result shown on the camera. */
+  const onCameraCode = async (text) => {
+    try {
+      const { data } = await api.post(`/stocktakes/${id}/scan`, { code: text })
+      setLast({ ...data, code: text })
+      beep(data.status === 'found')
+      load()
+      return { type: data.status === 'found' ? 'success' : RESULT_TYPE[data.status] === 'error' ? 'error' : 'warning', text: `${data.scan.serial_number}\n${resultText(data)}` }
+    } catch (e) {
+      beep(false)
+      return { type: 'error', text: t(errorKey(e) || 'error') }
     }
   }
 
@@ -403,7 +419,11 @@ export function StocktakePage() {
             <Button size="large" icon={<CameraOutlined />} onClick={() => photo.current?.click()}>
               {t('scan_photo')}
             </Button>
+            <Button size="large" icon={<ScanOutlined />} onClick={() => setScanning(true)}>
+              {t('stocktake_camera')}
+            </Button>
           </div>
+          <CodeScanner open={scanning} onClose={() => setScanning(false)} onCode={onCameraCode} title={report.stocktake.name} />
           {last && (
             <Alert
               className="scan-result"
