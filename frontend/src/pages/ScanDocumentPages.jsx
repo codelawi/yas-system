@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { App, Breadcrumb, Button, Empty, Form, Input, Modal, Popconfirm, Result, Segmented, Spin, Table, Tag, Typography } from 'antd'
+import { App, Breadcrumb, Button, Empty, Form, Image, Input, Modal, Popconfirm, Result, Segmented, Spin, Table, Tag, Typography } from 'antd'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -543,9 +543,16 @@ export function ScanDocumentPage() {
   }
 
   /** Called by the scanner for each code read; the answer is shown on the camera screen. */
-  const onCode = async (code) => {
+  const onCode = async (code, { photo } = {}) => {
     try {
-      const { data } = await api.post(`/scan-documents/${id}/scan`, { code })
+      // Text read by the camera comes with a photo of the line, kept with the new row
+      let body = { code }
+      if (photo) {
+        body = new FormData()
+        body.append('code', code)
+        body.append('photo', photo, 'line.jpg')
+      }
+      const { data } = await api.post(`/scan-documents/${id}/scan`, body)
       if (data.status === 'added') {
         beep(true)
         setRows((rs) => (rs.some((r) => r.id === data.row.id) ? rs : [...rs, data.row]))
@@ -665,8 +672,22 @@ export function ScanDocumentPage() {
       align: c.key === 'no' ? 'center' : undefined,
       render: (_, row, index) => {
         if (c.key === 'no' || c.key === 'scanned_at') return <span style={{ whiteSpace: 'nowrap' }}>{cellText(c, row, index)}</span>
-        if (!canEdit) return <span className={c.key === 'code' ? 'serial' : undefined}>{cellText(c, row, index)}</span>
-        if (c.key === 'code') return <CellInput className="scan-doc-code" dir="ltr" value={row.code} onSave={(code) => saveRow(row, { code })} />
+        if (c.key === 'code') {
+          const code = canEdit ? (
+            <CellInput className="scan-doc-code" dir="ltr" value={row.code} onSave={(code) => saveRow(row, { code })} />
+          ) : (
+            <span className="serial">{cellText(c, row, index)}</span>
+          )
+          if (!row.photo_url) return code
+          // The photo of the line the code was read from (camera's text mode)
+          return (
+            <div className="scan-doc-code-cell">
+              <Image className="scan-doc-row-photo" src={row.photo_url} alt={t('scan_doc_row_photo')} />
+              {code}
+            </div>
+          )
+        }
+        if (!canEdit) return <span>{cellText(c, row, index)}</span>
         return <CellInput multiline value={row.cells?.[c.key]} onSave={(value) => saveRow(row, { cells: { [c.key]: value } })} />
       },
     })),

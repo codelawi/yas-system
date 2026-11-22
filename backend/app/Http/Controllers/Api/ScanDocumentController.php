@@ -11,8 +11,11 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Scan documents (مستندات المسح): a phone scans QR / Data Matrix codes and each code
@@ -71,6 +74,7 @@ class ScanDocumentController extends Controller
 
     public function destroy(ScanDocument $scanDocument): Response
     {
+        ScanDocumentRow::deletePhotoFiles($scanDocument->rows());
         $scanDocument->delete();
 
         return response()->noContent();
@@ -81,11 +85,16 @@ class ScanDocumentController extends Controller
      * document, or every document of its folder (duplicate_scope). The answer then says which
      * document and row have it.
      *
+     * A code read as text by the camera comes with a photo of the line read, kept with a new row.
+     *
      * @return array{status: string, row: ScanDocumentRow, row_number: int, document: array{id: int, title: string}}
      */
     public function scan(Request $request, ScanDocument $scanDocument): array
     {
-        $data = $request->validate(['code' => ['required', 'string', 'max:500']]);
+        $data = $request->validate([
+            'code' => ['required', 'string', 'max:500'],
+            'photo' => ['sometimes', 'file', 'max:4096', 'mimes:jpg,jpeg,png,webp'],
+        ]);
         $code = trim($data['code']);
         if ($code === '') {
             throw ValidationException::withMessages(['code' => 'scan_empty']);
@@ -114,6 +123,9 @@ class ScanDocumentController extends Controller
             [$status, $row] = ['duplicate', $scanDocument->rows()->where('code', $code)->firstOrFail()];
         }
         if ($status === 'added') {
+            if ($request->hasFile('photo')) {
+                $row->update(['photo_path' => $request->file('photo')->storeAs(ScanDocumentRow::PHOTO_FOLDER, Str::uuid().'.jpg')]);
+            }
             $scanDocument->increment('revision');
         }
         $rowDocument = $row->scan_document_id === $scanDocument->id ? $scanDocument : $row->document;
@@ -166,10 +178,22 @@ class ScanDocumentController extends Controller
     public function destroyRow(ScanDocument $scanDocument, ScanDocumentRow $row): Response
     {
         abort_unless($row->scan_document_id === $scanDocument->id, 404);
+        if ($row->photo_path) {
+            Storage::delete($row->photo_path);
+        }
         $row->delete();
         $scanDocument->increment('revision');
 
         return response()->noContent();
+    }
+
+    /** The photo of the line a row's code was read from (text mode). Anyone can see it, as the document. */
+    public function rowPhoto(ScanDocument $scanDocument, ScanDocumentRow $row): BinaryFileResponse
+    {
+        abort_unless($row->scan_document_id === $scanDocument->id && $row->photo_path && Storage::exists($row->photo_path), 404);
+
+        // The URL changes with the photo (ScanDocumentRow::photo_url), so it can be cached
+        return response()->file(Storage::path($row->photo_path), ['Cache-Control' => 'public, max-age=31536000']);
     }
 
     /** @return array{document: ScanDocument, rows: Collection} */

@@ -10,6 +10,7 @@ use App\Models\Import;
 use App\Models\IssueReport;
 use App\Models\MaintenanceRecord;
 use App\Models\MaintenanceSchedule;
+use App\Models\ScanDocumentRow;
 use App\Models\Stocktake;
 use App\Services\BackupManager;
 use App\Support\PinConfirmation;
@@ -105,13 +106,14 @@ class DangerZoneController extends Controller
         return $count;
     }
 
-    /** Word files, damage photos and equipment photos whose records are gone. */
+    /** Word files, damage photos, equipment photos and scanned text photos whose records are gone. */
     private function deleteOrphanFiles(): void
     {
         $keep = [
             'imports' => Import::pluck('stored_path')->filter()->all(),
             'issues' => IssueReport::pluck('photo_path')->filter()->all(),
             'equipment_photos' => Equipment::withTrashed()->pluck('photo_path')->filter()->all(),
+            'scan_photos' => ScanDocumentRow::pluck('photo_path')->filter()->all(),
         ];
         foreach ($keep as $folder => $used) {
             foreach (array_diff(Storage::files($folder), $used) as $file) {

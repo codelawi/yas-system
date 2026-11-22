@@ -12,11 +12,14 @@
 
 const VERSION = '__VERSION__'
 const ASSETS = /* ASSETS */ []
+/** The text reader's files (about 30 MB): kept once used or saved for offline, not with every app update. */
+const OCR_ASSETS = /* OCR_ASSETS */ []
 
 // Keep these names in sync with offline.js
 const SHELL = `repo-shell-${VERSION}`
 const DATA = 'repo-offline-data'
 const PHOTOS = 'repo-offline-photos'
+const OCR = 'repo-ocr' // also in ocr/files.js
 const SNAPSHOT_KEY = '/__offline__/snapshot.json'
 const INDEX = '/app/index.html'
 
@@ -46,6 +49,7 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) => Promise.all(keys.filter((key) => key.startsWith('repo-shell-') && key !== SHELL).map((key) => caches.delete(key))))
+      .then(dropOldOcrFiles)
       .then(() => self.clients.claim()),
   )
 })
@@ -112,8 +116,27 @@ async function page(request) {
 
 /** App files have a hash in their name, so the saved one is always right. */
 async function asset(request) {
+  if (OCR_ASSETS.includes(new URL(request.url).pathname)) return ocrAsset(request)
   const cache = await caches.open(SHELL)
   return (await cache.match(request, MATCH)) || fetch(request)
+}
+
+/** The text reader's files: from the phone once saved, otherwise downloaded and saved. */
+async function ocrAsset(request) {
+  const cache = await caches.open(OCR)
+  const saved = await cache.match(request, MATCH)
+  if (saved) return saved
+  const response = await fetch(request)
+  if (response.ok) await cache.put(request, response.clone()).catch(() => {})
+  return response
+}
+
+/** Files of an older version of the text reader. */
+async function dropOldOcrFiles() {
+  const cache = await caches.open(OCR)
+  for (const request of await cache.keys()) {
+    if (!OCR_ASSETS.includes(new URL(request.url).pathname)) await cache.delete(request)
+  }
 }
 
 /** A photo's URL changes with every new photo, so a saved one never goes stale. */
@@ -163,6 +186,7 @@ const decode = (part) => {
 /** The GET requests the scan pages make, answered from the copy (undefined = not found). */
 const ROUTES = [
   [/^\/api\/settings$/, (copy) => copy.data.settings],
+  [/^\/api\/equipment\/serial-list$/, (copy) => ({ serials: Object.keys(copy.data.serials) })],
   [/^\/api\/equipment\/serial\/(.+)$/, (copy, serial) => copy.equipmentBySerial(decode(serial))],
   [/^\/api\/equipment\/(\d+)$/, (copy, id) => copy.equipment.get(Number(id))],
   [/^\/api\/equipment\/(\d+)\/maintenance$/, (copy, id) => (copy.equipment.has(Number(id)) ? copy.data.maintenance[id] || { schedules: [], records: [] } : undefined)],

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ScanDocument;
+use App\Models\ScanDocumentRow;
 use App\Models\ScanFolder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -90,6 +91,7 @@ class ScanFolderController extends Controller
     /** Deletes the folder with all its documents and their rows. */
     public function destroy(ScanFolder $scanFolder): Response
     {
+        ScanDocumentRow::deletePhotoFiles(ScanDocumentRow::query()->whereIn('scan_document_id', $scanFolder->documents()->select('id')));
         $scanFolder->delete();
 
         return response()->noContent();

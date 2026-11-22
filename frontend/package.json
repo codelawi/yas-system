@@ -21,6 +21,7 @@
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
     "jsqr": "^1.4.0",
+    "onnxruntime-web": "1.31.1",
     "pdfjs-dist": "^6.5.438",
     "qrcode": "^1.5.4",
     "react": "^19.3.1",
@@ -29,10 +30,12 @@
     "zxing-wasm": "^2.2.0"
   },
   "devDependencies": {
+    "@gutenye/ocr-models": "1.4.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "oxlint": "^1.88.0",
+    "paddleocr-browser": "1.0.4",
     "vite": "^8.3.4"
   }
 }
