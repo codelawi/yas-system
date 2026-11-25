@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { App, Breadcrumb, Button, Empty, Form, Image, Input, Modal, Popconfirm, Result, Segmented, Spin, Table, Tag, Typography } from 'antd'
+import { App, Breadcrumb, Button, Empty, Form, Input, Modal, Popconfirm, Result, Segmented, Spin, Table, Tag, Typography } from 'antd'
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -672,19 +672,12 @@ export function ScanDocumentPage() {
       align: c.key === 'no' ? 'center' : undefined,
       render: (_, row, index) => {
         if (c.key === 'no' || c.key === 'scanned_at') return <span style={{ whiteSpace: 'nowrap' }}>{cellText(c, row, index)}</span>
+        // The photo of the line read (camera's text mode) is kept on the server, not shown here
         if (c.key === 'code') {
-          const code = canEdit ? (
+          return canEdit ? (
             <CellInput className="scan-doc-code" dir="ltr" value={row.code} onSave={(code) => saveRow(row, { code })} />
           ) : (
             <span className="serial">{cellText(c, row, index)}</span>
-          )
-          if (!row.photo_url) return code
-          // The photo of the line the code was read from (camera's text mode)
-          return (
-            <div className="scan-doc-code-cell">
-              <Image className="scan-doc-row-photo" src={row.photo_url} alt={t('scan_doc_row_photo')} />
-              {code}
-            </div>
           )
         }
         if (!canEdit) return <span>{cellText(c, row, index)}</span>

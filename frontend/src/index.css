@@ -2305,19 +2305,6 @@ h5,
 .scan-doc-table .ant-input {
   min-width: 120px;
 }
-.scan-doc-code-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-.scan-doc-row-photo {
-  max-height: 36px;
-  max-width: 200px;
-  border-radius: 4px;
-  object-fit: contain;
-  background: #000;
-}
 .scan-doc-table .scan-doc-code {
   direction: ltr;
   unicode-bidi: plaintext; /* a code with spaces keeps its order */
