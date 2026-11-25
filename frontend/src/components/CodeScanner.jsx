@@ -360,7 +360,10 @@ export default function CodeScanner({ open, onClose, onCode, title, textMode = t
               preserveAspectRatio="xMidYMid slice"
               style={{ transform: `scale(${digitalZoom})` }}
             >
-              {!frozen && reader.liveLines.map((line, i) => <polygon key={i} className={lineClass(line)} points={line.box.map((p) => p.join(',')).join(' ')} />)}
+              {/* Moved with the camera on every frame (its transform is set by the reader) */}
+              <g ref={reader.liveGroup}>
+                {!frozen && reader.liveLines.map((line, i) => <polygon key={i} className={lineClass(line)} points={line.box.map((p) => p.join(',')).join(' ')} />)}
+              </g>
             </svg>
           )}
           {!textOn && status === 'running' && <div className="code-scanner-aim" />}
