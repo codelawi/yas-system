@@ -27,6 +27,7 @@ import { PrintCustodyForm, PrintList, PrintSheet } from './pages/PrintPages'
 import { CustodyFormPage, CustodyFormsPage } from './pages/CustodyFormsPage'
 import { BoxDetail, BoxesPage, ScanBoxPage } from './pages/BoxPages'
 import { GroupDetail, GroupsPage } from './pages/GroupPages'
+import { VoucherCodeImportPage, VoucherCodesPage } from './pages/VoucherCodePages'
 import BoxLabelsPrint from './pages/BoxLabelsPrint'
 import BoxReport from './pages/BoxReport'
 import OfflinePage from './pages/OfflinePage'
@@ -90,6 +91,8 @@ function Shell() {
       <Route path="/equipment" element={<EquipmentList />} />
       <Route path="/equipment/:id" element={<EquipmentDetail />} />
       <Route path="/groups" element={<GroupsPage />} />
+      <Route path="/groups/codes" element={<VoucherCodesPage />} />
+      <Route path="/groups/codes/import" element={<VoucherCodeImportPage />} />
       <Route path="/groups/:id" element={<GroupDetail />} />
       <Route path="/boxes" element={<BoxesPage />} />
       <Route path="/boxes/:id" element={<BoxDetail />} />

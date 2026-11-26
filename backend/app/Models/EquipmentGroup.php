@@ -10,11 +10,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /** A kind of equipment (e.g. «وحدة الفتح والقص») holding every main equipment of that kind. */
 class EquipmentGroup extends Model
 {
-    protected $fillable = ['name', 'created_by'];
+    protected $fillable = ['name', 'voucher_code', 'voucher_name', 'created_by'];
 
     protected static function booted(): void
     {
         static::saving(fn (EquipmentGroup $group) => $group->name_key = self::keyFor($group->name));
+    }
+
+    /** The name printed on an issue voucher (سند صرف): its own voucher name, or the group name. */
+    public function voucherName(): string
+    {
+        return trim((string) $this->voucher_name) ?: $this->name;
     }
 
     public function equipment(): HasMany

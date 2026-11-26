@@ -94,8 +94,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/equipment/{equipment}/photo', [EquipmentPhotoController::class, 'destroy']);
 
     Route::post('/groups', [EquipmentGroupController::class, 'store']);
-    Route::put('/groups/{group}', [EquipmentGroupController::class, 'update']);
-    Route::delete('/groups/{group}', [EquipmentGroupController::class, 'destroy']);
+    // What an issue voucher (سند صرف) prints for each group: entered in a table or read from Word/Excel
+    Route::put('/groups/voucher-codes', [EquipmentGroupController::class, 'saveVoucherCodes']);
+    Route::post('/groups/voucher-codes/read', [EquipmentGroupController::class, 'readVoucherFile']);
+    Route::put('/groups/{group}', [EquipmentGroupController::class, 'update'])->whereNumber('group');
+    Route::delete('/groups/{group}', [EquipmentGroupController::class, 'destroy'])->whereNumber('group');
     Route::post('/groups/assign', [EquipmentGroupController::class, 'assign']);
     Route::get('/groups/suggest', [EquipmentGroupController::class, 'suggest']);
     Route::post('/groups/apply', [EquipmentGroupController::class, 'apply']);
