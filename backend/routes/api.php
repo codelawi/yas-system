@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\ScanFolderController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\StocktakeController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\VoucherController;
 use Illuminate\Support\Facades\Route;
 
 // Viewing is open to everyone on the network; changes need a PIN.
@@ -126,6 +127,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/custody-forms/{form}/tags', [CustodyFormController::class, 'tags']);
     Route::get('/custody-forms/{form}/fill/{custody}', [CustodyFormController::class, 'fill']);
     Route::get('/custodies/{custody}/form-data', [CustodyFormController::class, 'data']);
+
+    // Issue vouchers (سند صرف عهدة)
+    Route::get('/vouchers', [VoucherController::class, 'index']);
+    Route::post('/vouchers', [VoucherController::class, 'store']);
+    Route::get('/vouchers/recipients', [VoucherController::class, 'recipients']);
+    Route::post('/vouchers/return', [VoucherController::class, 'returnAny']);
+    Route::put('/vouchers/next-number', [VoucherController::class, 'setNextNumber']);
+    Route::get('/vouchers/{voucher}', [VoucherController::class, 'show'])->whereNumber('voucher');
+    Route::get('/vouchers/{voucher}/revision', [VoucherController::class, 'revision'])->whereNumber('voucher');
+    Route::put('/vouchers/{voucher}', [VoucherController::class, 'update'])->whereNumber('voucher');
+    Route::delete('/vouchers/{voucher}', [VoucherController::class, 'destroy'])->whereNumber('voucher');
+    Route::post('/vouchers/{voucher}/items', [VoucherController::class, 'addItems'])->whereNumber('voucher');
+    Route::delete('/vouchers/{voucher}/items/{item}', [VoucherController::class, 'removeItem'])->whereNumber(['voucher', 'item']);
+    Route::post('/vouchers/{voucher}/issue', [VoucherController::class, 'issue'])->whereNumber('voucher');
+    Route::post('/vouchers/{voucher}/return', [VoucherController::class, 'returnItem'])->whereNumber('voucher');
+    Route::post('/vouchers/{voucher}/return-all', [VoucherController::class, 'returnAll'])->whereNumber('voucher');
 
     Route::post('/issues/{issue}/close', [IssueController::class, 'close']);
 

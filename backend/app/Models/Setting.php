@@ -41,6 +41,8 @@ class Setting extends Model
         'last_backup_at' => '',
         // JSON {QR address: labels printed with it} — written when labels are printed
         'labels_printed' => '{}',
+        // Issue vouchers are numbered from here (or after the last one, if that is higher)
+        'voucher_next_number' => '1',
     ];
 
     public static function allValues(): array

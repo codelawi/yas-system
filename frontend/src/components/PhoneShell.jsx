@@ -6,7 +6,7 @@ import { useLang } from '../i18n'
 import { useAuth } from '../auth'
 import { SECTIONS, inSection } from '../nav'
 import OfflineBanner from './OfflineBanner'
-import { AppLogo, BackIcon, BoxIcon, DocsIcon, EquipmentIcon, MenuIcon, ScanIcon } from './PhoneIcons'
+import { AppLogo, BackIcon, BoxIcon, DocsIcon, EquipmentIcon, MenuIcon, ScanIcon, VoucherIcon } from './PhoneIcons'
 import '../phone.css'
 
 /** The bottom tabs; `paths` are the pages that belong to each (the scan pages open from a label too). */
@@ -15,6 +15,7 @@ const TABS = [
   { to: '/boxes', label: 'boxes', icon: BoxIcon, paths: ['/boxes', '/box'] },
   { to: '/scan', label: 'tab_scan', icon: ScanIcon, paths: ['/scan'] },
   { to: '/scan-documents', label: 'tab_docs', icon: DocsIcon, paths: ['/scan-documents'] },
+  { to: '/vouchers', label: 'tab_vouchers', icon: VoucherIcon, paths: ['/vouchers'] },
 ]
 const tabOf = (path) => TABS.findIndex((tab) => tab.paths.some((p) => inSection(path, p)))
 
