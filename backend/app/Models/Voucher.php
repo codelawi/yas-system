@@ -19,7 +19,7 @@ class Voucher extends Model
     /** Every unit came back. */
     public const RETURNED = 'returned';
 
-    protected $fillable = ['number', 'status', 'recipient', 'fields', 'revision', 'created_by', 'issued_by', 'issued_at', 'returned_at'];
+    protected $fillable = ['number', 'status', 'recipient', 'fields', 'replaces_id', 'revision', 'created_by', 'issued_by', 'issued_at', 'returned_at'];
 
     protected $casts = ['number' => 'integer', 'fields' => 'array', 'revision' => 'integer', 'issued_at' => 'datetime', 'returned_at' => 'datetime'];
 
@@ -41,6 +41,12 @@ class Voucher extends Model
     public function issuer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'issued_by');
+    }
+
+    /** The issued voucher this draft corrects. */
+    public function replaces(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'replaces_id');
     }
 
     public function isDraft(): bool

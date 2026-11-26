@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Alert, App, AutoComplete, Button, Card, Checkbox, Col, Empty, Input, InputNumber, Modal, Popconfirm, Progress, Result, Row, Segmented, Spin, Table, Tag, Typography } from 'antd'
-import { ApartmentOutlined, CheckOutlined, DeleteOutlined, FileDoneOutlined, ImportOutlined, NumberOutlined, PlusOutlined, ScanOutlined, UnlockOutlined } from '@ant-design/icons'
+import { ApartmentOutlined, CheckOutlined, DeleteOutlined, EditOutlined, FileDoneOutlined, ImportOutlined, NumberOutlined, PlusOutlined, ScanOutlined, UnlockOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api, { errorKey } from '../api'
 import { useLang } from '../i18n'
@@ -43,7 +43,10 @@ function NeedPin() {
   )
 }
 
-const voucherTitle = (voucher, t) => (voucher.number ? t('voucher_title_n', { n: voucher.number }) : t('voucher_title_draft'))
+const voucherTitle = (voucher, t) => {
+  if (voucher.number) return t('voucher_title_n', { n: voucher.number })
+  return voucher.replaces ? t('voucher_title_replaces', { n: voucher.replaces.number }) : t('voucher_title_draft')
+}
 
 function StatusTag({ voucher }) {
   const { t } = useLang()
@@ -200,7 +203,7 @@ export function VouchersPage() {
         locale={{ emptyText: t('no_vouchers') }}
         onRow={(v) => ({ onClick: () => navigate(`/vouchers/${v.id}`), style: { cursor: 'pointer' } })}
         columns={[
-          { title: t('voucher_number'), key: 'number', render: (_, v) => (v.number ? <Link to={`/vouchers/${v.id}`}><b>{v.number}</b></Link> : <Link to={`/vouchers/${v.id}`}>{t('voucher_status_draft')}</Link>) },
+          { title: t('voucher_number'), key: 'number', render: (_, v) => (v.number ? <Link to={`/vouchers/${v.id}`}><b>{v.number}</b></Link> : <Link to={`/vouchers/${v.id}`}>{v.replaces ? t('voucher_title_replaces', { n: v.replaces.number }) : t('voucher_status_draft')}</Link>) },
           { title: t('voucher_recipient'), dataIndex: 'recipient', render: (r) => r || '—' },
           { title: t('voucher_units'), dataIndex: 'items_count', align: 'center' },
           {
@@ -228,6 +231,8 @@ export function VouchersPage() {
 function VoucherSheet({ voucher, rows }) {
   const { t } = useLang()
   const date = voucher.issued_at ? dayjs(voucher.issued_at) : dayjs()
+  // A replacement takes the number of the voucher it replaces
+  const number = voucher.number || voucher.replaces?.number
   return (
     <div className="voucher-sheet" dir="rtl" lang="ar">
       <div className="voucher-sheet-head">
@@ -240,7 +245,7 @@ function VoucherSheet({ voucher, rows }) {
         </div>
         <div className="voucher-sheet-meta">
           <div>
-            رقم السند: <b>{voucher.number ? arabicDigits(voucher.number) : '—'}</b>
+            رقم السند: <b>{number ? arabicDigits(number) : '—'}</b>
           </div>
           <div>التاريخ: {arabicDigits(date.format('D / M / YYYY'))} م</div>
         </div>
@@ -352,7 +357,6 @@ export function VoucherPage() {
   const [issuing, setIssuing] = useState(false)
   const [last, setLast] = useState(null)
   const [scanning, setScanning] = useState(false)
-  const [mode, setMode] = useState(null)
   const [recipient, setRecipient] = useState('')
   const [recipients, setRecipients] = useState([])
   const [picking, setPicking] = useState(null)
@@ -360,8 +364,6 @@ export function VoucherPage() {
   const typingRecipient = useRef(false)
   const recipientBox = useRef(null)
   const input = useRef(null)
-  // Equipment someone else holds, scanned while the camera was open: asked about once it closes
-  const pendingMoves = useRef([])
 
   const show = useCallback((data) => {
     revision.current = data.voucher.revision
@@ -394,7 +396,8 @@ export function VoucherPage() {
 
   const { voucher, items, rows } = report
   const isDraft = voucher.status === 'draft'
-  const current = isDraft ? 'add' : mode || 'return'
+  // A draft takes scans; an issued voucher is locked and only takes back what it gave
+  const current = isDraft ? 'add' : 'return'
   const inVoucher = new Set(items.map((i) => i.equipment.id))
   const out = items.filter((i) => !i.returned_at).length
   const moved = items.filter((i) => i.moved_to).length
@@ -403,7 +406,7 @@ export function VoucherPage() {
 
   const unit = (e) => (e ? { serial: e.serial_number, name: e.display_name } : {})
 
-  /** Asks before taking equipment from whoever holds it now; `retry` adds it again with move. */
+  /** Asks before taking equipment from whoever holds it now; `retry` issues again with move. */
   const askMove = (held, retry) =>
     modal.confirm({
       title: t('voucher_move_title'),
@@ -422,14 +425,8 @@ export function VoucherPage() {
       onOk: retry,
     })
 
-  const addCode = async (value, move) => {
-    const { data } = await api.post(`/vouchers/${id}/items`, { code: value, move })
-    show(data)
-    return data
-  }
-
-  /** One scanned or typed code: added to the voucher, or taken back in return mode. Returns what to show. */
-  const handle = async (value, fromCamera) => {
+  /** One scanned or typed code: added to a draft, or taken back from an issued voucher. Returns what to show. */
+  const handle = async (value) => {
     if (current === 'return') {
       const { data } = await api.post(`/vouchers/${id}/return`, { code: value })
       show(data)
@@ -438,19 +435,10 @@ export function VoucherPage() {
       return { type, text, ...unit(data.equipment) }
     }
 
-    // A draft takes anything (it is moved only when issued); an issued voucher asks first
-    const data = await addCode(value, isDraft)
+    // A draft takes anything: what someone else holds is moved only when issued, after asking
+    const { data } = await api.post(`/vouchers/${id}/items`, { code: value, move: true })
+    show(data)
     const equipment = data.equipment?.[0]
-    if (data.status === 'held') {
-      const retry = () =>
-        addCode(value, true).then(() => {
-          beep(true)
-          setLast({ type: 'success', text: t('voucher_moved'), ...unit(data.held[0]) })
-        })
-      if (fromCamera) pendingMoves.current.push({ held: data.held, retry })
-      else askMove(data.held, retry)
-      return { type: 'warning', text: `${heldText(data.held[0], t)}${fromCamera ? ` — ${t('voucher_ask_after_camera')}` : ''}`, ...unit(data.held[0]) }
-    }
     if (data.status === 'already') return { type: 'info', text: t('voucher_already'), ...unit(equipment) }
     const added = data.items.find((i) => i.equipment.id === equipment?.id)
     if (added?.held_by) return { type: 'warning', text: `${t('voucher_added')} — ${heldText(added.held_by, t)}، ${t('voucher_move_later')}`, ...unit(equipment) }
@@ -462,7 +450,7 @@ export function VoucherPage() {
     if (!value || busy) return
     setBusy(true)
     try {
-      const result = await handle(value, false)
+      const result = await handle(value)
       setLast(result)
       beep(result.type === 'success')
       setCode('')
@@ -477,7 +465,7 @@ export function VoucherPage() {
 
   const onCameraCode = async (text) => {
     try {
-      const result = await handle(text, true)
+      const result = await handle(text)
       setLast(result)
       beep(result.type === 'success')
       return { type: result.type === 'success' ? 'success' : result.type === 'info' ? 'warning' : result.type, text: [result.serial, result.name, result.text].filter(Boolean).join('\n') }
@@ -487,27 +475,13 @@ export function VoucherPage() {
     }
   }
 
-  const closeCamera = () => {
-    setScanning(false)
-    const pending = pendingMoves.current
-    pendingMoves.current = []
-    if (pending.length)
-      askMove(
-        pending.flatMap((p) => p.held),
-        async () => {
-          for (const p of pending) await p.retry().catch(() => {})
-        },
-      )
-  }
-
   const saveRecipient = async (value = recipient) => {
     typingRecipient.current = false
     const name = value.trim()
-    if (name === (voucher.recipient || '')) return
+    if (!isDraft || name === (voucher.recipient || '')) return
     try {
       const { data } = await api.put(`/vouchers/${id}`, { recipient: name })
       show(data)
-      if (!isDraft) message.success(t('saved'))
     } catch (e) {
       message.error(t(errorKey(e) || 'error'))
       setRecipient(voucher.recipient || '')
@@ -524,9 +498,8 @@ export function VoucherPage() {
         return
       }
       beep(true)
-      setMode('add')
       setLast(null)
-      message.success(t('voucher_issued_n', { n: data.voucher.number }))
+      message.success(t(voucher.replaces ? 'voucher_replaced_n' : 'voucher_issued_n', { n: data.voucher.number }))
     } catch (e) {
       message.error(t(errorKey(e) || 'error'))
     } finally {
@@ -547,19 +520,23 @@ export function VoucherPage() {
     }
     modal.confirm({
       title: t('voucher_issue'),
-      content: t('voucher_issue_confirm', { name, n: items.length }),
+      content: (
+        <>
+          <p>{t('voucher_issue_confirm', { name, n: items.length })}</p>
+          {voucher.replaces && <p>{t('voucher_issue_replaces', { n: voucher.replaces.number })}</p>}
+        </>
+      ),
       okText: t('voucher_issue'),
       cancelText: t('cancel'),
       onOk: () => issue(),
     })
   }
 
-  const addIds = async (ids, move = isDraft) => {
+  const addIds = async (ids) => {
     try {
-      const { data } = await api.post(`/vouchers/${id}/items`, { equipment_ids: ids, move })
+      const { data } = await api.post(`/vouchers/${id}/items`, { equipment_ids: ids, move: true })
       show(data)
-      if (data.status === 'held') askMove(data.held, () => addIds(ids, true))
-      else beep(true)
+      beep(true)
     } catch (e) {
       message.error(t(errorKey(e) || 'error'))
     }
@@ -633,10 +610,11 @@ export function VoucherPage() {
       },
     })
 
-  const removeReturned = () =>
+  // An issued voucher can be deleted too: what is still out is cancelled as if never handed over
+  const removeIssued = () =>
     askPin({
       title: t('voucher_delete'),
-      body: t('voucher_delete_returned_body'),
+      body: [out ? t('voucher_delete_issued_body', { n: out }) : t('voucher_delete_returned_body'), voucher.replacement_id && t('voucher_delete_with_replacement')].filter(Boolean).join(' '),
       okText: t('delete'),
       run: async (pin) => {
         await api.delete(`/vouchers/${id}`, { data: { pin } })
@@ -644,6 +622,28 @@ export function VoucherPage() {
         navigate('/vouchers')
       },
     })
+
+  /** A correction: a draft with the same units and recipient, which takes this voucher's place when issued. */
+  const openReplacement = async () => {
+    try {
+      const { data } = await api.post(`/vouchers/${id}/replace`)
+      navigate(`/vouchers/${data.voucher.id}`)
+    } catch (e) {
+      message.error(t(errorKey(e) || 'error'))
+    }
+  }
+  // Only what is still out can be corrected; a replacement already started is opened instead
+  const canReplace = !isDraft && (out > 0 || voucher.replacement_id)
+  const replace = () =>
+    voucher.replacement_id
+      ? navigate(`/vouchers/${voucher.replacement_id}`)
+      : modal.confirm({
+          title: t('voucher_replace'),
+          content: t('voucher_replace_body', { n: voucher.number }),
+          okText: t('voucher_replace'),
+          cancelText: t('cancel'),
+          onOk: openReplacement,
+        })
 
   // In return mode, what is still out comes first
   const listed = current === 'return' ? [...items.filter((i) => !i.returned_at), ...items.filter((i) => i.returned_at)] : items
@@ -653,23 +653,17 @@ export function VoucherPage() {
     if (item.moved_to) return <Tag color="orange">{t('voucher_moved_to', { n: item.moved_to })}</Tag>
     return item.returned_at ? <Tag color="green">{t('voucher_returned')}</Tag> : <Tag color="blue">{t('voucher_still_out')}</Tag>
   }
-  const itemActions = (item) => (
-    <>
-      {item.accessories.length > 0 && (
-        <Button size="small" icon={<ApartmentOutlined />} onClick={() => setPicking(item)}>
-          {`${t('accessories')} (${item.accessories.length})`}
-        </Button>
-      )}
-      {(isDraft || !item.returned_at) &&
-        (isDraft ? (
-          <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={t('voucher_remove')} onClick={() => removeItem(item)} />
-        ) : (
-          <Popconfirm title={t('voucher_remove_issued')} okText={t('voucher_remove')} okButtonProps={{ danger: true }} cancelText={t('cancel')} onConfirm={() => removeItem(item)}>
-            <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={t('voucher_remove')} />
-          </Popconfirm>
-        ))}
-    </>
-  )
+  const itemActions = (item) =>
+    isDraft && (
+      <>
+        {item.accessories.length > 0 && (
+          <Button size="small" icon={<ApartmentOutlined />} onClick={() => setPicking(item)}>
+            {`${t('accessories')} (${item.accessories.length})`}
+          </Button>
+        )}
+        <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={t('voucher_remove')} onClick={() => removeItem(item)} />
+      </>
+    )
   const itemName = (item) => (
     <>
       <span>{item.equipment.display_name}</span>
@@ -677,7 +671,12 @@ export function VoucherPage() {
     </>
   )
 
-  const recipientField = (
+  const recipientField = !isDraft ? (
+    <div className="voucher-recipient">
+      <label>{t('voucher_recipient')}</label>
+      <div className="voucher-recipient-value">{voucher.recipient}</div>
+    </div>
+  ) : (
     <div className="voucher-recipient">
       <label htmlFor="voucher-recipient">{t('voucher_recipient')}</label>
       <AutoComplete
@@ -698,21 +697,35 @@ export function VoucherPage() {
     </div>
   )
 
-  const modeSwitch = !isDraft && (
-    <Segmented
-      block
-      className="voucher-mode"
-      value={current}
-      onChange={(value) => {
-        setMode(value)
-        setLast(null)
-      }}
-      options={[
-        { value: 'return', label: t('voucher_mode_return'), icon: <ImportOutlined /> },
-        { value: 'add', label: t('voucher_mode_add'), icon: <PlusOutlined /> },
-      ]}
+  // Where this voucher stands next to its correction
+  const replaceNote = voucher.replaces ? (
+    <Alert
+      type="info"
+      showIcon
+      className="voucher-replace-note"
+      title={t('voucher_replacing_n', { n: voucher.replaces.number })}
+      action={
+        <Button size="small" onClick={() => navigate(`/vouchers/${voucher.replaces.id}`)}>
+          {t('voucher_open_old')}
+        </Button>
+      }
     />
+  ) : (
+    voucher.replacement_id && (
+      <Alert
+        type="info"
+        showIcon
+        className="voucher-replace-note"
+        title={t('voucher_has_replacement')}
+        action={
+          <Button size="small" onClick={() => navigate(`/vouchers/${voucher.replacement_id}`)}>
+            {t('voucher_open_replacement')}
+          </Button>
+        }
+      />
+    )
   )
+  const scanLabel = !isDraft && <div className="voucher-scan-label">{t('voucher_scan_return')}</div>
 
   const scanBar = (
     <div className="scan-bar">
@@ -784,8 +797,8 @@ export function VoucherPage() {
     </span>
   )
 
-  const camera = <CodeScanner open={scanning} onClose={closeCamera} onCode={onCameraCode} title={voucher.recipient || voucherTitle(voucher, t)} />
-  const picker = <AccessoryPicker key={picking?.id} item={picking} inVoucher={inVoucher} onAdd={(ids) => addIds(ids)} onClose={() => setPicking(null)} />
+  const camera = <CodeScanner open={scanning} onClose={() => setScanning(false)} onCode={onCameraCode} title={voucher.recipient || voucherTitle(voucher, t)} />
+  const picker = isDraft && <AccessoryPicker key={picking?.id} item={picking} inVoucher={inVoucher} onAdd={(ids) => addIds(ids)} onClose={() => setPicking(null)} />
 
   if (phone)
     return (
@@ -797,12 +810,14 @@ export function VoucherPage() {
           more={[
             { key: 'return', icon: <ImportOutlined />, label: t('voucher_return_title'), onClick: () => navigate('/vouchers/return') },
             { key: 'delete', icon: <DeleteOutlined />, label: t('voucher_delete_draft'), danger: true, hidden: !isDraft, onClick: removeDraft, confirm: { title: t('voucher_delete_confirm') } },
-            { key: 'delete-returned', icon: <DeleteOutlined />, label: t('voucher_delete'), danger: true, hidden: voucher.status !== 'returned', onClick: removeReturned },
+            { key: 'replace', icon: <EditOutlined />, label: t(voucher.replacement_id ? 'voucher_open_replacement' : 'voucher_replace'), hidden: !canReplace, onClick: replace },
+            { key: 'delete-issued', icon: <DeleteOutlined />, label: t('voucher_delete'), danger: true, hidden: isDraft, onClick: removeIssued },
           ]}
         />
         <div className="voucher-panel">
+          {replaceNote}
           {recipientField}
-          {modeSwitch}
+          {scanLabel}
           {scanBar}
           {returnAllButton}
           {result}
@@ -857,9 +872,14 @@ export function VoucherPage() {
               </Button>
             </Popconfirm>
           )}
-          {voucher.status === 'returned' && (
-            <Button danger icon={<DeleteOutlined />} onClick={removeReturned}>
+          {!isDraft && (
+            <Button danger icon={<DeleteOutlined />} onClick={removeIssued}>
               {t('voucher_delete')}
+            </Button>
+          )}
+          {canReplace && (
+            <Button icon={<EditOutlined />} onClick={replace}>
+              {t(voucher.replacement_id ? 'voucher_open_replacement' : 'voucher_replace')}
             </Button>
           )}
           {isDraft && (
@@ -872,8 +892,9 @@ export function VoucherPage() {
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={13}>
           <Card style={{ marginBottom: 16 }}>
+            {replaceNote}
             {recipientField}
-            {modeSwitch}
+            {scanLabel}
             {scanBar}
             {returnAllButton}
             {result}

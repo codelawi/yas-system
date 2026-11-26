@@ -2465,7 +2465,15 @@ h5,
   margin-bottom: 6px;
   font-weight: 600;
 }
-.voucher-mode {
+.voucher-recipient-value {
+  font-size: 16px;
+  font-weight: 600;
+}
+.voucher-scan-label {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.voucher-replace-note {
   margin-bottom: 12px;
 }
 .voucher-progress {

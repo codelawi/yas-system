@@ -143,6 +143,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/vouchers/{voucher}/issue', [VoucherController::class, 'issue'])->whereNumber('voucher');
     Route::post('/vouchers/{voucher}/return', [VoucherController::class, 'returnItem'])->whereNumber('voucher');
     Route::post('/vouchers/{voucher}/return-all', [VoucherController::class, 'returnAll'])->whereNumber('voucher');
+    Route::post('/vouchers/{voucher}/replace', [VoucherController::class, 'replace'])->whereNumber('voucher');
 
     Route::post('/issues/{issue}/close', [IssueController::class, 'close']);
 

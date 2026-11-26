@@ -120,28 +120,100 @@ class VoucherTest extends TestCase
         $this->assertSame(2, ActivityLog::where('action', 'custody_out')->where('changes->summary', 'فورد اسود (24442) · سند 1')->count());
         $this->assertTrue(Custody::open()->where('equipment_id', $charger->id)->exists());
         $this->postJson("/api/vouchers/{$id}/issue", ['recipient' => 'x'])->assertUnprocessable()->assertJsonPath('errors.voucher.0', 'voucher_not_draft');
-        $this->deleteJson("/api/vouchers/{$id}")->assertUnprocessable()->assertJsonPath('errors.voucher.0', 'voucher_still_out_delete');
 
-        // The next one gets the next number; added after issue, it is handed over at once
+        // Issued means locked: no units added or removed, no new recipient
+        $item = $this->getJson("/api/vouchers/{$id}")->json('items.0.id');
+        $this->postJson("/api/vouchers/{$id}/items", ['code' => 'SAW-3'])->assertUnprocessable()->assertJsonPath('errors.voucher.0', 'voucher_locked');
+        $this->deleteJson("/api/vouchers/{$id}/items/{$item}")->assertUnprocessable()->assertJsonPath('errors.voucher.0', 'voucher_locked');
+        $this->putJson("/api/vouchers/{$id}", ['recipient' => 'فورد ابيض'])->assertUnprocessable()->assertJsonPath('errors.voucher.0', 'voucher_locked');
+        $this->assertSame(2, Custody::open()->where('voucher_id', $id)->count());
+
+        // The next one gets the next number
         $next = $this->draft();
         $this->postJson("/api/vouchers/{$next}/items", ['code' => 'SAW-2']);
         $this->postJson("/api/vouchers/{$next}/issue", ['recipient' => 'سالم'])->assertJsonPath('voucher.number', 2);
-        $this->postJson("/api/vouchers/{$next}/items", ['code' => 'SAW-3'])->assertJsonPath('status', 'added');
-        $this->assertSame('سالم', Custody::open()->where('equipment_id', $saws[2]->id)->value('holder'));
-
-        // Removing a unit from an issued voucher ends its custody
-        $item = $this->getJson("/api/vouchers/{$next}")->json('items.1.id');
-        $this->deleteJson("/api/vouchers/{$next}/items/{$item}")->assertOk()->assertJsonCount(1, 'items');
         $this->assertFalse(Custody::open()->where('equipment_id', $saws[2]->id)->exists());
-        $this->assertStringContainsString('2', Custody::where('equipment_id', $saws[2]->id)->value('return_notes'));
-
-        // The recipient can be corrected: open custody follows
-        $this->putJson("/api/vouchers/{$id}", ['recipient' => 'فورد ابيض'])->assertOk()->assertJsonPath('voucher.recipient', 'فورد ابيض');
-        $this->assertSame(2, Custody::open()->where('holder', 'فورد ابيض')->count());
-        $this->putJson("/api/vouchers/{$id}", ['recipient' => ''])->assertUnprocessable()->assertJsonPath('errors.recipient.0', 'voucher_no_recipient');
 
         $this->getJson('/api/vouchers')->assertOk()->assertJsonPath('counts.issued', 2)->assertJsonPath('next_number', 3);
-        $this->getJson('/api/vouchers/recipients')->assertOk()->assertJson(['سالم', 'فورد ابيض']);
+        $this->getJson('/api/vouchers/recipients')->assertOk()->assertJson(['سالم', 'فورد اسود (24442)']);
+    }
+
+    public function test_an_issued_voucher_is_corrected_by_a_replacement_that_takes_its_number(): void
+    {
+        $this->signIn();
+        ['saws' => $saws, 'light' => $light] = $this->store();
+        $old = $this->draft();
+        foreach (['SAW-1', 'SAW-2', 'L-1'] as $code) {
+            $this->postJson("/api/vouchers/{$old}/items", ['code' => $code]);
+        }
+        $this->putJson("/api/vouchers/{$old}", ['fields' => ['signer' => 'عمر']]);
+        $this->postJson("/api/vouchers/{$old}/issue", ['recipient' => 'فورد اسود']);
+        $this->postJson('/api/vouchers/'.$this->draft().'/items', ['code' => 'SAW-3']);
+        $this->postJson('/api/vouchers/2/issue', ['recipient' => 'سالم'])->assertJsonPath('voucher.number', 2);
+        // The light came back before the correction: it is not handed over again
+        $this->postJson("/api/vouchers/{$old}/return", ['code' => 'L-1'])->assertJsonPath('status', 'returned');
+
+        // A draft with the same recipient, fields and the units still out; asking again opens the same draft
+        $draft = $this->postJson("/api/vouchers/{$old}/replace")
+            ->assertOk()
+            ->assertJsonPath('voucher.status', 'draft')
+            ->assertJsonPath('voucher.recipient', 'فورد اسود')
+            ->assertJsonPath('voucher.fields.signer', 'عمر')
+            ->assertJsonPath('voucher.replaces.number', 1)
+            ->assertJsonCount(2, 'items')
+            // Its own units are not "held by someone else"
+            ->assertJsonPath('items.0.held_by', null)
+            ->json('voucher.id');
+        $this->postJson("/api/vouchers/{$old}/replace")->assertJsonPath('voucher.id', $draft);
+        $this->getJson("/api/vouchers/{$old}")->assertJsonPath('voucher.replacement_id', $draft);
+
+        // Corrected: one saw less, the third saw (held on voucher 2) added, another recipient
+        $first = $this->getJson("/api/vouchers/{$draft}")->json('items.0.id');
+        $this->deleteJson("/api/vouchers/{$draft}/items/{$first}")->assertOk();
+        $this->postJson("/api/vouchers/{$draft}/items", ['code' => 'SAW-3', 'move' => true]);
+        $this->postJson("/api/vouchers/{$draft}/issue", ['recipient' => 'فورد ابيض'])->assertJsonPath('status', 'held');
+        $this->postJson("/api/vouchers/{$draft}/issue", ['recipient' => 'فورد ابيض', 'move' => true])
+            ->assertOk()
+            ->assertJsonPath('voucher.number', 1)
+            ->assertJsonPath('voucher.replaces', null);
+
+        $this->assertNull(Voucher::find($old));
+        $this->assertSame(['SAW-2', 'SAW-3'], Custody::open()->where('voucher_id', $draft)->orderBy('id')->get()->map(fn ($c) => $c->equipment->serial_number)->all());
+        $this->assertSame(2, Custody::open()->where('holder', 'فورد ابيض')->count());
+        // The saw left out was never handed over, as far as custody goes; the light's return stays
+        $this->assertSame(0, Custody::where('equipment_id', $saws[0]->id)->count());
+        $this->assertSame(1, Custody::where('equipment_id', $light->id)->whereNotNull('returned_at')->count());
+        $this->assertSame(0, Custody::open()->where('equipment_id', $light->id)->count());
+        $this->getJson('/api/vouchers')->assertJsonPath('next_number', 3);
+
+        // Voucher 2's only saw moved to the replacement: with nothing out, there is nothing to correct
+        $this->postJson('/api/vouchers/2/replace')->assertUnprocessable()->assertJsonPath('errors.voucher.0', 'voucher_nothing_out');
+    }
+
+    public function test_deleting_an_issued_voucher_cancels_what_is_out_as_if_never_issued(): void
+    {
+        Sanctum::actingAs(User::factory()->create(['pin' => '246810']));
+        ['saws' => $saws] = $this->store();
+        // SAW-2 was with Salem before this voucher took it
+        $this->postJson("/api/equipment/{$saws[1]->id}/custody", ['holder' => 'سالم'])->assertOk();
+        $id = $this->draft();
+        foreach (['SAW-1', 'SAW-2', 'SAW-3'] as $code) {
+            $this->postJson("/api/vouchers/{$id}/items", ['code' => $code, 'move' => true]);
+        }
+        $this->postJson("/api/vouchers/{$id}/issue", ['recipient' => 'أحمد', 'move' => true])->assertJsonPath('status', 'issued');
+        $this->postJson("/api/vouchers/{$id}/return", ['code' => 'SAW-3'])->assertJsonPath('status', 'returned');
+        // A correction was started: it goes with the voucher
+        $this->postJson("/api/vouchers/{$id}/replace")->assertOk()->assertJsonCount(2, 'items');
+
+        $this->deleteJson("/api/vouchers/{$id}")->assertUnprocessable()->assertJsonPath('errors.pin.0', 'pin_required');
+        $this->deleteJson("/api/vouchers/{$id}", ['pin' => '246810'])->assertNoContent();
+
+        $this->assertSame(0, Voucher::count());
+        $this->assertSame(0, Custody::where('equipment_id', $saws[0]->id)->count());
+        $this->assertSame('سالم', Custody::open()->where('equipment_id', $saws[1]->id)->value('holder'));
+        // What came back stays in the equipment's history
+        $this->assertSame(1, Custody::where('equipment_id', $saws[2]->id)->whereNotNull('returned_at')->count());
+        $this->assertSame(1, ActivityLog::where('action', 'custody_in')->where('changes->summary', 'like', 'إلغاء سند الصرف رقم 1%')->where('equipment_id', $saws[0]->id)->count());
     }
 
     public function test_equipment_someone_holds_is_only_moved_when_asked(): void
@@ -224,15 +296,13 @@ class VoucherTest extends TestCase
         $this->postJson("/api/vouchers/{$id}/return-all", ['pin' => '246810'])->assertUnprocessable()->assertJsonPath('errors.voucher.0', 'voucher_nothing_out');
     }
 
-    public function test_a_returned_voucher_is_deleted_with_the_pin_and_one_still_out_is_not(): void
+    public function test_a_returned_voucher_is_deleted_with_the_pin(): void
     {
         Sanctum::actingAs(User::factory()->create(['pin' => '246810']));
         $this->store();
         $id = $this->draft();
         $this->postJson("/api/vouchers/{$id}/items", ['code' => 'SAW-1']);
         $this->postJson("/api/vouchers/{$id}/issue", ['recipient' => 'أحمد']);
-
-        $this->deleteJson("/api/vouchers/{$id}", ['pin' => '246810'])->assertUnprocessable()->assertJsonPath('errors.voucher.0', 'voucher_still_out_delete');
         $this->postJson("/api/vouchers/{$id}/return", ['code' => 'SAW-1']);
         $this->deleteJson("/api/vouchers/{$id}")->assertUnprocessable()->assertJsonPath('errors.pin.0', 'pin_required');
         $this->deleteJson("/api/vouchers/{$id}", ['pin' => '246810'])->assertNoContent();

@@ -31,7 +31,7 @@ class VoucherController extends Controller
         $status = $request->query('status');
         $q = trim((string) $request->query('q', ''));
 
-        $vouchers = Voucher::with(['creator:id,name', 'issuer:id,name'])
+        $vouchers = Voucher::with(['creator:id,name', 'issuer:id,name', 'replaces:id,number'])
             ->withCount(['items', 'items as held_count' => fn ($query) => $query->whereHas('custody', fn ($c) => $c->whereNull('returned_at'))])
             ->when(in_array($status, self::STATUSES, true), fn ($query) => $query->where('status', $status))
             ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w
@@ -87,51 +87,82 @@ class VoucherController extends Controller
             ->values();
     }
 
-    /** Changes the recipient; on an issued voucher, the custody of what is still held follows. */
+    /** The recipient and the voucher's own fields, while it is a draft. */
     public function update(Request $request, Voucher $voucher)
     {
+        self::mustBeDraft($voucher);
         $data = $request->validate([
             'recipient' => ['sometimes', 'nullable', 'string', 'max:191'],
             'fields' => ['sometimes', 'nullable', 'array', 'max:50'],
             'fields.*' => ['nullable', 'string', 'max:500'],
         ]);
 
-        DB::transaction(function () use ($voucher, $data) {
-            if (array_key_exists('recipient', $data)) {
-                $recipient = self::clean($data['recipient']);
-                if (! $recipient && ! $voucher->isDraft()) {
-                    throw ValidationException::withMessages(['recipient' => 'voucher_no_recipient']);
-                }
-                if (! $voucher->isDraft() && $recipient !== $voucher->recipient) {
-                    $voucher->custodies()->open()->update(['holder' => $recipient]);
-                }
-                $voucher->recipient = $recipient;
-            }
-            if (array_key_exists('fields', $data)) {
-                $voucher->fields = $data['fields'];
-            }
-            $voucher->revision++;
-            $voucher->save();
-        });
+        if (array_key_exists('recipient', $data)) {
+            $voucher->recipient = self::clean($data['recipient']);
+        }
+        if (array_key_exists('fields', $data)) {
+            $voucher->fields = $data['fields'];
+        }
+        $voucher->revision++;
+        $voucher->save();
 
         return $this->payload($voucher);
     }
 
     /**
-     * A draft is deleted at once; a returned voucher needs the PIN again. One still out cannot be
-     * deleted. The custody history of each equipment stays either way.
+     * A draft is deleted at once; an issued or returned voucher needs the PIN again. What is still
+     * out is cancelled as if the voucher was never issued; what came back stays in each
+     * equipment's custody history.
      */
     public function destroy(Request $request, Voucher $voucher)
     {
-        if ($voucher->status === Voucher::ISSUED) {
-            throw ValidationException::withMessages(['voucher' => 'voucher_still_out_delete']);
-        }
-        if ($voucher->status === Voucher::RETURNED) {
+        if (! $voucher->isDraft()) {
             PinConfirmation::check($request);
         }
-        $voucher->delete();
+        DB::transaction(function () use ($voucher, $request) {
+            // A correction being prepared for this voucher goes with it
+            Voucher::where('replaces_id', $voucher->id)->where('status', Voucher::DRAFT)->delete();
+            $this->discard($voucher, $request->user()->id);
+        });
 
         return response()->noContent();
+    }
+
+    /**
+     * An issued voucher cannot be changed: a correction starts as a draft with the same recipient,
+     * fields and the units still out on it (what came back or went to another voucher is left
+     * out, so it is not handed over again). Issuing it deletes this voucher and takes its number.
+     */
+    public function replace(Request $request, Voucher $voucher)
+    {
+        if ($voucher->isDraft()) {
+            throw ValidationException::withMessages(['voucher' => 'voucher_not_issued']);
+        }
+        $draft = Voucher::where('replaces_id', $voucher->id)->where('status', Voucher::DRAFT)->first();
+        if (! $draft) {
+            $out = $voucher->custodies()->open()->orderBy('id')->pluck('equipment_id');
+            if ($out->isEmpty()) {
+                throw ValidationException::withMessages(['voucher' => 'voucher_nothing_out']);
+            }
+            $userId = $request->user()->id;
+            $draft = DB::transaction(function () use ($voucher, $out, $userId) {
+                $draft = Voucher::create([
+                    'status' => Voucher::DRAFT,
+                    'recipient' => $voucher->recipient,
+                    'fields' => $voucher->fields,
+                    'replaces_id' => $voucher->id,
+                    'created_by' => $userId,
+                ]);
+                foreach ($out as $equipmentId) {
+                    $draft->items()->create(['equipment_id' => $equipmentId, 'added_by' => $userId]);
+                }
+                $voucher->increment('revision');
+
+                return $draft;
+            });
+        }
+
+        return $this->payload($draft);
     }
 
     /**
@@ -141,6 +172,7 @@ class VoucherController extends Controller
      */
     public function addItems(Request $request, Voucher $voucher)
     {
+        self::mustBeDraft($voucher);
         $data = $request->validate([
             'code' => ['required_without:equipment_ids', 'nullable', 'string', 'max:500'],
             'equipment_ids' => ['required_without:code', 'array', 'max:500'],
@@ -165,10 +197,7 @@ class VoucherController extends Controller
 
         $userId = $request->user()->id;
         $added = DB::transaction(function () use ($voucher, $new, $userId) {
-            $items = $new->map(fn (Equipment $e) => $voucher->items()->create(['equipment_id' => $e->id, 'added_by' => $userId])->setRelation('equipment', $e));
-            if (! $voucher->isDraft()) {
-                $this->handOver($voucher, $items, $userId);
-            }
+            $items = $new->map(fn (Equipment $e) => $voucher->items()->create(['equipment_id' => $e->id, 'added_by' => $userId]));
             $voucher->syncStatus();
 
             return $items;
@@ -177,20 +206,14 @@ class VoucherController extends Controller
         return ['status' => 'added', 'added' => $added->pluck('id'), 'equipment' => $new->map(fn (Equipment $e) => self::brief($e))->values()] + $this->payload($voucher);
     }
 
-    /** Takes a unit off the voucher; if it was handed over, its custody ends here. */
-    public function removeItem(Request $request, Voucher $voucher, VoucherItem $item)
+    /** Takes a unit off a draft. */
+    public function removeItem(Voucher $voucher, VoucherItem $item)
     {
         abort_unless($item->voucher_id === $voucher->id, 404);
+        self::mustBeDraft($voucher);
 
-        DB::transaction(function () use ($voucher, $item, $request) {
-            $custody = $item->custody;
-            if ($custody && ! $custody->returned_at) {
-                $custody->update(['returned_at' => now(), 'return_notes' => "أُزيلت من سند الصرف رقم {$voucher->number}", 'received_by' => $request->user()->id]);
-                ActivityLog::record($item->equipment, 'custody_in', ['summary' => self::summary($custody->holder, $voucher).' ✕']);
-            }
-            $item->delete();
-            $voucher->refresh()->syncStatus();
-        });
+        $item->delete();
+        $voucher->syncStatus();
 
         return $this->payload($voucher);
     }
@@ -222,8 +245,15 @@ class VoucherController extends Controller
 
         $userId = $request->user()->id;
         DB::transaction(function () use ($voucher, $items, $recipient, $userId) {
+            // A correction takes the place (and the number) of the voucher it corrects
+            $replaced = $voucher->replaces()->lockForUpdate()->first();
+            $number = $replaced?->number;
+            if ($replaced) {
+                $this->discard($replaced, $userId, $items->pluck('equipment_id'));
+            }
             $voucher->update([
-                'number' => Voucher::nextNumber(),
+                'number' => $number ?? Voucher::nextNumber(),
+                'replaces_id' => null,
                 'status' => Voucher::ISSUED,
                 'recipient' => $recipient,
                 'issued_at' => now(),
@@ -373,6 +403,46 @@ class VoucherController extends Controller
         }
     }
 
+    /**
+     * Deletes a voucher. Its custody still open is cancelled, as if the voucher was never issued:
+     * a unit it had taken from someone goes back to them, unless the correction (`$carried`)
+     * hands it over again.
+     *
+     * @param  Collection<int, int>|null  $carried
+     */
+    private function discard(Voucher $voucher, int $userId, ?Collection $carried = null): void
+    {
+        $carried = ($carried ?? collect())->flip();
+        foreach ($voucher->custodies()->open()->with('equipment')->get() as $custody) {
+            if ($custody->equipment) {
+                ActivityLog::record($custody->equipment, 'custody_in', ['summary' => "إلغاء سند الصرف رقم {$voucher->number} · {$custody->holder}"], $userId);
+            }
+            $custody->delete();
+            if ($carried->has($custody->equipment_id)) {
+                continue;
+            }
+            $before = Custody::where('equipment_id', $custody->equipment_id)
+                ->where('returned_at', $custody->handed_at)
+                ->where('return_notes', "نُقلت إلى سند الصرف رقم {$voucher->number}")
+                ->latest('id')
+                ->first();
+            if ($before && ! Custody::open()->where('equipment_id', $custody->equipment_id)->exists()) {
+                $before->update(['returned_at' => null, 'return_notes' => null, 'received_by' => null]);
+                if ($custody->equipment) {
+                    ActivityLog::record($custody->equipment, 'custody_out', ['summary' => "{$before->holder} · عادت بعد إلغاء سند الصرف رقم {$voucher->number}"], $userId);
+                }
+            }
+        }
+        $voucher->delete();
+    }
+
+    private static function mustBeDraft(Voucher $voucher): void
+    {
+        if (! $voucher->isDraft()) {
+            throw ValidationException::withMessages(['voucher' => 'voucher_locked']);
+        }
+    }
+
     private function takeBack(Custody $custody, Equipment $equipment, int $userId): void
     {
         DB::transaction(function () use ($custody, $equipment, $userId) {
@@ -389,9 +459,11 @@ class VoucherController extends Controller
      */
     private function heldElsewhere(Voucher $voucher, Collection $equipmentIds): Collection
     {
+        $own = array_values(array_filter([$voucher->id, $voucher->replaces_id]));
+
         return Custody::open()->with('voucher:id,number')
             ->whereIn('equipment_id', $equipmentIds)
-            ->where(fn ($q) => $q->whereNull('voucher_id')->orWhere('voucher_id', '!=', $voucher->id))
+            ->where(fn ($q) => $q->whereNull('voucher_id')->orWhereNotIn('voucher_id', $own))
             ->get();
     }
 
@@ -477,6 +549,8 @@ class VoucherController extends Controller
             'voucher' => $voucher->only(['id', 'number', 'status', 'recipient', 'fields', 'revision', 'issued_at', 'returned_at', 'created_at']) + [
                 'creator' => $voucher->creator?->only(['id', 'name']),
                 'issuer' => $voucher->issuer?->only(['id', 'name']),
+                'replaces' => $voucher->replaces?->only(['id', 'number']),
+                'replacement_id' => $voucher->isDraft() ? null : Voucher::where('replaces_id', $voucher->id)->value('id'),
             ],
             'items' => $items->filter(fn (VoucherItem $i) => $i->equipment)->map(function (VoucherItem $item) use ($held, $movedTo) {
                 $e = $item->equipment;
