@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Equipment;
 use App\Models\EquipmentGroup;
+use App\Services\WordTableParser;
+use App\Services\XlsxTableReader;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 /**
  * Groups (مجموعات): a kind of equipment, e.g. «وحدة الفتح والقص», holding every unit of that kind.
@@ -24,7 +27,7 @@ class EquipmentGroupController extends Controller
         return EquipmentGroup::withCount('equipment')
             ->when($q !== '', fn ($query) => $query->where('name', 'like', '%'.str_replace(['%', '_'], ['\%', '\_'], $q).'%'))
             ->orderBy('name')
-            ->get(['id', 'name', 'updated_at']);
+            ->get(['id', 'name', 'voucher_code', 'voucher_name', 'updated_at']);
     }
 
     public function show(EquipmentGroup $group)
@@ -34,6 +37,8 @@ class EquipmentGroupController extends Controller
         return [
             'id' => $group->id,
             'name' => $group->name,
+            'voucher_code' => $group->voucher_code,
+            'voucher_name' => $group->voucher_name,
             'equipment' => $items->map(fn (Equipment $e) => [
                 'id' => $e->id,
                 'serial_number' => $e->serial_number,
@@ -48,17 +53,85 @@ class EquipmentGroupController extends Controller
 
     public function store(Request $request)
     {
-        $name = $this->validatedName($request);
-        $group = EquipmentGroup::create(['name' => $name, 'created_by' => $request->user()->id]);
+        $data = $request->validate([
+            'voucher_code' => ['nullable', 'string', 'max:191'],
+            'voucher_name' => ['nullable', 'string', 'max:191'],
+        ]);
+        $group = EquipmentGroup::create(self::trimmed($data) + ['name' => $this->validatedName($request), 'created_by' => $request->user()->id]);
 
         return $this->show($group);
     }
 
+    /** Renames a group and/or sets what an issue voucher prints for it. */
     public function update(Request $request, EquipmentGroup $group)
     {
-        $group->update(['name' => $this->validatedName($request, $group)]);
+        $data = $request->validate([
+            'voucher_code' => ['sometimes', 'nullable', 'string', 'max:191'],
+            'voucher_name' => ['sometimes', 'nullable', 'string', 'max:191'],
+        ]);
+        if ($request->has('name')) {
+            $data['name'] = $this->validatedName($request, $group);
+        }
+        $group->update(self::trimmed($data));
 
         return $this->show($group);
+    }
+
+    /**
+     * Saves the voucher code and voucher name of many groups at once
+     * (the table of all groups, and the import from Word/Excel).
+     */
+    public function saveVoucherCodes(Request $request)
+    {
+        $data = $request->validate([
+            'groups' => ['required', 'array', 'max:2000'],
+            'groups.*.id' => ['required', 'integer', 'distinct', 'exists:equipment_groups,id'],
+            'groups.*.voucher_code' => ['present', 'nullable', 'string', 'max:191'],
+            'groups.*.voucher_name' => ['present', 'nullable', 'string', 'max:191'],
+        ]);
+
+        $changed = DB::transaction(function () use ($data) {
+            $groups = EquipmentGroup::whereIn('id', array_column($data['groups'], 'id'))->get()->keyBy('id');
+            $changed = 0;
+            foreach ($data['groups'] as $row) {
+                $group = $groups[$row['id']];
+                $group->fill(self::trimmed(['voucher_code' => $row['voucher_code'], 'voucher_name' => $row['voucher_name']]));
+                if ($group->isDirty()) {
+                    $group->save();
+                    $changed++;
+                }
+            }
+
+            return $changed;
+        });
+
+        return ['changed' => $changed];
+    }
+
+    /**
+     * Reads the tables of a Word/Excel file holding voucher codes; nothing is saved.
+     * The browser lets the user choose the name and code columns and the group of each row.
+     */
+    public function readVoucherFile(Request $request)
+    {
+        $request->validate(['file' => ['required', 'file', 'max:20480', 'extensions:docx,xlsx']], ['file.extensions' => 'only_docx_xlsx']);
+        $file = $request->file('file');
+        $path = $file->getRealPath();
+
+        try {
+            $tables = strtolower($file->getClientOriginalExtension()) === 'xlsx'
+                ? (new XlsxTableReader)->read($path)
+                : array_map(fn (array $t) => array_intersect_key($t, array_flip(['index', 'title', 'grid', 'spans'])), (new WordTableParser([]))->analyze($path));
+        } catch (RuntimeException) {
+            throw ValidationException::withMessages(['file' => 'voucher_file_bad']);
+        }
+
+        $tables = array_values(array_filter($tables, fn (array $t) => count($t['grid']) > 0));
+        if (! $tables) {
+            throw ValidationException::withMessages(['file' => 'voucher_file_no_tables']);
+        }
+
+        return ['file' => $file->getClientOriginalName(), 'tables' => $tables];
     }
 
     /** Deletes the group only; its equipment stays, without a group. */
@@ -175,6 +248,23 @@ class EquipmentGroupController extends Controller
             ->get()
             ->groupBy(fn (Equipment $e) => EquipmentGroup::keyFor(EquipmentController::displayName($e)))
             ->forget('');
+    }
+
+    /**
+     * Empty voucher texts are stored as null.
+     *
+     * @param  array<string, ?string>  $data
+     * @return array<string, ?string>
+     */
+    private static function trimmed(array $data): array
+    {
+        foreach (['voucher_code', 'voucher_name'] as $key) {
+            if (array_key_exists($key, $data)) {
+                $data[$key] = trim(preg_replace('/\s+/u', ' ', (string) $data[$key])) ?: null;
+            }
+        }
+
+        return $data;
     }
 
     private function validatedName(Request $request, ?EquipmentGroup $group = null): string

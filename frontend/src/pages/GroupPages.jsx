@@ -11,6 +11,7 @@ import {
   PictureOutlined,
   PlusOutlined,
   PrinterOutlined,
+  TagsOutlined,
 } from '@ant-design/icons'
 import api, { errorKey } from '../api'
 import { useLang } from '../i18n'
@@ -20,7 +21,7 @@ import EquipmentPicker from '../components/EquipmentPicker'
 import { usePhone } from '../nav'
 import { Fab, PhoneActions, PhoneHeader, PhoneList, PhoneRow, PhoneSearch, PhoneSkeleton } from '../components/PhoneUI'
 
-/** Create (no `group`) or rename a group. */
+/** Create (no `group`) or edit a group: its name, and what an issue voucher prints for it. */
 function GroupForm({ open, group, onClose, onSaved }) {
   const { t } = useLang()
   const { message } = App.useApp()
@@ -28,7 +29,7 @@ function GroupForm({ open, group, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (open) form.setFieldsValue({ name: group?.name || '' })
+    if (open) form.setFieldsValue({ name: group?.name || '', voucher_code: group?.voucher_code || '', voucher_name: group?.voucher_name || '' })
   }, [open, group, form])
 
   const save = async () => {
@@ -50,7 +51,7 @@ function GroupForm({ open, group, onClose, onSaved }) {
   return (
     <Modal
       open={open}
-      title={group ? t('rename_group') : t('add_group')}
+      title={group ? t('edit_group') : t('add_group')}
       okText={t('save')}
       cancelText={t('cancel')}
       onOk={save}
@@ -63,6 +64,13 @@ function GroupForm({ open, group, onClose, onSaved }) {
         <Form.Item name="name" label={t('group_name')} rules={[{ required: true, whitespace: true, message: t('group_name') }]}>
           <Input autoFocus placeholder={t('group_name_example')} />
         </Form.Item>
+        <Form.Item name="voucher_code" label={t('voucher_code')}>
+          <Input placeholder={t('voucher_code_example')} />
+        </Form.Item>
+        <Form.Item name="voucher_name" label={t('voucher_name')} extra={t('voucher_name_hint')}>
+          <Input />
+        </Form.Item>
+        <button type="submit" hidden />
       </Form>
     </Modal>
   )
@@ -213,7 +221,10 @@ export function GroupsPage() {
         <PhoneHeader
           title={t('groups')}
           subtitle={groups ? t('groups_n', { n: groups.length }) : '\u00a0'}
-          more={[{ key: 'auto', icon: <MergeCellsOutlined />, label: t('auto_group'), onClick: withPin(setAuto) }]}
+          more={[
+            { key: 'codes', icon: <TagsOutlined />, label: t('voucher_codes'), onClick: () => navigate('/groups/codes') },
+            { key: 'auto', icon: <MergeCellsOutlined />, label: t('auto_group'), onClick: withPin(setAuto) },
+          ]}
         />
         <PhoneSearch value={q} placeholder={t('search_groups')} onChange={setQ} />
         {!groups ? (
@@ -221,7 +232,14 @@ export function GroupsPage() {
         ) : shown.length ? (
           <PhoneList>
             {shown.map((g) => (
-              <PhoneRow key={g.id} to={`/groups/${g.id}`} icon={<ClusterOutlined />} tone="cyan" title={g.name} subtitle={t('n_items', { n: g.equipment_count })} />
+              <PhoneRow
+                key={g.id}
+                to={`/groups/${g.id}`}
+                icon={<ClusterOutlined />}
+                tone="cyan"
+                title={g.name}
+                subtitle={[t('n_items', { n: g.equipment_count }), g.voucher_code].filter(Boolean).join(' · ')}
+              />
             ))}
           </PhoneList>
         ) : (
@@ -239,6 +257,9 @@ export function GroupsPage() {
           <ClusterOutlined /> {t('groups')}
         </Typography.Title>
         <div className="page-actions">
+          <Link to="/groups/codes">
+            <Button icon={<TagsOutlined />}>{t('voucher_codes')}</Button>
+          </Link>
           <Button icon={<MergeCellsOutlined />} onClick={withPin(setAuto)}>
             {t('auto_group')}
           </Button>
@@ -266,6 +287,7 @@ export function GroupsPage() {
               </Link>
             ),
           },
+          { title: t('voucher_code'), dataIndex: 'voucher_code', width: 220, render: (code) => code || <Typography.Text type="secondary">—</Typography.Text> },
           { title: t('count'), dataIndex: 'equipment_count', width: 120, render: (n) => t('n_items', { n }) },
         ]}
       />
@@ -343,7 +365,7 @@ export function GroupDetail() {
               </span>
             }
             title={group.name}
-            subtitle={t('n_items', { n: group.equipment.length })}
+            subtitle={[t('n_items', { n: group.equipment.length }), group.voucher_code].filter(Boolean).join(' · ')}
           />
           <PhoneActions
             actions={[
@@ -358,7 +380,7 @@ export function GroupDetail() {
                   { key: 'import', icon: <FileWordOutlined />, label: t('import_into_group'), onClick: () => navigate(`/import?group=${group.id}`) },
                 ],
               },
-              { key: 'rename', icon: <EditOutlined />, label: t('rename_group'), onClick: withPin(setRenaming) },
+              { key: 'rename', icon: <EditOutlined />, label: t('edit_group'), onClick: withPin(setRenaming) },
               { key: 'labels', icon: <PrinterOutlined />, label: t('act_labels'), onClick: printLabels, disabled: !ids.length },
               { key: 'delete', icon: <DeleteOutlined />, label: t('delete'), danger: true, onClick: remove, confirm: { title: t('delete_group_confirm') } },
             ]}
@@ -377,7 +399,7 @@ export function GroupDetail() {
           </div>
           <div className="page-actions">
             <Button icon={<EditOutlined />} onClick={withPin(setRenaming)}>
-              {t('rename_group')}
+              {t('edit_group')}
             </Button>
             <Button icon={<PrinterOutlined />} disabled={!ids.length} onClick={printLabels}>
               {t('print_labels', { n: ids.length })}
@@ -390,6 +412,18 @@ export function GroupDetail() {
           </div>
         </div>
       )}
+
+      <div className="voucher-group-info">
+        <TagsOutlined />
+        <span>
+          <Typography.Text type="secondary">{t('voucher_code')}: </Typography.Text>
+          <b>{group.voucher_code || '—'}</b>
+        </span>
+        <span>
+          <Typography.Text type="secondary">{t('voucher_name')}: </Typography.Text>
+          <b>{group.voucher_name || group.name}</b>
+        </span>
+      </div>
 
       <Card
         title={`${t('group_units')} (${group.equipment.length})`}
