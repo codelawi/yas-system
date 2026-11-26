@@ -100,6 +100,23 @@ export function DocsIcon({ active }) {
   )
 }
 
+/** A receipt with lines: issue vouchers. */
+export function VoucherIcon({ active }) {
+  const paper = 'M6 3.75h12a1.25 1.25 0 0 1 1.25 1.25v15.25l-2.4-1.5-2.4 1.5-2.45-1.5-2.45 1.5-2.4-1.5-2.4 1.5V5A1.25 1.25 0 0 1 6 3.75z'
+  const lines = 'M8.5 8.25h7M8.5 11.75h7M8.5 15.25h4'
+  return active ? (
+    <svg {...svg}>
+      <path d={paper} fill="currentColor" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d={lines} {...cut} />
+    </svg>
+  ) : (
+    <svg {...svg}>
+      <path d={paper} {...line} />
+      <path d={lines} {...line} strokeWidth="1.6" />
+    </svg>
+  )
+}
+
 /** Nine dots (the sections menu), turning into a cross while it is open. */
 export function MenuIcon({ open }) {
   const dots = [5, 12, 19].flatMap((y) => [5, 12, 19].map((x) => [x, y]))

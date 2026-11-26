@@ -8,9 +8,24 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Custody extends Model
 {
-    protected $fillable = ['equipment_id', 'holder', 'holder_phone', 'holder_id_number', 'holder_department', 'notes', 'handed_at', 'due_back_at', 'returned_at', 'return_notes', 'handed_by', 'received_by'];
+    protected $fillable = ['equipment_id', 'voucher_id', 'holder', 'holder_phone', 'holder_id_number', 'holder_department', 'notes', 'handed_at', 'due_back_at', 'returned_at', 'return_notes', 'handed_by', 'received_by'];
 
     protected $casts = ['handed_at' => 'datetime', 'due_back_at' => 'date:Y-m-d', 'returned_at' => 'datetime'];
+
+    protected static function booted(): void
+    {
+        // Taken back anywhere (equipment page, custody page, another voucher): its voucher follows
+        static::saved(function (Custody $custody) {
+            if ($custody->voucher_id && $custody->wasChanged('returned_at')) {
+                $custody->voucher?->syncStatus();
+            }
+        });
+    }
+
+    public function voucher(): BelongsTo
+    {
+        return $this->belongsTo(Voucher::class);
+    }
 
     public function equipment(): BelongsTo
     {

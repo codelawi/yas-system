@@ -2440,3 +2440,187 @@ h5,
   line-height: 1.3;
   padding-block: 4px;
 }
+
+/* Issue vouchers */
+.voucher-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.voucher-panel {
+  padding: 14px;
+  margin-bottom: 12px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+.voucher-recipient {
+  margin-bottom: 12px;
+}
+.voucher-recipient label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.voucher-recipient-value {
+  font-size: 16px;
+  font-weight: 600;
+}
+.voucher-scan-label {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.voucher-replace-note {
+  margin-bottom: 12px;
+}
+.voucher-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+  color: #475569;
+  font-size: 13px;
+}
+.voucher-held-warning {
+  margin-top: 12px;
+}
+.voucher-item-name > span:first-child {
+  display: block;
+}
+.voucher-item-parent {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: #64748b;
+}
+.voucher-item-actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+  align-items: center;
+}
+.voucher-row-back td,
+.voucher-item-row.is-back {
+  opacity: 0.6;
+}
+.voucher-item-row {
+  cursor: default;
+}
+.voucher-section-title {
+  margin: 18px 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+.voucher-accessories {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.voucher-move-list > div {
+  margin-bottom: 4px;
+}
+.voucher-return-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.voucher-return-count {
+  margin-top: 10px;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+/* The hint in the app's font (the code itself stays monospaced) */
+.voucher-page .scan-bar .ant-input:placeholder-shown {
+  font-family: 'Inter Variable', 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+}
+
+/* The voucher as it will be printed */
+.voucher-sheet {
+  overflow-x: auto;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #0f172a;
+  font-size: 14px;
+}
+.voucher-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  line-height: 1.9;
+}
+.voucher-sheet-kind {
+  font-weight: 700;
+  text-decoration: underline;
+}
+.voucher-sheet-muted {
+  font-size: 13px;
+  color: #64748b;
+}
+.voucher-sheet-meta {
+  white-space: nowrap;
+}
+.voucher-sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.voucher-sheet-table th,
+.voucher-sheet-table td {
+  padding: 6px 8px;
+  border: 1px solid #334155;
+  text-align: center;
+}
+.voucher-sheet-table th {
+  background: #f1f5f9;
+  font-weight: 600;
+}
+.voucher-sheet-table td:nth-child(2) {
+  text-align: start;
+}
+.voucher-sheet-code,
+.voucher-sheet-qty,
+.voucher-sheet-table td:last-child {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.voucher-sheet-table td.voucher-sheet-empty {
+  padding: 18px;
+  color: #94a3b8;
+  text-align: center;
+}
+.voucher-no-code {
+  font-size: 12px;
+  font-weight: 500;
+  color: #b45309;
+}
+
+/* Return: by scanning, or everything with one press */
+.voucher-return-all {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.voucher-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+.voucher-or::before,
+.voucher-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}

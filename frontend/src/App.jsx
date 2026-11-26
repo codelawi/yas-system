@@ -28,6 +28,7 @@ import { CustodyFormPage, CustodyFormsPage } from './pages/CustodyFormsPage'
 import { BoxDetail, BoxesPage, ScanBoxPage } from './pages/BoxPages'
 import { GroupDetail, GroupsPage } from './pages/GroupPages'
 import { VoucherCodeImportPage, VoucherCodesPage } from './pages/VoucherCodePages'
+import { VoucherPage, VoucherReturnPage, VouchersPage } from './pages/VoucherPages'
 import BoxLabelsPrint from './pages/BoxLabelsPrint'
 import BoxReport from './pages/BoxReport'
 import OfflinePage from './pages/OfflinePage'
@@ -102,6 +103,9 @@ function Shell() {
       <Route path="/custody" element={<CustodyPage />} />
       <Route path="/custody/forms" element={<CustodyFormsPage />} />
       <Route path="/custody/forms/:id" element={<CustodyFormPage />} />
+      <Route path="/vouchers" element={<VouchersPage />} />
+      <Route path="/vouchers/return" element={<VoucherReturnPage />} />
+      <Route path="/vouchers/:id" element={<VoucherPage />} />
       <Route path="/stocktakes" element={<StocktakesPage />} />
       <Route path="/stocktakes/:id" element={<StocktakePage />} />
       <Route path="/scan-documents" element={<ScanFoldersPage />} />

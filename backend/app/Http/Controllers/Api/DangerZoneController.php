@@ -12,6 +12,7 @@ use App\Models\MaintenanceRecord;
 use App\Models\MaintenanceSchedule;
 use App\Models\ScanDocumentRow;
 use App\Models\Stocktake;
+use App\Models\Voucher;
 use App\Services\BackupManager;
 use App\Support\PinConfirmation;
 use Illuminate\Http\Request;
@@ -36,7 +37,7 @@ class DangerZoneController extends Controller
         return [
             'history' => ActivityLog::count(),
             'stocktakes' => Stocktake::count(),
-            'custody' => Custody::count(),
+            'custody' => Custody::count() + Voucher::count(),
             'issues' => IssueReport::count(),
             'maintenance' => MaintenanceSchedule::count() + MaintenanceRecord::count(),
             'equipment' => Equipment::withTrashed()->count(),
@@ -59,7 +60,7 @@ class DangerZoneController extends Controller
         $deleted = DB::transaction(fn () => match ($data['target']) {
             'history' => ActivityLog::query()->delete(),
             'stocktakes' => Stocktake::query()->delete(),
-            'custody' => Custody::query()->delete(),
+            'custody' => Voucher::query()->delete() + Custody::query()->delete(),
             'issues' => IssueReport::query()->delete(),
             'maintenance' => MaintenanceRecord::query()->delete() + MaintenanceSchedule::query()->delete(),
             'equipment' => $this->clearEquipment(),
@@ -102,6 +103,7 @@ class DangerZoneController extends Controller
         $count = Equipment::withTrashed()->whereNotNull('parent_id')->forceDelete()
             + Equipment::withTrashed()->forceDelete();
         Import::query()->delete();
+        Voucher::query()->delete(); // empty once their equipment is gone
 
         return $count;
     }

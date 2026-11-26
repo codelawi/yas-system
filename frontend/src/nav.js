@@ -5,6 +5,7 @@ import {
   ClusterOutlined,
   CloudDownloadOutlined,
   DashboardOutlined,
+  FileDoneOutlined,
   FileWordOutlined,
   HistoryOutlined,
   InboxOutlined,
@@ -17,7 +18,7 @@ import {
 } from '@ant-design/icons'
 
 /**
- * The app's sections, in menu order. On phones the four with `tab` are the bottom tabs and the
+ * The app's sections, in menu order. On phones the ones with `tab` are bottom tabs and the
  * others are in the top bar's menu; `color` tints their icon there.
  */
 export const SECTIONS = [
@@ -27,6 +28,7 @@ export const SECTIONS = [
   { to: '/boxes', label: 'boxes', icon: InboxOutlined, tab: true },
   { to: '/import', label: 'import', icon: FileWordOutlined, color: '#4f46e5' },
   { to: '/custody', label: 'custodies', icon: UserSwitchOutlined, color: '#7c3aed' },
+  { to: '/vouchers', label: 'vouchers', icon: FileDoneOutlined, tab: true },
   { to: '/stocktakes', label: 'stocktake', icon: AuditOutlined, color: '#059669' },
   { to: '/scan-documents', label: 'scan_docs', icon: ScanOutlined, tab: true },
   { to: '/qr', label: 'qr_codes', icon: QrcodeOutlined, color: '#334155' },

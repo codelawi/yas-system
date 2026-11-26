@@ -24,48 +24,10 @@ import CodeScanner from '../components/CodeScanner'
 import { cellText, downloadScanDocDocx } from '../scanDocExport'
 import { usePhone } from '../nav'
 import { Fab, PhoneActions, PhoneHeader, PhoneList, PhoneRow, PhoneSkeleton } from '../components/PhoneUI'
+import useRevisionPoll from '../revisionPoll'
 
-/** How often open screens ask the server whether something changed (ms). */
-const POLL_MS = 1500
 /** How long a row added from another device stays highlighted (ms). */
 const FRESH_MS = 4000
-
-/**
- * Live updates without any extra server: every POLL_MS asks `url` for the current revision and calls
- * `onChange` when it differs from `known.current` (the caller sets it after each load).
- * Pauses while the tab is hidden and checks at once when it is shown again.
- */
-function useRevisionPoll(url, known, onChange) {
-  const callback = useRef(onChange)
-  callback.current = onChange
-
-  useEffect(() => {
-    let stopped = false
-    let busy = false
-    const check = async () => {
-      if (stopped || busy || document.visibilityState !== 'visible') return
-      busy = true
-      try {
-        const { data } = await api.get(url)
-        if (!stopped && data.revision !== known.current) {
-          known.current = data.revision
-          await callback.current()
-        }
-      } catch {
-        /* the server is busy or out of reach: try again next time */
-      } finally {
-        busy = false
-      }
-    }
-    const timer = setInterval(check, POLL_MS)
-    document.addEventListener('visibilitychange', check)
-    return () => {
-      stopped = true
-      clearInterval(timer)
-      document.removeEventListener('visibilitychange', check)
-    }
-  }, [url, known])
-}
 
 const folderPath = (folderId) => `/scan-documents/folders/${folderId}`
 const formatTime = (value) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '—')
