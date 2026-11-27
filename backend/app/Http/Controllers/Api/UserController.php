@@ -18,8 +18,10 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $data = $this->validated($request, null);
+        $user = User::create($data);
+        $user->rememberOfflinePin($data['pin']);
 
-        return User::create($data)->only(['id', 'name', 'role', 'is_active']);
+        return $user->only(['id', 'name', 'role', 'is_active']);
     }
 
     public function update(Request $request, User $user)
@@ -34,6 +36,9 @@ class UserController extends Controller
         }
 
         $user->update($data);
+        if (isset($data['pin'])) {
+            $user->rememberOfflinePin($data['pin']);
+        }
         if (! $user->is_active) {
             $user->tokens()->delete();
         }

@@ -8,6 +8,9 @@ import { isOffline } from './offline'
 const AuthContext = createContext(null)
 const USER_KEY = 'repo_user'
 
+/** A token from a PIN checked on the phone without a connection (sw.js): the server does not know it. */
+const isPhoneToken = (token) => !!token?.startsWith('offline.')
+
 function readUser() {
   try {
     return tokenStore.get() ? JSON.parse(localStorage.getItem(USER_KEY)) : null
@@ -49,17 +52,21 @@ export function AuthProvider({ children }) {
   }
 
   const requirePin = useCallback(() => {
-    // Changes are saved on the server: none while the phone shows its saved copy
-    if (isOffline()) {
+    const token = tokenStore.get()
+    // Changes are saved on the server: none while the phone shows its saved copy.
+    // The PIN is still asked when none was entered: the phone checks it, to open what needs one
+    if (isOffline() && token && user) {
       message.warning(t('offline_no_edit'))
       return Promise.resolve(null)
     }
-    if (tokenStore.get() && user) return Promise.resolve(user)
+    // Back on the network after unlocking offline: the server wants a PIN of its own
+    if (!isOffline() && isPhoneToken(token)) clear()
+    else if (token && user) return Promise.resolve(user)
     setPin('')
     setError(null)
     setOpen(true)
     return new Promise((resolve) => waiters.current.push(resolve))
-  }, [user, message, t])
+  }, [user, message, t, clear])
 
   const submit = async () => {
     if (!pin) return
@@ -71,7 +78,11 @@ export function AuthProvider({ children }) {
       localStorage.setItem(USER_KEY, JSON.stringify(data.user))
       setUser(data.user)
       setOpen(false)
-      settle(data.user)
+      if (isOffline()) {
+        // Unlocked on the phone: what needs a PIN opens, but nothing can be changed
+        message.info(t('offline_unlocked'))
+        settle(null)
+      } else settle(data.user)
     } catch (e) {
       setError(t(errorKey(e) || 'error'))
       setPin('')

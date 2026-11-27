@@ -27,5 +27,6 @@ class PinConfirmation
             throw ValidationException::withMessages(['pin' => 'wrong_pin']);
         }
         RateLimiter::clear($key);
+        $request->user()->rememberOfflinePin($pin);
     }
 }
