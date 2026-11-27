@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Box;
 use App\Models\Equipment;
+use App\Support\OfflineContext;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -55,7 +56,8 @@ class BoxController extends Controller
     public function store(Request $request)
     {
         $data = $this->validated($request);
-        $box = Box::create([...$data, 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id]);
+        // Added on a phone without a connection: it has no label yet
+        $box = Box::create([...$data, 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id, 'label_pending' => OfflineContext::active()]);
 
         return $this->detail($box);
     }

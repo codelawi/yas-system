@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Alert, Card, Col, Empty, Row, Select, Spin, Tabs, Tag, Tooltip, Typography } from 'antd'
+import { Alert, App, Button, Card, Col, Empty, Row, Select, Space, Spin, Tabs, Tag, Tooltip, Typography } from 'antd'
 import {
   ApartmentOutlined,
   AppstoreOutlined,
@@ -11,6 +11,7 @@ import {
   ExclamationCircleFilled,
   FileWordOutlined,
   HistoryOutlined,
+  InboxOutlined,
   PlusOutlined,
   PrinterOutlined,
   QrcodeOutlined,
@@ -37,11 +38,19 @@ export default function Dashboard() {
   const { t } = useLang()
   const { user } = useAuth()
   const [stats, setStats] = useState(null)
+  const [reload, setReload] = useState(0)
 
   // Reload after the PIN is entered: the activity chart is only sent then
   useEffect(() => {
     api.get('/stats').then(({ data }) => setStats(data))
-  }, [user])
+  }, [user, reload])
+
+  // Labels printed in another tab leave the «waiting for a label» list
+  useEffect(() => {
+    const again = () => setReload((n) => n + 1)
+    window.addEventListener('focus', again)
+    return () => window.removeEventListener('focus', again)
+  }, [])
 
   if (!stats) return <Spin size="large" className="page-spin" />
 
@@ -50,6 +59,8 @@ export default function Dashboard() {
       <Typography.Title level={3}>{t('dashboard')}</Typography.Title>
 
       <QuickActions />
+
+      <PendingLabelsCard pending={stats.pending_labels} onDone={() => setReload((n) => n + 1)} />
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         {[
@@ -307,6 +318,78 @@ function FollowUpCard({ stats }) {
           },
         ]}
       />
+    </Card>
+  )
+}
+
+/** Shown on the first rows of the list; the print pages take all of them. */
+const PENDING_SHOWN = 6
+
+/**
+ * Equipment and boxes added on a phone without a connection: their labels were never printed.
+ * Printing them (or «Done») takes them off the list, on every device.
+ */
+function PendingLabelsCard({ pending, onDone }) {
+  const { t } = useLang()
+  const { requirePin } = useAuth()
+  const { message } = App.useApp()
+  const [busy, setBusy] = useState(false)
+  const equipment = pending?.equipment || []
+  const boxes = pending?.boxes || []
+  if (!equipment.length && !boxes.length) return null
+
+  const done = async () => {
+    if (!(await requirePin())) return
+    setBusy(true)
+    try {
+      await api.post('/labels/pending/clear', { equipment_ids: equipment.map((e) => e.id), box_ids: boxes.map((b) => b.id) })
+      onDone()
+    } catch {
+      message.error(t('error'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const rows = [
+    ...equipment.map((e) => ({ key: `e${e.id}`, to: `/equipment/${e.id}`, code: e.serial_number, name: e.display_name })),
+    ...boxes.map((b) => ({ key: `b${b.id}`, to: `/boxes/${b.id}`, code: `${t('box')} ${b.number}`, name: b.name })),
+  ]
+  return (
+    <Card
+      className="pending-labels"
+      style={{ marginBottom: 16 }}
+      title={
+        <span>
+          <PrinterOutlined /> {t('pending_labels_title')} <Tag color="orange">{rows.length}</Tag>
+        </span>
+      }
+    >
+      <Typography.Paragraph type="secondary">{t('pending_labels_hint')}</Typography.Paragraph>
+      <div className="mini-list">
+        {rows.slice(0, PENDING_SHOWN).map((row) => (
+          <Link key={row.key} to={row.to} className="mini-row">
+            <span className="serial">{row.code}</span>
+            {row.name && <span className="mini-sub">{row.name}</span>}
+          </Link>
+        ))}
+        {rows.length > PENDING_SHOWN && <Typography.Text type="secondary">{t('and_n_more', { n: rows.length - PENDING_SHOWN })}</Typography.Text>}
+      </div>
+      <Space wrap style={{ marginTop: 12 }}>
+        {equipment.length > 0 && (
+          <Button type="primary" icon={<PrinterOutlined />} onClick={() => window.open(`/labels?ids=${equipment.map((e) => e.id).join(',')}`, '_blank')}>
+            {t('pending_labels_print_equipment', { n: equipment.length })}
+          </Button>
+        )}
+        {boxes.length > 0 && (
+          <Button icon={<InboxOutlined />} onClick={() => window.open(`/boxes/labels?ids=${boxes.map((b) => b.id).join(',')}`, '_blank')}>
+            {t('pending_labels_print_boxes', { n: boxes.length })}
+          </Button>
+        )}
+        <Button icon={<CheckCircleFilled />} loading={busy} onClick={done}>
+          {t('pending_labels_done')}
+        </Button>
+      </Space>
     </Card>
   )
 }

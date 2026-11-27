@@ -18,27 +18,39 @@ const PARALLEL = 4
 
 export const offlineSupported = () => window.isSecureContext && 'serviceWorker' in navigator && 'caches' in window
 
-/* ---------- Is the data on screen from the saved copy? (set by api.js from the worker's X-Repo-Offline header) */
+/*
+ * ---------- Is the data on screen from the saved copy? Set by api.js from the worker's headers:
+ * X-Repo-Offline (from the copy), X-Repo-Changes (changes waiting on the phone) and X-Repo-Server
+ * (the server answered the worker's last check).
+ */
 
-let offline = false
+let current = { offline: false, changes: 0, server: false }
 const listeners = new Set()
 
-export function setOffline(value) {
-  if (offline === value) return
-  offline = value
+export function setOfflineState(next) {
+  const state = { ...current, ...next }
+  if (state.offline === current.offline && state.changes === current.changes && state.server === current.server) return
+  current = state
   listeners.forEach((listener) => listener())
 }
 
-export const isOffline = () => offline
+export const setOffline = (value) => setOfflineState(value ? { offline: true } : { offline: false, changes: 0, server: true })
 
-export const useOffline = () =>
-  useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
-    () => offline,
-  )
+/** The pages show the phone's copy (no connection, or changes waiting to be synced). */
+export const isOffline = () => current.offline
+
+const subscribe = (listener) => {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+export const useOffline = () => useSyncExternalStore(subscribe, () => current.offline)
+
+/** { offline, changes, server } */
+export const useOfflineState = () => useSyncExternalStore(subscribe, () => current)
+
+/** Pages read again after the changes on the phone changed (undone, or synced). */
+export const OFFLINE_CHANGED = 'offline:changed'
 
 /* ---------- The saved copy */
 
@@ -82,10 +94,11 @@ export class OfflineNeedsPin extends Error {}
 
 /**
  * Downloads everything to this phone (the app, the data, and the photos if asked), with the
- * token of a PIN entered on it. onProgress({ step: 'app' | 'ocr' | 'data' | 'photos', done, total }).
+ * token of a PIN entered on it (and whose it is). onProgress({ step: 'app' | 'ocr' | 'data' | 'photos', done, total }).
+ * clearChanges: the changes kept on the phone were synced.
  * Returns the new meta.
  */
-export async function downloadOffline({ token, withPhotos, onProgress = () => {} }) {
+export async function downloadOffline({ token, user, withPhotos, onProgress = () => {}, clearChanges = false }) {
   onProgress({ step: 'app' })
   const registration = await navigator.serviceWorker.register('/sw.js')
   await whenActive(registration)
@@ -95,7 +108,8 @@ export async function downloadOffline({ token, withPhotos, onProgress = () => {}
   await saveOcrFiles()
 
   onProgress({ step: 'data' })
-  const response = await fetch('/api/offline/snapshot', { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }, cache: 'no-store' })
+  // From the server itself, never the phone's copy (X-Repo-Direct, see sw.js)
+  const response = await fetch('/api/offline/snapshot', { headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'X-Repo-Direct': '1' }, cache: 'no-store' })
   if (response.status === 401) throw new OfflineNeedsPin()
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   const text = await response.text()
@@ -117,7 +131,7 @@ export async function downloadOffline({ token, withPhotos, onProgress = () => {}
     onProgress({ step: 'photos', done: photos, total: wanted.size })
     await inParallel(missing, PARALLEL, async (url) => {
       try {
-        const photo = await fetch(url)
+        const photo = await fetch(url, { headers: { 'X-Repo-Direct': '1' } })
         if (!photo.ok) throw new Error(`HTTP ${photo.status}`)
         await cache.put(url, photo)
         photos++
@@ -147,7 +161,11 @@ export async function downloadOffline({ token, withPhotos, onProgress = () => {}
   const cache = await caches.open(DATA)
   await cache.put(SNAPSHOT_KEY, new Response(text, { headers: { 'Content-Type': 'application/json' } }))
   await cache.put(META_KEY, new Response(JSON.stringify(meta), { headers: { 'Content-Type': 'application/json' } }))
+  // A new copy starts with no changes (the sync sent them, see offlineSync.js)
+  if (clearChanges) await clearSavedChanges(cache)
   registration.active?.postMessage('snapshot-changed')
+  // Changes made with this token without a connection are kept under this person's name
+  if (user) registration.active?.postMessage({ type: 'token', token, user })
 
   // Ask the browser not to clear the copy when the phone runs low on space
   try {
@@ -156,6 +174,39 @@ export async function downloadOffline({ token, withPhotos, onProgress = () => {}
     /* not supported: the copy may be cleared, the page says when it was saved */
   }
   return meta
+}
+
+/* ---------- Changes kept on the phone (written by sw.js) */
+
+const CHANGES_KEY = '/__offline__/changes.json'
+const FILES = '/__offline__/files/'
+
+/** The changes waiting on this phone, as sw.js keeps them: [{ id, key, at, user, method, path, body, ids }]. */
+export async function readSavedChanges() {
+  if (!offlineSupported()) return []
+  try {
+    const response = await (await caches.open(DATA)).match(CHANGES_KEY)
+    return response ? (await response.json()).changes || [] : []
+  } catch {
+    return []
+  }
+}
+
+/** The copy the changes were made on. */
+export async function readSavedCopy() {
+  const response = await (await caches.open(DATA)).match(SNAPSHOT_KEY)
+  return response ? response.json() : null
+}
+
+/** A photo taken with a change ({ file } in its body). */
+export async function readSavedFile(file) {
+  const response = await (await caches.open(DATA)).match(FILES + file)
+  return response ? response.blob() : null
+}
+
+async function clearSavedChanges(cache) {
+  await cache.delete(CHANGES_KEY)
+  for (const request of await cache.keys()) if (new URL(request.url).pathname.startsWith(FILES)) await cache.delete(request)
 }
 
 /** Removes the copy, the photos, the saved app and the worker from this phone. */

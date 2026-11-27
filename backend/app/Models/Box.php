@@ -8,9 +8,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 /** A numbered box with its own QR label, holding a group of equipment. */
 class Box extends Model
 {
-    protected $fillable = ['number', 'name', 'weight', 'created_by', 'updated_by'];
+    protected $fillable = ['number', 'name', 'weight', 'created_by', 'updated_by', 'label_pending'];
 
-    protected $casts = ['weight' => 'float'];
+    protected $casts = ['weight' => 'float', 'label_pending' => 'boolean'];
+
+    protected $hidden = ['label_pending'];
 
     public function equipment(): BelongsToMany
     {

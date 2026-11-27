@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Box;
+use App\Models\Equipment;
 use App\Models\Setting;
 use App\Support\QrAddress;
 use Illuminate\Http\Request;
@@ -14,16 +16,47 @@ class SettingController extends Controller
         return Setting::allValues();
     }
 
-    /** Called by the print page after the print dialog: counts labels printed per QR address. */
+    /**
+     * Called by the print page after the print dialog: counts labels printed per QR address, and
+     * takes what was printed off the list of labels still to print.
+     */
     public function labelsPrinted(Request $request)
     {
         $data = $request->validate([
             'url' => ['required', 'string', 'max:255', 'regex:#^https?://[^\s/]+/?$#i'],
             'count' => ['required', 'integer', 'min:1', 'max:5000'],
+            ...self::PENDING_RULES,
         ]);
         QrAddress::recordPrinted($data['url'], $data['count']);
+        self::labelsDone($data);
 
         return ['printed' => QrAddress::printed()];
+    }
+
+    /** Takes equipment and boxes off the list of labels still to print («تم» on the home page). */
+    public function clearPendingLabels(Request $request)
+    {
+        self::labelsDone($request->validate(self::PENDING_RULES));
+
+        return response()->noContent();
+    }
+
+    private const PENDING_RULES = [
+        'equipment_ids' => ['sometimes', 'array', 'max:5000'],
+        'equipment_ids.*' => ['integer'],
+        'box_ids' => ['sometimes', 'array', 'max:5000'],
+        'box_ids.*' => ['integer'],
+    ];
+
+    /** @param  array{equipment_ids?: list<int>, box_ids?: list<int>}  $data */
+    private static function labelsDone(array $data): void
+    {
+        if (! empty($data['equipment_ids'])) {
+            Equipment::whereIn('id', $data['equipment_ids'])->where('label_pending', true)->toBase()->update(['label_pending' => false]);
+        }
+        if (! empty($data['box_ids'])) {
+            Box::whereIn('id', $data['box_ids'])->where('label_pending', true)->toBase()->update(['label_pending' => false]);
+        }
     }
 
     /** Partial update: the QR page and the Settings page each send only their own keys. */

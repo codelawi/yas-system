@@ -53,12 +53,9 @@ export function AuthProvider({ children }) {
 
   const requirePin = useCallback(() => {
     const token = tokenStore.get()
-    // Changes are saved on the server: none while the phone shows its saved copy.
-    // The PIN is still asked when none was entered: the phone checks it, to open what needs one
-    if (isOffline() && token && user) {
-      message.warning(t('offline_no_edit'))
-      return Promise.resolve(null)
-    }
+    // On the phone's copy a change is kept on the phone (sw.js) under the name of whoever is
+    // unlocked; the PIN is asked when nobody is, and the phone checks it
+    if (isOffline() && token && user) return Promise.resolve(user)
     // Back on the network after unlocking offline: the server wants a PIN of its own
     if (!isOffline() && isPhoneToken(token)) clear()
     else if (token && user) return Promise.resolve(user)
@@ -66,7 +63,7 @@ export function AuthProvider({ children }) {
     setError(null)
     setOpen(true)
     return new Promise((resolve) => waiters.current.push(resolve))
-  }, [user, message, t, clear])
+  }, [user, clear])
 
   const submit = async () => {
     if (!pin) return
@@ -78,11 +75,9 @@ export function AuthProvider({ children }) {
       localStorage.setItem(USER_KEY, JSON.stringify(data.user))
       setUser(data.user)
       setOpen(false)
-      if (isOffline()) {
-        // Unlocked on the phone: what needs a PIN opens, but nothing can be changed
-        message.info(t('offline_unlocked'))
-        settle(null)
-      } else settle(data.user)
+      // Unlocked on the phone: changes wait on it until it syncs
+      if (isOffline()) message.info(t('offline_unlocked'))
+      settle(data.user)
     } catch (e) {
       setError(t(errorKey(e) || 'error'))
       setPin('')
@@ -143,3 +138,9 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthContext)
+
+/** Keeps a token and whose it is, as entering the PIN does (after a sync, which asked for it). */
+export function saveSession(token, user) {
+  tokenStore.set(token)
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
+}

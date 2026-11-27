@@ -28,6 +28,7 @@ import BulkEditModal from '../components/BulkEditModal'
 import { downloadFile } from '../download'
 import { usePhone } from '../nav'
 import { ChipRow, Fab, PhoneHeader, PhoneList, PhoneRow, PhoneSearch, PhoneSkeleton, SelectionBar } from '../components/PhoneUI'
+import { OfflineMark } from '../components/OfflineChanges'
 
 function parseFilters(params) {
   let filters = []
@@ -84,7 +85,11 @@ function PhoneUnit({ unit, selecting, selected, onSelect }) {
       to={`/equipment/${unit.id}`}
       icon={unit.parent ? <ApartmentOutlined /> : <AppstoreOutlined />}
       tone={unit.parent ? 'violet' : 'blue'}
-      title={unit.display_name || <span className="serial">{unit.serial_number || '—'}</span>}
+      title={
+        <>
+          {unit.display_name || <span className="serial">{unit.serial_number || '—'}</span>} <OfflineMark mark={unit.offline} />
+        </>
+      }
       subtitle={
         <>
           {unit.display_name && <span className="serial">{unit.serial_number || '—'}</span>}

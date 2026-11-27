@@ -27,6 +27,7 @@ import { PhoneActions, PhoneHeader } from './PhoneUI'
 import EquipmentForm from './EquipmentForm'
 import EquipmentPicker from './EquipmentPicker'
 import GroupSelect from './GroupSelect'
+import { OfflineMark, UnsyncedCard } from './OfflineChanges'
 
 /** "12.5 كغ" */
 export function formatWeight(weight, t) {
@@ -383,6 +384,8 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
         </>
       )}
 
+      {!printMode && <UnsyncedCard changes={box.offline_changes} />}
+
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={printMode ? 24 : 16}>
           {/* No frame around the contents on the printed sheet */}
@@ -446,7 +449,9 @@ export default function BoxView({ box, onChange, onDeleted, mobile, printMode })
                               <span className="box-item-photo box-item-nophoto">{!printMode && <PictureOutlined />}</span>
                             )}
                             <span className="box-item-text">
-                              <span className="box-item-name">{eq.display_name || eq.serial_number || t('accessory')}</span>
+                              <span className="box-item-name">
+                                {eq.display_name || eq.serial_number || t('accessory')} <OfflineMark mark={eq.offline} />
+                              </span>
                               {/* A few details instead of the serial number (it is on the equipment's own page) */}
                               {eq.summary?.length > 0 && (
                                 <span className="box-item-details">

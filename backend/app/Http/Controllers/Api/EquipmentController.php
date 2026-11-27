@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\Box;
 use App\Models\Equipment;
 use App\Models\EquipmentField;
 use App\Models\EquipmentGroup;
@@ -14,12 +15,14 @@ use App\Models\Setting;
 use App\Services\WordTableParser;
 use App\Support\EquipmentFilters;
 use App\Support\FieldDiff;
+use App\Support\OfflineContext;
 use App\Support\PinConfirmation;
 use App\Support\QrAddress;
 use App\Support\XlsxWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class EquipmentController extends Controller
 {
@@ -178,6 +181,8 @@ class EquipmentController extends Controller
                 'group_id' => $parent ? null : ($data['group_id'] ?? null),
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
+                // Added on a phone without a connection: it has no label yet
+                'label_pending' => OfflineContext::active() && $data['serial_number'] !== null,
             ]);
             $equipment->syncFields($data['fields'] ?? []);
             ActivityLog::record($equipment, 'created', ['added' => $equipment->fieldList()]);
@@ -237,6 +242,25 @@ class EquipmentController extends Controller
         DB::transaction(fn () => $this->deleteWithAccessories($equipment));
 
         return response()->noContent();
+    }
+
+    /**
+     * Brings back a deleted equipment: a phone changed it without a connection while it was
+     * deleted here, and the person syncing chose to keep the phone's changes.
+     */
+    public function restore(Equipment $equipment)
+    {
+        if ($equipment->trashed()) {
+            $parentGone = $equipment->isAccessory() && ! Equipment::whereKey($equipment->parent_id)->exists();
+            $serialTaken = ! $equipment->isAccessory() && Equipment::whereNull('parent_id')->where('serial_number', $equipment->serial_number)->exists();
+            if ($parentGone || $serialTaken) {
+                throw ValidationException::withMessages(['serial_number' => $parentGone ? 'parent_deleted' : 'serial_taken']);
+            }
+            $equipment->restore();
+            ActivityLog::record($equipment, 'restored');
+        }
+
+        return $this->detail($equipment);
     }
 
     /** Deletes several equipment at once (each one with its accessories). */
@@ -440,6 +464,7 @@ class EquipmentController extends Controller
                 'last_backup_at' => Setting::get('last_backup_at') ?: null,
             ],
             'attention' => $this->needsAttention(),
+            'pending_labels' => $this->pendingLabels(),
             'maintenance' => [
                 'overdue' => MaintenanceSchedule::whereHas('equipment')->where('due_date', '<', now()->toDateString())->count(),
                 'soon' => MaintenanceSchedule::whereHas('equipment')->whereBetween('due_date', [now()->toDateString(), now()->addDays(7)->toDateString()])->count(),
@@ -511,6 +536,23 @@ class EquipmentController extends Controller
                 'key' => $m->key,
                 'value' => strtok((string) $m->value, "\n"),
             ])->values()->all(),
+        ];
+    }
+
+    /**
+     * Equipment and boxes added on a phone without a connection whose labels are not printed yet.
+     *
+     * @return array{equipment: list<array{id: int, serial_number: ?string, display_name: ?string}>, boxes: list<array{id: int, number: string, name: ?string}>}
+     */
+    private function pendingLabels(): array
+    {
+        return [
+            'equipment' => Equipment::with(['fields', 'group:id,name'])->where('label_pending', true)->orderBy('id')->limit(500)->get()
+                ->map(fn (Equipment $e) => ['id' => $e->id, 'serial_number' => $e->serial_number, 'display_name' => $this->displayName($e)])
+                ->all(),
+            'boxes' => Box::where('label_pending', true)->orderBy('id')->limit(500)->get()
+                ->map(fn (Box $b) => ['id' => $b->id, 'number' => $b->number, 'name' => $b->name])
+                ->all(),
         ];
     }
 

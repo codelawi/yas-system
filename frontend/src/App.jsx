@@ -34,6 +34,7 @@ import BoxReport from './pages/BoxReport'
 import OfflinePage from './pages/OfflinePage'
 import { ScanDocumentPage, ScanFolderPage, ScanFoldersPage } from './pages/ScanDocumentPages'
 import OfflineBanner from './components/OfflineBanner'
+import SyncDialog from './components/OfflineSync'
 
 // Latin letters and digits come from Inter, Arabic letters from IBM Plex Sans Arabic
 const FONT = '"Inter Variable", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif'
@@ -52,6 +53,7 @@ export default function App() {
           <AuthProvider>
             {/* On phones it is under the app's top bar */}
             {!phone && <OfflineBanner />}
+            <SyncDialog />
             <Routes>
               <Route path="/labels" element={<LabelsPrint />} />
               {/* The laptop's print station: no menus, no PIN (it has its own key) */}

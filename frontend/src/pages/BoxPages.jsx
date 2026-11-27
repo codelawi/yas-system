@@ -10,6 +10,7 @@ import BoxView, { BoxForm, formatWeight } from '../components/BoxView'
 import { OfflineNoCopy, noOfflineCopy } from '../components/OfflineBanner'
 import { usePhone } from '../nav'
 import { Fab, PhoneHeader, PhoneList, PhoneRow, PhoneSearch, PhoneSkeleton, SelectionBar } from '../components/PhoneUI'
+import { OfflineMark } from '../components/OfflineChanges'
 
 /** All boxes: search, add, print labels. */
 export function BoxesPage() {
@@ -72,7 +73,11 @@ export function BoxesPage() {
                 to={`/boxes/${box.id}`}
                 icon={<span className="phone-box-number">{box.number}</span>}
                 tone="amber"
-                title={box.name || `${t('box')} ${box.number}`}
+                title={
+                  <>
+                    {box.name || `${t('box')} ${box.number}`} <OfflineMark mark={box.offline} />
+                  </>
+                }
                 subtitle={
                   <>
                     <span>{t('n_items', { n: box.equipment_count })}</span>

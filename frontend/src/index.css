@@ -1994,6 +1994,75 @@ h5,
   margin-top: 6px;
 }
 
+/* Changes made on the phone, not synced yet (components/OfflineChanges.jsx) */
+.offline-mark {
+  margin-inline-start: 6px;
+  font-size: 11px;
+  line-height: 18px;
+  padding-inline: 5px;
+  vertical-align: middle;
+}
+.offline-unsynced {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+.offline-unsynced .ant-card-head {
+  border-bottom-color: #fed7aa;
+}
+.offline-change {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.offline-change-meta,
+.offline-change-labels {
+  font-size: 12px;
+}
+.offline-change .history-changes {
+  margin-top: 4px;
+}
+.offline-undo-list {
+  padding-inline-start: 18px;
+  margin: 0;
+}
+
+/* The sync dialog (components/OfflineSync.jsx) */
+.sync-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+.sync-keep-open {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.sync-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.sync-question {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+.sync-question .cf-value {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Dashboard: equipment and boxes added offline, waiting for their labels */
+.pending-labels {
+  border-color: #fdba74;
+}
+
 /* ---------- Live QR / Data Matrix scanner (components/CodeScanner.jsx) ---------- */
 .code-scanner {
   position: fixed;

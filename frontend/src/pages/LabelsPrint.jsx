@@ -25,7 +25,8 @@ export default function LabelsPrint() {
   useEffect(() => {
     if (!items?.length || !ready) return
     const base = equipmentUrl(settings, 'x').replace(/\/eq\/x$/, '')
-    const onAfterPrint = () => api.post('/labels/printed', { url: base, count: items.length }).catch(() => {})
+    // Printed labels also leave the dashboard's «waiting for a label» list
+    const onAfterPrint = () => api.post('/labels/printed', { url: base, count: items.length, equipment_ids: items.map((eq) => eq.id) }).catch(() => {})
     window.addEventListener('afterprint', onAfterPrint)
     return () => window.removeEventListener('afterprint', onAfterPrint)
   }, [items, settings, ready])

@@ -13,6 +13,10 @@ class PinConfirmation
     /** @param string $askWith error sent when no PIN was given (the client then asks for it) */
     public static function check(Request $request, string $askWith = 'pin_required'): void
     {
+        // A change made on a phone without a connection: the phone asked for the PIN then
+        if (OfflineContext::active()) {
+            return;
+        }
         $pin = (string) $request->input('pin', '');
         if ($pin === '') {
             throw ValidationException::withMessages(['pin' => $askWith]);
