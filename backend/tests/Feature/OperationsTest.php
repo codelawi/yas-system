@@ -46,31 +46,20 @@ class OperationsTest extends TestCase
 
     // ------------------------------------------------------------ custody
 
-    public function test_hand_over_with_accessories_and_take_back(): void
+    public function test_custody_is_only_handed_over_with_issue_vouchers(): void
     {
         Sanctum::actingAs(User::factory()->create());
-        $main = Equipment::create(['serial_number' => 'K-1']);
-        Equipment::create(['serial_number' => 'K-1-A', 'parent_id' => $main->id]);
+        $e = Equipment::create(['serial_number' => 'K-1']);
+        Custody::create(['equipment_id' => $e->id, 'holder' => 'سالم', 'handed_at' => now()]);
 
-        $this->postJson("/api/equipment/{$main->id}/custody", ['holder' => 'أحمد', 'due_back_at' => now()->subDay()->toDateString(), 'include_accessories' => true])
-            ->assertOk()->assertJson(['handed_over' => 2]);
-        $this->postJson("/api/equipment/{$main->id}/custody", ['holder' => 'سالم'])->assertUnprocessable()->assertJsonPath('errors.holder.0', 'already_in_custody');
-        $this->getJson('/api/custody')->assertJsonCount(2, 'open')->assertJsonPath('holders.0', 'أحمد');
-        $this->getJson('/api/stats')->assertJsonPath('custody.overdue', 2);
-
-        $this->postJson("/api/equipment/{$main->id}/custody/return", ['return_notes' => 'سليم'])->assertOk()->assertJson(['received' => 2]);
+        $this->getJson('/api/custody')->assertNotFound();
+        $this->postJson("/api/equipment/{$e->id}/custody", ['holder' => 'أحمد'])->assertNotFound();
+        $this->postJson("/api/equipment/{$e->id}/custody/return")->assertNotFound();
+        $this->getJson('/api/custody-forms')->assertNotFound();
+        $this->getJson('/api/stats')->assertOk()->assertJsonMissingPath('custody');
+        // Custody from before the vouchers still comes back by scanning
+        $this->postJson('/api/vouchers/return', ['code' => 'K-1'])->assertJsonPath('status', 'returned')->assertJsonPath('holder', 'سالم');
         $this->assertSame(0, Custody::open()->count());
-        $this->assertSame(2, ActivityLog::where('action', 'custody_in')->count());
-    }
-
-    public function test_custody_needs_a_pin_and_names_are_private(): void
-    {
-        $e = Equipment::create(['serial_number' => 'K-2']);
-        Custody::create(['equipment_id' => $e->id, 'holder' => 'سري', 'handed_at' => now(), 'due_back_at' => now()->addDay()]);
-
-        $this->getJson('/api/custody')->assertUnauthorized();
-        $this->postJson("/api/equipment/{$e->id}/custody", ['holder' => 'x'])->assertUnauthorized();
-        $this->getJson('/api/stats')->assertJsonPath('custody.open', 1)->assertJsonPath('custody.items', null);
     }
 
     // ------------------------------------------------------------ damage reports

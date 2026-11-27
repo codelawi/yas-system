@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { Button, Checkbox, Result, Spin, Tooltip } from 'antd'
+import { Button, Spin } from 'antd'
 import { PrinterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api, { equipmentUrl } from '../api'
@@ -8,8 +8,6 @@ import { useLang } from '../i18n'
 import { useSettings } from '../settings'
 import QrCode from '../components/QrCode'
 import { filterLabel } from '../components/FieldFilter'
-import { ElementContent } from '../components/TemplateLabel'
-import { formElementText, loadFormPages } from '../custodyForm'
 
 /** Opens the print dialog once everything (fonts, QR) is ready. "Save as PDF" makes the PDF. */
 function useAutoPrint(ready) {
@@ -196,71 +194,6 @@ export function PrintList() {
           ))}
         </tbody>
       </table>
-    </div>
-  )
-}
-
-/** Custody form (PDF/image) filled for one hand-over, page by page at the form's real size. */
-export function PrintCustodyForm() {
-  const { custodyId } = useParams()
-  const [params] = useSearchParams()
-  const { t } = useLang()
-  const { settings } = useSettings()
-  const [form, setForm] = useState(null)
-  const [data, setData] = useState(null)
-  const [pages, setPages] = useState(null)
-  const [failed, setFailed] = useState(false)
-  const [background, setBackground] = useState(true)
-  const [qrDone, setQrDone] = useState(0)
-
-  useEffect(() => {
-    Promise.all([api.get('/custody-forms'), api.get(`/custodies/${custodyId}/form-data`)])
-      .then(([forms, values]) => {
-        const chosen = forms.data.find((f) => String(f.id) === params.get('form')) || forms.data.find((f) => f.is_default)
-        if (!chosen) throw new Error('no form')
-        setForm(chosen)
-        setData(values.data)
-        return loadFormPages(chosen, 3)
-      })
-      .then(setPages)
-      .catch(() => setFailed(true))
-  }, [custodyId, params])
-
-  const elements = form?.layout?.elements || []
-  const qrCount = elements.filter((el) => el.type === 'qr').length
-  useAutoPrint(pages && qrDone >= qrCount)
-
-  if (failed) return <Result status="warning" title={t('cf_load_failed')} />
-  if (!pages) return <Spin size="large" className="page-spin" />
-
-  const url = equipmentUrl(settings, data.serial_number)
-  const first = pages[0]
-
-  return (
-    <div className="cf-print">
-      <style>{`@page { size: ${first.w}mm ${first.h}mm; margin: 0; }`}</style>
-      <div className="no-print print-toolbar" style={{ gap: 16, alignItems: 'center' }}>
-        <Button type="primary" icon={<PrinterOutlined />} onClick={() => window.print()}>
-          {t('print_pdf')}
-        </Button>
-        <Tooltip title={t('cf_print_bg_help')}>
-          <Checkbox checked={background} onChange={(e) => setBackground(e.target.checked)}>
-            {t('cf_print_bg')}
-          </Checkbox>
-        </Tooltip>
-      </div>
-      {pages.map((page, i) => (
-        <div key={i} className="tlabel cf-page" dir="ltr" style={{ width: `${page.w}mm`, height: `${page.h}mm` }}>
-          {background && <img className="cf-bg" src={page.src} alt="" />}
-          {elements
-            .filter((el) => el.page === i)
-            .map((el) => (
-              <div key={el.id} className="tl-el" style={{ left: `${el.x}mm`, top: `${el.y}mm`, width: `${el.w}mm`, height: `${el.h}mm` }}>
-                <ElementContent el={el} url={url} value={formElementText(el, data)} onReady={() => setQrDone((n) => n + 1)} />
-              </div>
-            ))}
-        </div>
-      ))}
     </div>
   )
 }

@@ -13,7 +13,6 @@ import {
   ScanOutlined,
   SettingOutlined,
   TeamOutlined,
-  UserSwitchOutlined,
   WifiOutlined,
 } from '@ant-design/icons'
 
@@ -27,7 +26,6 @@ export const SECTIONS = [
   { to: '/groups', label: 'groups', icon: ClusterOutlined, color: '#0891b2' },
   { to: '/boxes', label: 'boxes', icon: InboxOutlined, tab: true },
   { to: '/import', label: 'import', icon: FileWordOutlined, color: '#4f46e5' },
-  { to: '/custody', label: 'custodies', icon: UserSwitchOutlined, color: '#7c3aed' },
   { to: '/vouchers', label: 'vouchers', icon: FileDoneOutlined, tab: true },
   { to: '/stocktakes', label: 'stocktake', icon: AuditOutlined, color: '#059669' },
   { to: '/scan-documents', label: 'scan_docs', icon: ScanOutlined, tab: true },

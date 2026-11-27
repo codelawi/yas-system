@@ -195,7 +195,7 @@ class VoucherTest extends TestCase
         Sanctum::actingAs(User::factory()->create(['pin' => '246810']));
         ['saws' => $saws] = $this->store();
         // SAW-2 was with Salem before this voucher took it
-        $this->postJson("/api/equipment/{$saws[1]->id}/custody", ['holder' => 'سالم'])->assertOk();
+        Custody::create(['equipment_id' => $saws[1]->id, 'holder' => 'سالم', 'handed_at' => now()->subDay()]);
         $id = $this->draft();
         foreach (['SAW-1', 'SAW-2', 'SAW-3'] as $code) {
             $this->postJson("/api/vouchers/{$id}/items", ['code' => $code, 'move' => true]);
@@ -223,8 +223,8 @@ class VoucherTest extends TestCase
         $first = $this->draft();
         $this->postJson("/api/vouchers/{$first}/items", ['code' => 'SAW-1']);
         $this->postJson("/api/vouchers/{$first}/issue", ['recipient' => 'أحمد']);
-        // Handed over from the equipment page, without a voucher
-        $this->postJson("/api/equipment/{$saws[1]->id}/custody", ['holder' => 'سالم'])->assertOk();
+        // Handed over before the vouchers, without one
+        Custody::create(['equipment_id' => $saws[1]->id, 'holder' => 'سالم', 'handed_at' => now()]);
 
         $id = $this->draft();
         $this->postJson("/api/vouchers/{$id}/items", ['code' => 'SAW-1'])
@@ -320,7 +320,7 @@ class VoucherTest extends TestCase
         $this->postJson("/api/vouchers/{$id}/items", ['code' => 'SAW-1']);
         $this->postJson("/api/vouchers/{$id}/items", ['code' => 'SAW-2']);
         $this->postJson("/api/vouchers/{$id}/issue", ['recipient' => 'أحمد']);
-        $this->postJson("/api/equipment/{$saws[2]->id}/custody", ['holder' => 'سالم']);
+        Custody::create(['equipment_id' => $saws[2]->id, 'holder' => 'سالم', 'handed_at' => now()]);
 
         $this->postJson('/api/vouchers/return', ['code' => 'SAW-1'])
             ->assertOk()
@@ -332,8 +332,8 @@ class VoucherTest extends TestCase
         $this->postJson('/api/vouchers/return', ['code' => 'SAW-1'])->assertJsonPath('status', 'not_held');
         $this->postJson('/api/vouchers/return', ['code' => 'SAW-3'])->assertJsonPath('status', 'returned')->assertJsonPath('voucher', null);
 
-        // Taken back from the equipment page: the voucher follows
-        $this->postJson("/api/equipment/{$saws[1]->id}/custody/return")->assertOk();
+        // The last one out: the voucher follows
+        $this->postJson('/api/vouchers/return', ['code' => 'SAW-2'])->assertJsonPath('voucher.held_count', 0);
         $this->assertSame('returned', Voucher::find($id)->status);
     }
 

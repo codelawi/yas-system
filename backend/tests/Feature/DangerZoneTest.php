@@ -4,12 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\ActivityLog;
 use App\Models\Custody;
-use App\Models\CustodyForm;
 use App\Models\Equipment;
 use App\Models\IssueReport;
 use App\Models\Setting;
 use App\Models\Stocktake;
 use App\Models\User;
+use App\Models\VoucherTemplate;
 use App\Services\BackupManager;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\File;
@@ -55,7 +55,7 @@ class DangerZoneTest extends TestCase
         Storage::put('issues/p.jpg', 'photo');
         IssueReport::create(['equipment_id' => $main->id, 'description' => 'كسر', 'photo_path' => 'issues/p.jpg']);
         Stocktake::create(['name' => 'جرد', 'status' => 'open']);
-        CustodyForm::create(['name' => 'سند', 'kind' => 'pdf', 'file_path' => 'custody_forms/x.pdf', 'original_name' => 'x.pdf']);
+        VoucherTemplate::current();
 
         return $main;
     }
@@ -76,7 +76,7 @@ class DangerZoneTest extends TestCase
         $this->assertStringContainsString('before-clear-history', $this->backups()[0]['file']);
     }
 
-    public function test_clearing_equipment_removes_linked_records_and_files_but_keeps_forms(): void
+    public function test_clearing_equipment_removes_linked_records_and_files_but_keeps_voucher_templates(): void
     {
         $this->seedData();
         $this->getJson('/api/danger')->assertOk()->assertJsonPath('equipment', 3)->assertJsonPath('custody', 1);
@@ -87,7 +87,7 @@ class DangerZoneTest extends TestCase
         $this->assertSame(0, Custody::count());
         $this->assertSame(0, IssueReport::count());
         $this->assertFalse(Storage::exists('issues/p.jpg'));
-        $this->assertSame(1, CustodyForm::count());
+        $this->assertSame(1, VoucherTemplate::count());
         $this->assertSame(1, Stocktake::count(), 'stocktakes are cleared on their own');
     }
 

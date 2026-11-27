@@ -25,7 +25,7 @@ use RuntimeException;
 /**
  * Settings → danger zone (admin only): clear data, delete backups.
  * Every action needs the PIN again; clearing data always makes a safety backup first.
- * Users, settings, label design and custody forms are never touched.
+ * Users, settings, label design and voucher templates are never touched.
  */
 class DangerZoneController extends Controller
 {

@@ -14,7 +14,6 @@ import HistoryLocked from './HistoryLocked'
 import EquipmentForm from './EquipmentForm'
 import { useLargeDelete } from '../largeDelete'
 import MaintenanceCard from './MaintenanceCard'
-import CustodyCard from './CustodyCard'
 import IssuesCard, { ReportProblemModal } from './IssuesCard'
 import EquipmentPhoto from './EquipmentPhoto'
 import { usePhone } from '../nav'
@@ -277,7 +276,6 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
             </div>
           </Card>
           {accessoriesCard}
-          <CustodyCard equipment={equipment} mobile={mobile} onChanged={onReload} />
           <MaintenanceCard equipment={equipment} onChanged={onReload} />
           {mobile && !phone && <div style={{ marginTop: 16 }}>{actions}</div>}
         </Col>

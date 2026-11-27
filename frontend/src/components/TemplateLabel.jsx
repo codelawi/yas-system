@@ -6,12 +6,10 @@ import { elementText } from '../labelTemplate'
 const MIN_FONT_MM = 0.4
 
 /** One element's content (shared by the printed label and the designer canvas). */
-export function ElementContent({ el, equipment, url, settings, onReady, placeholder, value }) {
+export function ElementContent({ el, equipment, url, settings, onReady, placeholder }) {
   const ref = useRef(null)
   const inner = useRef(null)
-  // `value`: text already worked out by the caller (custody forms); otherwise it comes from the equipment
-  const resolved = value ?? elementText(el, equipment, settings)
-  const text = resolved || (placeholder ? placeholder(el) : '')
+  const text = elementText(el, equipment, settings) || (placeholder ? placeholder(el) : '')
 
   // "Shrink to fit": scale the font down until the text fits its box, however long it is
   useLayoutEffect(() => {

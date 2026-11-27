@@ -4,8 +4,6 @@ use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BackupController;
 use App\Http\Controllers\Api\BoxController;
-use App\Http\Controllers\Api\CustodyController;
-use App\Http\Controllers\Api\CustodyFormController;
 use App\Http\Controllers\Api\DangerZoneController;
 use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\EquipmentGroupController;
@@ -124,17 +122,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/maintenance/{schedule}', [MaintenanceController::class, 'destroy']);
     Route::post('/maintenance/{schedule}/complete', [MaintenanceController::class, 'complete']);
 
-    Route::get('/custody', [CustodyController::class, 'index']);
-    Route::get('/custody/holders', [CustodyController::class, 'holders']);
-    Route::get('/equipment/{equipment}/custody', [CustodyController::class, 'equipmentIndex']);
-    Route::post('/equipment/{equipment}/custody', [CustodyController::class, 'handOver']);
-    Route::post('/equipment/{equipment}/custody/return', [CustodyController::class, 'receive']);
-    Route::get('/custody-forms', [CustodyFormController::class, 'index']);
-    Route::get('/custody-forms/{form}/file', [CustodyFormController::class, 'file']);
-    Route::get('/custody-forms/{form}/tags', [CustodyFormController::class, 'tags']);
-    Route::get('/custody-forms/{form}/fill/{custody}', [CustodyFormController::class, 'fill']);
-    Route::get('/custodies/{custody}/form-data', [CustodyFormController::class, 'data']);
-
     // Issue vouchers (سند صرف عهدة)
     Route::get('/vouchers', [VoucherController::class, 'index']);
     Route::post('/vouchers', [VoucherController::class, 'store']);
@@ -190,9 +177,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('admin')->group(function () {
         Route::apiResource('users', UserController::class)->except('show');
         Route::put('/settings', [SettingController::class, 'update']);
-        Route::post('/custody-forms', [CustodyFormController::class, 'store']);
-        Route::put('/custody-forms/{form}', [CustodyFormController::class, 'update']);
-        Route::delete('/custody-forms/{form}', [CustodyFormController::class, 'destroy']);
         Route::put('/network/base-url', [NetworkController::class, 'setBaseUrl']);
         Route::get('/fields/usage', [FieldController::class, 'usage']);
         Route::post('/fields/rename', [FieldController::class, 'rename']);
