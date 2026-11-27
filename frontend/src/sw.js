@@ -282,12 +282,14 @@ function keep(request, path, key = crypto.randomUUID()) {
     const files = []
     const body = await readBody(request, files)
     const { model, changes } = current
-    // A large delete asks for the PIN again, as the server does; the phone checks it
+    // A large delete, deleting an issued voucher and taking all of it back ask for the PIN again,
+    // as the server does; the phone checks it
     const pin = String(body.pin ?? '')
     delete body.pin
     const count = OfflineEdit.deleteCount(model, request.method, path, body)
-    if (count > OfflineEdit.LARGE_DELETE) {
-      const refused = !pin ? 'pin_required:' + count : (await checkPin(user, pin))
+    const large = count > OfflineEdit.LARGE_DELETE
+    if (large || OfflineEdit.voucherPinNeeded(model, request.method, path)) {
+      const refused = !pin ? (large ? 'pin_required:' + count : 'pin_required') : await checkPin(user, pin)
       if (refused) {
         await dropFiles(files)
         return json(422, { message: refused, errors: { pin: [refused] } })
@@ -329,6 +331,8 @@ function pageAfter(copy, entry, result) {
   if (/^\/api\/boxes\/\d+\/equipment$/.test(path)) return { ...body, box: page(`/api/boxes/${body.box.id}`) }
   if (/^\/api\/boxes\/\d+\/equipment\//.test(path) && body?.id) return page(`/api/boxes/${body.id}`)
   if (/^\/api\/scan-documents\/\d+$/.test(path) && method === 'PUT') return page(path)
+  // A voucher's page, with its mark and its changes not synced yet
+  if (/^\/api\/vouchers(\/\d+)?/.test(path) && body?.voucher?.id && body.items) return { ...body, ...page(`/api/vouchers/${body.voucher.id}`) }
   // A row of a scan document, with its mark
   const row = /^\/api\/scan-documents\/(\d+)\/(scan|rows)/.exec(path) && (body?.row ?? body)
   if (row?.id && method !== 'DELETE') {

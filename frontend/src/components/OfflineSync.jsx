@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, List, Modal, Progress, Radio, Result, Space, Typography } from 'antd'
-import { CloudSyncOutlined, LockOutlined } from '@ant-design/icons'
+import { CloudSyncOutlined, LockOutlined, PrinterOutlined } from '@ant-design/icons'
 import { useLang } from '../i18n'
 import { saveSession } from '../auth'
 import { downloadOffline, readOfflineMeta } from '../offline'
 import { SyncStopped, serverReachable, signInToSync, syncChanges } from '../offlineSync'
 import { SYNC_EVENT, changeText } from './OfflineChanges'
+import { StationDialog } from '../pages/VoucherPages'
 
 /** The answers each kind of question offers (offlineSync.js). */
 const CHOICES = {
@@ -21,6 +22,9 @@ const CHOICES = {
   scan_folder_deleted: ['restore', 'keep'],
   scan_document_deleted: ['restore', 'keep'],
   scan_row_deleted: ['restore', 'keep'],
+  voucher_deleted: ['restore', 'keep'],
+  voucher_issued_both: ['system', 'separate'],
+  voucher_unit_held: ['move', 'keep'],
 }
 
 /** A field's name as the pages show it. */
@@ -30,6 +34,7 @@ function attrName(t, q) {
   if (q.type === 'scan_folder') return t('scan_folder_name')
   if (q.type === 'scan_document') return t({ title: 'scan_doc_title', duplicate_scope: 'scan_dup_scope' }[q.attr] || q.attr)
   if (q.attr.startsWith('field:')) return q.attr.slice(6)
+  if (q.type === 'voucher') return t({ recipient: 'voucher_recipient', template_id: 'voucher_template' }[q.attr] || q.attr)
   if (q.type === 'box') return t({ number: 'box_number', name: 'box_name' }[q.attr] || q.attr)
   if (q.type === 'group') return t({ name: 'group_name' }[q.attr] || q.attr)
   return t(q.attr === 'group_id' ? 'group' : q.attr)
@@ -48,6 +53,9 @@ function choiceLabel(t, q, choice) {
     )
   }
   if (q.kind === 'photo') return t(choice === 'phone' ? (q.removed ? 'cf_photo_phone_removed' : 'cf_photo_phone') : 'cf_photo_server')
+  if (q.kind === 'voucher_unit_held') return choice === 'move' ? t(q.recipient ? 'cf_voucher_move_to' : 'cf_voucher_move', { name: q.recipient }) : t('cf_voucher_keep_holder', { name: q.holder })
+  if (q.kind === 'voucher_issued_both') return choice === 'system' ? t('cf_voucher_system', { n: q.number }) : t(q.phoneIssued ? 'cf_voucher_separate' : 'cf_voucher_separate_draft')
+  if (q.kind === 'voucher_deleted') return t(choice === 'restore' ? (q.phoneIssued ? 'cf_voucher_restore_issued' : 'cf_voucher_restore') : 'cf_voucher_drop')
   if (choice === 'rename') return t({ serial_taken: 'cf_rename_serial', box_taken: 'cf_rename_box', group_taken: 'cf_rename_group' }[q.kind])
   if (choice === 'merge') return t(q.kind === 'serial_taken' ? 'cf_merge_equipment' : q.kind === 'box_taken' ? 'cf_merge_box' : 'cf_merge_group')
   if (choice === 'keep') return t(q.kind === 'changed_deleted' ? 'cf_keep' : 'cf_keep_deleted')
@@ -55,7 +63,12 @@ function choiceLabel(t, q, choice) {
 }
 
 function questionTitle(t, q) {
+  // A voucher made on the phone with no recipient yet has no name: a draft
+  if ((q.type === 'voucher' || q.kind === 'voucher_issued_both' || q.kind === 'voucher_deleted') && !q.label) q = { ...q, label: t('voucher_title_draft') }
   if (q.kind === 'field') return t('cf_field', { label: q.label, field: attrName(t, q) })
+  if (q.kind === 'voucher_unit_held') return t(q.number ? 'cf_voucher_unit_held_n' : 'cf_voucher_unit_held', { label: q.label, holder: q.holder, n: q.number, voucher: q.voucher || t('voucher_title_draft') })
+  if (q.kind === 'voucher_issued_both') return t(q.phoneIssued ? 'cf_voucher_issued_both' : 'cf_voucher_issued_changed', { label: q.label, n: q.number })
+  if (q.kind === 'voucher_deleted') return t(q.replaces ? 'cf_voucher_replaced_deleted' : q.phoneIssued ? 'cf_voucher_deleted_issued' : 'cf_voucher_deleted', { label: q.label })
   if (q.kind === 'serial_taken') return t('cf_serial_taken', { value: q.value, other: q.other || '' })
   if (q.kind === 'box_taken' || q.kind === 'group_taken') return t(`cf_${q.kind}`, { value: q.value })
   if (q.kind === 'changed_deleted' && q.type && q.type !== 'equipment') return t(`cf_changed_deleted_${q.type}`, { label: q.label })
@@ -101,29 +114,74 @@ function Questions({ questions, onDone }) {
 
 function Summary({ report }) {
   const { t } = useLang()
+  const [station, setStation] = useState(false)
   const problems = [...report.failed.map((f) => ({ ...f, text: t(f.error) })), ...report.dropped.map((d) => ({ ...d, text: t(d.reason) }))]
+  const notes = report.notes || []
+  // The vouchers issued or printed on the phone, sent to the print station once they had their numbers
+  const printsKey = `sync_prints_${report.prints?.online ? 'now' : 'wait'}${report.prints?.n === 1 ? '_one' : ''}`
+  // The button under the text: on a phone, beside it, it leaves the text a narrow column
+  const prints = report.prints && (
+    <Alert
+      type={report.prints.online ? 'success' : 'warning'}
+      showIcon
+      icon={<PrinterOutlined />}
+      title={t(printsKey, { n: report.prints.n })}
+      description={
+        !report.prints.online && (
+          <>
+            <div>{t('sync_prints_wait_hint')}</div>
+            <Button size="small" icon={<PrinterOutlined />} onClick={() => setStation(true)} style={{ marginTop: 8 }}>
+              {t('station_open_it')}
+            </Button>
+          </>
+        )
+      }
+      style={{ textAlign: 'start', marginBottom: 12 }}
+    />
+  )
   return (
     <Result
       status={report.failed.length ? 'warning' : 'success'}
       title={t('sync_done')}
       subTitle={[t('sync_sent', { n: report.sent }), report.merged > 0 && t('sync_merged', { n: report.merged }), report.skipped > 0 && t('sync_skipped', { n: report.skipped })].filter(Boolean).join(' · ')}
       extra={
-        problems.length > 0 && (
-          <List
-            size="small"
-            header={t('sync_not_sent', { n: problems.length })}
-            dataSource={problems}
-            rowKey={(p) => `${p.id}-${p.text}`}
-            renderItem={(p) => (
-              <List.Item>
-                <div style={{ textAlign: 'start' }}>
-                  <div>{p.effect ? changeText(t, p.effect) : `#${p.id}`}</div>
-                  <Typography.Text type="secondary">{p.text}</Typography.Text>
-                </div>
-              </List.Item>
-            )}
-          />
-        )
+        <>
+          {prints}
+          {station && <StationDialog open onClose={() => setStation(false)} />}
+          {notes.length > 0 && (
+            <List
+              size="small"
+              header={t('sync_notes', { n: notes.reduce((sum, x) => sum + x.n, 0) })}
+              dataSource={notes}
+              rowKey={(p) => `${p.id}-${p.reason}`}
+              renderItem={(p) => (
+                <List.Item>
+                  <div style={{ textAlign: 'start' }}>
+                    <div>{p.effect ? changeText(t, p.effect) : `#${p.id}`}</div>
+                    <Typography.Text type="secondary">{t(p.reason, { n: p.n })}</Typography.Text>
+                  </div>
+                </List.Item>
+              )}
+              style={{ marginBottom: 12 }}
+            />
+          )}
+          {problems.length > 0 && (
+            <List
+              size="small"
+              header={t('sync_not_sent', { n: problems.length })}
+              dataSource={problems}
+              rowKey={(p) => `${p.id}-${p.text}`}
+              renderItem={(p) => (
+                <List.Item>
+                  <div style={{ textAlign: 'start' }}>
+                    <div>{p.effect ? changeText(t, p.effect) : `#${p.id}`}</div>
+                    <Typography.Text type="secondary">{p.text}</Typography.Text>
+                  </div>
+                </List.Item>
+              )}
+            />
+          )}
+        </>
       }
     />
   )

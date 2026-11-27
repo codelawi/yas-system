@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\OfflineContext;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -90,7 +91,8 @@ class Voucher extends Model
             $held = $this->items()->whereHas('custody', fn ($q) => $q->whereNull('returned_at'))->exists();
             $done = ! $held && $this->items()->exists();
             $this->status = $done ? self::RETURNED : self::ISSUED;
-            $this->returned_at = $done ? ($this->returned_at ?? now()) : null;
+            // Brought back on a phone without a connection: when it really was
+            $this->returned_at = $done ? ($this->returned_at ?? OfflineContext::at() ?? now()) : null;
         }
         $this->revision++;
         $this->save();

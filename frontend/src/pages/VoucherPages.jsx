@@ -12,6 +12,7 @@ import { usePhone } from '../nav'
 import { ChipRow, Fab, PhoneActions, PhoneHeader, PhoneList, PhoneRow, PhoneSearch, PhoneSkeleton } from '../components/PhoneUI'
 import useRevisionPoll from '../revisionPoll'
 import VoucherPaper from '../components/VoucherPaper'
+import { OfflineMark, UnsyncedCard } from '../components/OfflineChanges'
 
 /*
  * Issue vouchers (سند صرف عهدة): scan what someone takes from the store, issue the voucher to hand
@@ -41,9 +42,15 @@ function NeedPin() {
   )
 }
 
+/** Issued on a phone away from the system: its number is given when the phone syncs. */
+const numberedAtSync = (voucher) => !voucher.number && voucher.status && voucher.status !== 'draft'
+/** A voucher's number in a sentence; one issued away from the system has none yet. */
+const numberText = (n, t) => n || t('voucher_number_at_sync')
+
 const voucherTitle = (voucher, t) => {
   if (voucher.number) return t('voucher_title_n', { n: voucher.number })
-  return voucher.replaces ? t('voucher_title_replaces', { n: voucher.replaces.number }) : t('voucher_title_draft')
+  if (numberedAtSync(voucher)) return t('voucher_numbered_at_sync')
+  return voucher.replaces ? t('voucher_title_replaces', { n: numberText(voucher.replaces.number, t) }) : t('voucher_title_draft')
 }
 
 function StatusTag({ voucher }) {
@@ -145,7 +152,11 @@ export function VouchersPage() {
                 to={`/vouchers/${v.id}`}
                 icon={<FileDoneOutlined />}
                 tone={v.status === 'draft' ? 'amber' : v.status === 'issued' ? 'blue' : 'green'}
-                title={v.recipient || voucherTitle(v, t)}
+                title={
+                  <>
+                    {v.recipient || voucherTitle(v, t)} <OfflineMark mark={v.offline} />
+                  </>
+                }
                 subtitle={
                   <>
                     {v.recipient && <span>{voucherTitle(v, t)}</span>}
@@ -207,7 +218,12 @@ export function VouchersPage() {
         locale={{ emptyText: t('no_vouchers') }}
         onRow={(v) => ({ onClick: () => navigate(`/vouchers/${v.id}`), style: { cursor: 'pointer' } })}
         columns={[
-          { title: t('voucher_number'), key: 'number', render: (_, v) => (v.number ? <Link to={`/vouchers/${v.id}`}><b>{v.number}</b></Link> : <Link to={`/vouchers/${v.id}`}>{v.replaces ? t('voucher_title_replaces', { n: v.replaces.number }) : t('voucher_status_draft')}</Link>) },
+          { title: t('voucher_number'), key: 'number', render: (_, v) => (
+              <>
+                <Link to={`/vouchers/${v.id}`}>{v.number ? <b>{v.number}</b> : numberedAtSync(v) ? t('voucher_numbered_at_sync') : v.replaces ? t('voucher_title_replaces', { n: numberText(v.replaces.number, t) }) : t('voucher_status_draft')}</Link> <OfflineMark mark={v.offline} />
+              </>
+            ),
+          },
           { title: t('voucher_recipient'), dataIndex: 'recipient', render: (r) => r || '—' },
           { title: t('voucher_units'), dataIndex: 'items_count', align: 'center' },
           {
@@ -237,7 +253,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  * The print station is not open on the laptop: one press opens it there (the START script's window does
  * it), then this waits for it to answer, or says the laptop does not answer.
  */
-function StationDialog({ open, onClose }) {
+export function StationDialog({ open, onClose }) {
   const { t } = useLang()
   const [state, setState] = useState('closed') // closed | opening | open | no_answer | unreachable
   const alive = useRef(true)
@@ -444,7 +460,8 @@ export function VoucherPage() {
   const current = isDraft ? 'add' : 'return'
   const inVoucher = new Set(items.map((i) => i.equipment.id))
   const out = items.filter((i) => !i.returned_at).length
-  const moved = items.filter((i) => i.moved_to).length
+  // A unit taken by a voucher issued on this phone shows '' until that one is numbered
+  const moved = items.filter((i) => i.moved_to != null).length
   const own = items.length - moved
   const heldItems = items.filter((i) => i.held_by)
 
@@ -556,7 +573,9 @@ export function VoucherPage() {
   /** Sent to the print station: says so, or offers to open it when it is not open. */
   const afterPrint = (print) => {
     if (!print?.job) return
-    if (print.station.online) message.success(t('voucher_printing_now', { n: print.job.copies }))
+    // Away from the system: the print station prints it when the phone syncs
+    if (print.job.status === 'waiting_sync') message.info(t('voucher_print_at_sync', { n: print.job.copies }))
+    else if (print.station.online) message.success(t('voucher_printing_now', { n: print.job.copies }))
     else setStationAsk(true)
   }
 
@@ -571,7 +590,8 @@ export function VoucherPage() {
       }
       beep(true)
       setLast(null)
-      message.success(t(voucher.replaces ? 'voucher_replaced_n' : 'voucher_issued_n', { n: data.voucher.number }))
+      if (data.voucher.number) message.success(t(voucher.replaces ? 'voucher_replaced_n' : 'voucher_issued_n', { n: data.voucher.number }))
+      else message.success(t('voucher_issued_at_sync'))
       afterPrint(data.print)
     } catch (e) {
       message.error(t(errorKey(e) || 'error'))
@@ -582,7 +602,7 @@ export function VoucherPage() {
 
   const reprint = () =>
     askCopies(modal, t, {
-      title: t('voucher_print_title', { n: voucher.number }),
+      title: voucher.number ? t('voucher_print_title', { n: voucher.number }) : t('voucher_print'),
       initial: report.copies,
       okText: t('voucher_print'),
       run: async (copies) => {
@@ -615,7 +635,7 @@ export function VoucherPage() {
       extra: (
         <>
           <p>{t('voucher_issue_confirm', { name, n: items.length })}</p>
-          {voucher.replaces && <p>{t('voucher_issue_replaces', { n: voucher.replaces.number })}</p>}
+          {voucher.replaces && <p>{t('voucher_issue_replaces', { n: numberText(voucher.replaces.number, t) })}</p>}
         </>
       ),
       run: (copies) => issue(false, copies),
@@ -729,7 +749,7 @@ export function VoucherPage() {
       ? navigate(`/vouchers/${voucher.replacement_id}`)
       : modal.confirm({
           title: t('voucher_replace'),
-          content: t('voucher_replace_body', { n: voucher.number }),
+          content: t('voucher_replace_body', { n: numberText(voucher.number, t) }),
           okText: t('voucher_replace'),
           cancelText: t('cancel'),
           onOk: openReplacement,
@@ -740,7 +760,7 @@ export function VoucherPage() {
 
   const itemState = (item) => {
     if (isDraft) return item.held_by ? <Tag color="orange">{heldText(item.held_by, t)}</Tag> : null
-    if (item.moved_to) return <Tag color="orange">{t('voucher_moved_to', { n: item.moved_to })}</Tag>
+    if (item.moved_to != null) return <Tag color="orange">{t('voucher_moved_to', { n: numberText(item.moved_to, t) })}</Tag>
     return item.returned_at ? <Tag color="green">{t('voucher_returned')}</Tag> : <Tag color="blue">{t('voucher_still_out')}</Tag>
   }
   const itemActions = (item) =>
@@ -793,7 +813,7 @@ export function VoucherPage() {
       type="info"
       showIcon
       className="voucher-replace-note"
-      title={t('voucher_replacing_n', { n: voucher.replaces.number })}
+      title={t('voucher_replacing_n', { n: numberText(voucher.replaces.number, t) })}
       action={
         <Button size="small" onClick={() => navigate(`/vouchers/${voucher.replaces.id}`)}>
           {t('voucher_open_old')}
@@ -975,6 +995,7 @@ export function VoucherPage() {
             { key: 'delete-issued', icon: <DeleteOutlined />, label: t('voucher_delete'), danger: true, hidden: isDraft, onClick: removeIssued },
           ]}
         />
+        <UnsyncedCard changes={voucher.offline_changes} />
         <div className="voucher-panel">
           {replaceNote}
           {printRow}
@@ -1058,6 +1079,7 @@ export function VoucherPage() {
           )}
         </div>
       </div>
+      <UnsyncedCard changes={voucher.offline_changes} />
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={13}>
           <Card style={{ marginBottom: 16 }}>
@@ -1215,7 +1237,7 @@ export function VoucherReturnPage() {
                   {entry.voucher && (
                     <>
                       {' · '}
-                      <Link to={`/vouchers/${entry.voucher.id}`}>{t('voucher_title_n', { n: entry.voucher.number })}</Link>
+                      <Link to={`/vouchers/${entry.voucher.id}`}>{entry.voucher.number ? t('voucher_title_n', { n: entry.voucher.number }) : t('voucher_numbered_at_sync')}</Link>
                     </>
                   )}
                 </span>

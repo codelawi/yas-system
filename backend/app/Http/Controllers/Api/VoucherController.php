@@ -12,11 +12,13 @@ use App\Models\Voucher;
 use App\Models\VoucherItem;
 use App\Models\VoucherPrint;
 use App\Models\VoucherTemplate;
+use App\Support\OfflineContext;
 use App\Support\PinConfirmation;
 use App\Support\PrintStation;
 use App\Support\VoucherRows;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -290,7 +292,7 @@ class VoucherController extends Controller
                 'recipient' => $recipient,
                 'template_id' => $template->id,
                 'layout' => $template->layout(),
-                'issued_at' => now(),
+                'issued_at' => self::now(),
                 'issued_by' => $userId,
             ]);
             $this->handOver($voucher, $items, $userId);
@@ -351,7 +353,7 @@ class VoucherController extends Controller
 
         $userId = $request->user()->id;
         DB::transaction(function () use ($voucher, $open, $userId) {
-            $now = now();
+            $now = self::now();
             foreach ($open as $custody) {
                 // Quietly: the voucher is brought up to date once, below
                 $custody->updateQuietly(['returned_at' => $now, 'received_by' => $userId, 'return_notes' => "إرجاع كامل لسند الصرف رقم {$voucher->number}"]);
@@ -434,7 +436,7 @@ class VoucherController extends Controller
      */
     private function handOver(Voucher $voucher, Collection $items, int $userId): void
     {
-        $now = now();
+        $now = self::now();
         $previous = Custody::open()->whereIn('equipment_id', $items->pluck('equipment_id'))->get()->groupBy('equipment_id');
         foreach ($items as $item) {
             foreach ($previous[$item->equipment_id] ?? [] as $old) {
@@ -496,7 +498,7 @@ class VoucherController extends Controller
     private function takeBack(Custody $custody, Equipment $equipment, int $userId): void
     {
         DB::transaction(function () use ($custody, $equipment, $userId) {
-            $custody->update(['returned_at' => now(), 'received_by' => $userId]);
+            $custody->update(['returned_at' => self::now(), 'received_by' => $userId]);
             ActivityLog::record($equipment, 'custody_in', ['summary' => $custody->voucher ? self::summary($custody->holder, $custody->voucher) : $custody->holder], $userId);
         });
     }
@@ -572,6 +574,12 @@ class VoucherController extends Controller
         ];
     }
 
+    /** When it happens: now, or when it was done on a phone without a connection (App\Support\OfflineContext). */
+    private static function now(): Carbon
+    {
+        return OfflineContext::at() ?? now();
+    }
+
     private static function summary(?string $holder, Voucher $voucher): string
     {
         return trim($holder.' · سند '.$voucher->number);
@@ -599,7 +607,7 @@ class VoucherController extends Controller
     }
 
     /** What was typed in each field last time, offered on the next voucher. */
-    private static function lastFields(): array
+    public static function lastFields(): array
     {
         return json_decode((string) Setting::get('voucher_last_fields'), true) ?: [];
     }

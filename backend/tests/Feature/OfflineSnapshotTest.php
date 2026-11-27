@@ -95,6 +95,18 @@ class OfflineSnapshotTest extends TestCase
         $this->assertSame($this->getJson('/api/vouchers/recipients')->json(), $vouchers['recipients']);
         $this->assertSame(['سالم الخطيب'], $vouchers['recipients']);
         $this->assertSame($this->getJson('/api/voucher-templates')->json(), $vouchers['templates']);
+
+        // The rows themselves, for the phone to issue and take back without a connection
+        $this->assertSame([$issued, $draft], array_column($vouchers['records']['vouchers'], 'id'));
+        $this->assertArrayHasKey('layout', $vouchers['records']['vouchers'][0]);
+        $this->assertSame([[$issued, 'SAW-1'], [$draft, 'SAW-2']], array_map(fn (array $item) => [$item['voucher_id'], Equipment::find($item['equipment_id'])->serial_number], $vouchers['records']['items']));
+        $custody = $vouchers['records']['custodies'];
+        $this->assertCount(1, $custody);
+        $this->assertSame([$issued, 'سالم الخطيب', null], [$custody[0]['voucher_id'], $custody[0]['holder'], $custody[0]['returned_at']]);
+        $default = $vouchers['default_template'];
+        // A draft shows its template as it is now
+        $this->assertSame($this->getJson("/api/vouchers/{$draft}")->json('layout'), $vouchers['layouts'][$default]);
+        $this->assertSame(1, $vouchers['copies']);
     }
 
     public function test_scan_documents_are_sent_with_their_folders_and_revisions(): void
@@ -190,7 +202,7 @@ class OfflineSnapshotTest extends TestCase
         $content = $this->getJson('/api/offline/snapshot')->assertOk()->assertJsonPath('equipment', [])->getContent();
 
         // The phone looks pages up by key: an empty map must stay {} in the JSON
-        foreach (['serials', 'maintenance', 'issues', 'pages', 'folder_pages', 'folder_revisions', 'documents'] as $key) {
+        foreach (['serials', 'maintenance', 'issues', 'pages', 'folder_pages', 'folder_revisions', 'documents', 'last_fields'] as $key) {
             $this->assertStringContainsString('"'.$key.'":{}', $content);
         }
     }

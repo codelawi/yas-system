@@ -14,8 +14,8 @@
  * Laravel serves it at /sw.js so it can answer every page.
  */
 
-const VERSION = "081650de668d"
-const ASSETS = ["/app/assets/dist-CjWoxUJ5.js","/app/assets/es-BkxMLVLq.js","/app/assets/html2canvas-BXXf6LuR.js","/app/assets/ibm-plex-sans-arabic-arabic-400-normal-CyU-ddYS.woff2","/app/assets/ibm-plex-sans-arabic-arabic-500-normal-C4MQITzh.woff2","/app/assets/ibm-plex-sans-arabic-arabic-600-normal-0pRdybE_.woff2","/app/assets/ibm-plex-sans-arabic-arabic-700-normal-DrtBj6UE.woff2","/app/assets/index-BBea4Dwr.css","/app/assets/index-BqGVyWd3.js","/app/assets/index.es-FiTPEs2O.js","/app/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2","/app/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2","/app/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2","/app/assets/inter-greek-wght-normal-CkhJZR-_.woff2","/app/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2","/app/assets/inter-latin-wght-normal-Dx4kXJAl.woff2","/app/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2","/app/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2","/app/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2","/app/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2","/app/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2","/app/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2","/app/assets/jspdf.es.min-HCnqS4VO.js","/app/assets/ocr.worker-CU1LH8SP.js","/app/assets/purify.es-Dqk5qvad.js","/app/assets/zxing_reader-EOacYbLr.wasm","/app/favicon.svg"]
+const VERSION = "95cafd311fe6"
+const ASSETS = ["/app/assets/dist-CjWoxUJ5.js","/app/assets/es-BkxMLVLq.js","/app/assets/html2canvas-D_2z_kcg.js","/app/assets/ibm-plex-sans-arabic-arabic-400-normal-CyU-ddYS.woff2","/app/assets/ibm-plex-sans-arabic-arabic-500-normal-C4MQITzh.woff2","/app/assets/ibm-plex-sans-arabic-arabic-600-normal-0pRdybE_.woff2","/app/assets/ibm-plex-sans-arabic-arabic-700-normal-DrtBj6UE.woff2","/app/assets/index-BBea4Dwr.css","/app/assets/index-DtblJ_5K.js","/app/assets/index.es-tS8wzTLv.js","/app/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2","/app/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2","/app/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2","/app/assets/inter-greek-wght-normal-CkhJZR-_.woff2","/app/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2","/app/assets/inter-latin-wght-normal-Dx4kXJAl.woff2","/app/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2","/app/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2","/app/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2","/app/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2","/app/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2","/app/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2","/app/assets/jspdf.es.min-CA-3YiOQ.js","/app/assets/ocr.worker-CU1LH8SP.js","/app/assets/purify.es-Dqk5qvad.js","/app/assets/zxing_reader-EOacYbLr.wasm","/app/favicon.svg"]
 /** The text reader's files (about 30 MB): kept once used or saved for offline, not with every app update. */
 const OCR_ASSETS = ["/app/assets/ch_ppocr_mobile_v2.0_cls_infer-CZsrcDcs.onnx","/app/assets/ort-wasm-simd-threaded-qh98TCA_.wasm","/app/assets/ppocr_det-BNVJyGmD.onnx","/app/assets/rec_en_PP-OCRv3_infer-ihNOzo5x.onnx"]
 
@@ -282,12 +282,14 @@ function keep(request, path, key = crypto.randomUUID()) {
     const files = []
     const body = await readBody(request, files)
     const { model, changes } = current
-    // A large delete asks for the PIN again, as the server does; the phone checks it
+    // A large delete, deleting an issued voucher and taking all of it back ask for the PIN again,
+    // as the server does; the phone checks it
     const pin = String(body.pin ?? '')
     delete body.pin
     const count = OfflineEdit.deleteCount(model, request.method, path, body)
-    if (count > OfflineEdit.LARGE_DELETE) {
-      const refused = !pin ? 'pin_required:' + count : (await checkPin(user, pin))
+    const large = count > OfflineEdit.LARGE_DELETE
+    if (large || OfflineEdit.voucherPinNeeded(model, request.method, path)) {
+      const refused = !pin ? (large ? 'pin_required:' + count : 'pin_required') : await checkPin(user, pin)
       if (refused) {
         await dropFiles(files)
         return json(422, { message: refused, errors: { pin: [refused] } })
@@ -329,6 +331,8 @@ function pageAfter(copy, entry, result) {
   if (/^\/api\/boxes\/\d+\/equipment$/.test(path)) return { ...body, box: page(`/api/boxes/${body.box.id}`) }
   if (/^\/api\/boxes\/\d+\/equipment\//.test(path) && body?.id) return page(`/api/boxes/${body.id}`)
   if (/^\/api\/scan-documents\/\d+$/.test(path) && method === 'PUT') return page(path)
+  // A voucher's page, with its mark and its changes not synced yet
+  if (/^\/api\/vouchers(\/\d+)?/.test(path) && body?.voucher?.id && body.items) return { ...body, ...page(`/api/vouchers/${body.voucher.id}`) }
   // A row of a scan document, with its mark
   const row = /^\/api\/scan-documents\/(\d+)\/(scan|rows)/.exec(path) && (body?.row ?? body)
   if (row?.id && method !== 'DELETE') {
@@ -1357,6 +1361,7 @@ function toModel(data) {
     maintenance,
     issues,
     ...scanRecords(data.scan),
+    ...voucherRecords(data.vouchers),
     nextId: TEMP_ID,
   }
 }
@@ -1539,6 +1544,7 @@ function pages(m, notes, equipment, byId) {
   }
   if (notes) data.stats = dashboard(m, notes.now)
   if (m.data.scan) data.scan = scanPages(m, notes)
+  if (m.vouchers) data.vouchers = voucherData(m, notes)
   return data
 }
 
@@ -1759,6 +1765,7 @@ function deleteCount(m, method, path, input) {
 }
 
 function forget(m, e) {
+  departUnit(m, e)
   m.equipment.delete(e.id)
   m.maintenance.delete(e.id)
   m.issues.delete(e.id)
@@ -2604,6 +2611,748 @@ function deleteScanRow(m, input, ctx, id, rowId) {
   return { status: 204, effect: { kind: 'scan_row_deleted', label: d.title, code: row.code } }
 }
 
+/* Issue vouchers (VoucherController, VoucherRows, App\Models\Voucher) */
+
+const DRAFT = 'draft'
+const ISSUED = 'issued'
+const RETURNED = 'returned'
+/** VoucherController::MAX_COPIES */
+const MAX_COPIES = 20
+/** A print asked for on the phone: the print station prints it at the end of the sync. */
+const PRINT_AT_SYNC = 'waiting_sync'
+
+/** The rows of the copy (OfflineController::vouchers), and what deleted equipment showed on its vouchers. */
+function voucherRecords(v) {
+  if (!v?.records) return {}
+  const pages = v.pages || {}
+  const vouchers = new Map()
+  for (const r of v.records.vouchers) {
+    const page = pages[r.id]?.voucher
+    vouchers.set(r.id, { ...r, fields: r.fields ?? null, layout: r.layout ?? null, creator: page?.creator ?? null, issuer: page?.issuer ?? null, last_print: page?.last_print ?? null })
+  }
+  const departed = new Map()
+  for (const page of Object.values(pages)) {
+    const rows = new Map(page.rows.map((r) => [r.key, r]))
+    for (const item of page.items) {
+      if (!item.equipment.deleted || departed.has(item.equipment.id)) continue
+      const { deleted, ...brief } = item.equipment
+      void deleted
+      departed.set(brief.id, { brief, key: item.row_key, code: rows.get(item.row_key)?.code ?? null, accessory: item.row_key.startsWith('a:'), accessories: item.accessories })
+    }
+  }
+  return {
+    vouchers,
+    voucherItems: new Map(v.records.items.map((i) => [i.id, { ...i }])),
+    custodies: new Map(v.records.custodies.map((c) => [c.id, { ...c }])),
+    departed,
+    voucherSettings: {
+      templates: (v.templates || []).map((t) => ({ ...t })),
+      layouts: v.layouts || {},
+      last_fields: { ...(v.last_fields || {}) },
+      copies: v.copies ?? 1,
+      number_from: v.number_from ?? 0,
+    },
+  }
+}
+
+const ONES = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة']
+const TENS = ['', 'عشرة', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون']
+const HUNDREDS = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة']
+
+function belowHundred(n) {
+  if (n < 10) return ONES[n]
+  if (n === 10) return 'عشرة'
+  if (n === 11) return 'أحد عشر'
+  if (n === 12) return 'اثنا عشر'
+  if (n < 20) return `${ONES[n - 10]} عشر`
+  if (n % 10 === 0) return TENS[n / 10]
+  return `${ONES[n % 10]} و${TENS[Math.floor(n / 10)]}`
+}
+
+function belowThousand(n) {
+  const parts = []
+  if (n >= 100) {
+    parts.push(HUNDREDS[Math.floor(n / 100)])
+    n %= 100
+  }
+  if (n > 0) parts.push(belowHundred(n))
+  return parts.join(' و')
+}
+
+/** ArabicNumber::words: 2 → «اثنان» */
+function arabicWords(n) {
+  if (n <= 0) return 'صفر'
+  if (n >= 1000000) return String(n)
+  const thousands = Math.floor(n / 1000)
+  const rest = n % 1000
+  const parts = []
+  if (thousands > 0) parts.push(thousands === 1 ? 'ألف' : thousands === 2 ? 'ألفان' : thousands <= 10 ? `${belowThousand(thousands)} آلاف` : `${belowThousand(thousands)} ألف`)
+  if (rest > 0) parts.push(belowThousand(rest))
+  return parts.join(' و')
+}
+
+const byId = (a, b) => a.id - b.id
+const isOpen = (c) => c && c.returned_at == null
+
+/** VoucherRows::name: the group's voucher name for main equipment, else its own name (or serial). */
+function rowName(m, e) {
+  const group = e.parent_id == null && e.group_id != null ? m.groups.get(e.group_id) : null
+  if (group) {
+    const own = phpTrim(group.voucher_name ?? '')
+    return truthy(own) ? own : group.name
+  }
+  const name = phpTrim(displayName(m, e) ?? '')
+  return truthy(name) ? name : String(e.serial_number ?? '')
+}
+
+/** VoucherRows::key: units with the same key share a line. */
+function rowKey(m, e) {
+  if (e.parent_id == null) return e.group_id != null ? `g:${e.group_id}` : `n:${groupNameKey(rowName(m, e))}`
+  const parent = m.equipment.get(e.parent_id)
+  const parentKey = parent ? rowKey(m, parent) : (m.departed?.get(e.parent_id)?.key ?? `p:${e.parent_id}`)
+  return `a:${parentKey}|${groupNameKey(rowName(m, e))}`
+}
+
+/** VoucherController::brief */
+function voucherBrief(m, e) {
+  const parent = e.parent_id != null ? m.equipment.get(e.parent_id) : null
+  const parentSerial = parent ? parent.serial_number : e.parent_id != null ? (m.departed?.get(e.parent_id)?.brief.serial_number ?? null) : null
+  return { id: e.id, serial_number: e.serial_number, display_name: rowName(m, e), parent_serial: parentSerial }
+}
+
+/** What a voucher shows of a unit: the equipment, or what it was when it was deleted. */
+function unitOf(m, id) {
+  const e = m.equipment.get(id)
+  if (!e) {
+    const gone = m.departed?.get(id)
+    return gone ? { ...gone, deleted: true } : null
+  }
+  const main = e.parent_id == null
+  return {
+    brief: voucherBrief(m, e),
+    key: rowKey(m, e),
+    code: main && e.group_id != null ? (m.groups.get(e.group_id)?.voucher_code ?? null) : null,
+    accessory: !main,
+    accessories: main
+      ? children(m, e)
+          .sort((a, b) => compareValues(a.name, b.name) || compareValues(a.serial_number, b.serial_number) || a.id - b.id)
+          .map((a) => ({ id: a.id, serial_number: a.serial_number, display_name: rowName(m, a) }))
+      : [],
+    deleted: false,
+  }
+}
+
+/** Deleted on the phone: its vouchers still show it as it was. */
+function departUnit(m, e) {
+  if (!m.voucherItems || ![...m.voucherItems.values()].some((i) => i.equipment_id === e.id)) return
+  const { deleted, ...unit } = unitOf(m, e.id)
+  void deleted
+  m.departed.set(e.id, unit)
+}
+
+/** Items by voucher and custody by equipment, in id order, while pages are put together. */
+function voucherIndex(m) {
+  const items = new Map()
+  const custodies = new Map()
+  const replacement = new Map()
+  for (const i of [...m.voucherItems.values()].sort(byId)) {
+    if (!items.has(i.voucher_id)) items.set(i.voucher_id, [])
+    items.get(i.voucher_id).push(i)
+  }
+  for (const c of [...m.custodies.values()].sort(byId)) {
+    if (!custodies.has(c.equipment_id)) custodies.set(c.equipment_id, [])
+    custodies.get(c.equipment_id).push(c)
+  }
+  for (const v of [...m.vouchers.values()].sort(byId)) if (v.replaces_id != null && !replacement.has(v.replaces_id)) replacement.set(v.replaces_id, v.id)
+  return { items: (v) => items.get(v.id) || [], custodies: (id) => custodies.get(id) || [], replacement }
+}
+
+const itemsOfVoucher = (m, v) => [...m.voucherItems.values()].filter((i) => i.voucher_id === v.id).sort(byId)
+const custodiesOfVoucher = (m, v) => [...m.custodies.values()].filter((c) => c.voucher_id === v.id).sort(byId)
+const custodyOf = (m, item) => (item.custody_id != null ? (m.custodies.get(item.custody_id) ?? null) : null)
+const numberOf = (m, voucherId) => (voucherId != null ? (m.vouchers.get(voucherId)?.number ?? null) : null)
+/** An empty array is saved as [] (JSON): it comes back as a list. */
+const fieldsOut = (fields) => (fields && typeof fields === 'object' && !Array.isArray(fields) && !Object.keys(fields).length ? [] : fields)
+
+/** VoucherController::heldElsewhere: open custody of these equipment that is not this voucher's own. */
+function heldElsewhere(m, v, equipmentIds) {
+  const own = [v.id, v.replaces_id].filter((id) => id != null)
+  const ids = new Set(equipmentIds)
+  return [...m.custodies.values()].filter((c) => isOpen(c) && ids.has(c.equipment_id) && (c.voucher_id == null || !own.includes(c.voucher_id))).sort(byId)
+}
+
+function heldList(m, held) {
+  return held.map((c) => ({ ...(unitOf(m, c.equipment_id)?.brief ?? { id: c.equipment_id }), holder: c.holder, voucher_number: numberOf(m, c.voucher_id) }))
+}
+
+/** VoucherController::movedTo: units another voucher took, by item. */
+function movedTo(m, ix, v, items) {
+  const moved = new Map()
+  for (const item of items) {
+    const custody = custodyOf(m, item)
+    if (!custody?.returned_at) continue
+    let next = null
+    for (const c of ix.custodies(item.equipment_id)) if (c.voucher_id != null && c.voucher_id !== v.id && c.handed_at === custody.returned_at) next = c
+    // Taken by a voucher issued on this phone: it has no number until the sync ('')
+    if (next) moved.set(item.id, numberOf(m, next.voucher_id) || '')
+  }
+  return moved
+}
+
+function currentTemplate(m, id) {
+  const list = [...m.voucherSettings.templates].sort(byId)
+  return (id != null && list.find((t) => t.id === Number(id))) || list.find((t) => t.is_default) || list[0] || null
+}
+
+const templateLayout = (m, id) => {
+  const template = currentTemplate(m, id)
+  return template ? (m.voucherSettings.layouts[template.id] ?? null) : null
+}
+
+/** VoucherRows::for */
+function voucherRows(units) {
+  const rows = new Map()
+  for (const { unit, custody } of units) {
+    if (!rows.has(unit.key)) rows.set(unit.key, { key: unit.key, code: unit.accessory ? null : unit.code, name: unit.brief.display_name, accessory: unit.accessory, quantity: 0, quantity_words: '', returned: 0, serials: [] })
+    const row = rows.get(unit.key)
+    row.quantity++
+    row.serials.push(unit.brief.serial_number)
+    if (custody?.returned_at) row.returned++
+  }
+  for (const row of rows.values()) row.quantity_words = `${arabicWords(row.quantity)} فقط`
+  return [...rows.values()]
+}
+
+/** VoucherController::payload. `created`: the model just made answers without the revision the database gives it. */
+function voucherPage(m, ix, v, notes = null, created = false) {
+  const draft = v.status === DRAFT
+  const items = ix.items(v)
+  const held = new Map()
+  if (draft) for (const c of heldElsewhere(m, v, items.map((i) => i.equipment_id))) held.set(c.equipment_id, c)
+  const moved = movedTo(m, ix, v, items)
+  const replaced = v.replaces_id != null ? m.vouchers.get(v.replaces_id) : null
+  const units = []
+  const shown = []
+  for (const item of items) {
+    const unit = unitOf(m, item.equipment_id)
+    if (!unit) continue
+    const custody = custodyOf(m, item)
+    const holder = held.get(item.equipment_id)
+    units.push({ unit, custody })
+    shown.push({
+      id: item.id,
+      row_key: unit.key,
+      equipment: { ...unit.brief, deleted: unit.deleted },
+      accessories: unit.accessories,
+      returned_at: custody?.returned_at ?? null,
+      return_notes: custody?.return_notes ?? null,
+      moved_to: moved.get(item.id) ?? null,
+      held_by: holder ? { holder: holder.holder, voucher_number: numberOf(m, holder.voucher_id) } : null,
+      added_at: item.created_at,
+    })
+  }
+  return {
+    voucher: {
+      id: v.id,
+      number: v.number,
+      status: v.status,
+      recipient: v.recipient,
+      fields: fieldsOut(v.fields),
+      template_id: v.template_id,
+      revision: created ? null : v.revision,
+      issued_at: v.issued_at,
+      returned_at: v.returned_at,
+      created_at: v.created_at,
+      creator: v.creator,
+      issuer: v.issuer,
+      replaces: replaced ? { id: replaced.id, number: replaced.number } : null,
+      replacement_id: draft ? null : (ix.replacement.get(v.id) ?? null),
+      last_print: v.last_print,
+      ...notesFor(notes, 'voucher', v.id),
+    },
+    layout: v.layout ?? templateLayout(m, v.template_id),
+    copies: Math.max(1, Number(m.voucherSettings.copies) || 0),
+    items: shown,
+    rows: voucherRows(units),
+  }
+}
+
+const pageOf = (m, v, created = false) => voucherPage(m, voucherIndex(m), v, null, created)
+
+/** Voucher::nextNumber */
+const nextNumber = (m) => Math.max(Number(m.voucherSettings.number_from) || 0, [...m.vouchers.values()].reduce((max, v) => Math.max(max, v.number ?? 0), 0) + 1, 1)
+
+/** The list's order (VoucherController::listed); issued on the phone (no number yet) comes after the drafts. */
+const listRank = (v) => (v.status === DRAFT ? 0 : v.number == null ? 1 : 2)
+const listOrder = (a, b) => listRank(a) - listRank(b) || (b.number ?? 0) - (a.number ?? 0) || b.id - a.id
+
+function listEntry(m, ix, v, notes) {
+  const items = ix.items(v)
+  const replaced = v.replaces_id != null ? m.vouchers.get(v.replaces_id) : null
+  const { layout, last_print, ...attributes } = v
+  void layout
+  void last_print
+  return {
+    ...attributes,
+    fields: fieldsOut(v.fields),
+    items_count: items.length,
+    held_count: items.filter((i) => isOpen(custodyOf(m, i))).length,
+    replaces: replaced ? { id: replaced.id, number: replaced.number } : null,
+    ...markOf(notes, 'voucher', v.id),
+  }
+}
+
+/** VoucherController::recipients: names used before, for suggestions. */
+function voucherRecipients(m) {
+  const distinct = (values) => {
+    const seen = new Set()
+    return values.filter((value) => {
+      if (value == null) return false
+      const key = groupKey(String(value))
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }
+  const names = [...distinct([...m.vouchers.values()].sort(byId).map((v) => v.recipient)), ...distinct([...m.custodies.values()].sort(byId).map((c) => c.holder))]
+    .map((name) => phpTrim(String(name)))
+    .filter(truthy)
+  return [...new Set(names)].sort(phpCompare).slice(0, 500)
+}
+
+/** The voucher pages of the copy (OfflineController::vouchers). */
+function voucherData(m, notes) {
+  const ix = voucherIndex(m)
+  const all = [...m.vouchers.values()].sort(byId)
+  const pages = {}
+  for (const v of all) pages[v.id] = voucherPage(m, ix, v, notes)
+  const counts = new Map()
+  for (const v of all) if (v.template_id != null) counts.set(v.template_id, (counts.get(v.template_id) || 0) + 1)
+  const { records, ...saved } = m.data.vouchers
+  void records
+  return {
+    ...saved,
+    list: [...all].sort(listOrder).map((v) => listEntry(m, ix, v, notes)),
+    next_number: nextNumber(m),
+    pages,
+    recipients: voucherRecipients(m),
+    templates: saved.templates.map((t) => ({ ...t, vouchers_count: counts.get(t.id) || 0 })),
+    last_fields: { ...m.voucherSettings.last_fields },
+    copies: Math.max(1, Number(m.voucherSettings.copies) || 0),
+  }
+}
+
+/** How a voucher is named in the list of changes: its number and recipient. */
+const voucherLabel = (v) => [v.number, v.recipient].filter(Boolean).join(' · ')
+
+function vouchersOf(m) {
+  if (!m.vouchers) throw new Refusal(409, { message: 'offline_sync_first' })
+  return m.vouchers
+}
+
+const voucherOr404 = (m, id) => vouchersOf(m).get(Number(id)) ?? notFound()
+
+function mustBeDraft(v) {
+  if (v.status !== DRAFT) invalid('voucher', 'voucher_locked')
+}
+
+/** The boolean rule; `move` is true only for true, 1 and '1'. */
+function checkBoolean(field, value) {
+  if (value != null && ![true, false, 0, 1, '0', '1'].includes(value)) invalid(field)
+  return value === true || value === 1 || value === '1'
+}
+
+/** Voucher::syncStatus: "returned" once nothing is held any more, "issued" again when something is. */
+function syncStatus(m, v, ctx) {
+  if (v.status !== DRAFT) {
+    const items = itemsOfVoucher(m, v)
+    const done = items.length > 0 && !items.some((i) => isOpen(custodyOf(m, i)))
+    v.status = done ? RETURNED : ISSUED
+    v.returned_at = done ? (v.returned_at ?? ctx.at) : null
+  }
+  v.revision++
+  v.updated_at = ctx.at
+  ctx.mark('voucher', v.id)
+}
+
+/** A custody saved with another return time: its voucher follows (Custody::booted). */
+function custodyChanged(m, c, ctx) {
+  const v = c.voucher_id != null ? m.vouchers.get(c.voucher_id) : null
+  if (v) syncStatus(m, v, ctx)
+}
+
+/** The voucher row deleted: its units go with it, its custody stays without it. */
+function removeVoucher(m, v) {
+  m.vouchers.delete(v.id)
+  for (const [id, item] of m.voucherItems) if (item.voucher_id === v.id) m.voucherItems.delete(id)
+  for (const c of m.custodies.values()) if (c.voucher_id === v.id) c.voucher_id = null
+  for (const other of m.vouchers.values()) if (other.replaces_id === v.id) other.replaces_id = null
+}
+
+/** VoucherController::discard: custody still open is cancelled, a unit taken from someone goes back to them. */
+function discard(m, v, ctx, carried = new Set()) {
+  const note = `نُقلت إلى سند الصرف رقم ${v.number ?? ''}`
+  for (const custody of custodiesOfVoucher(m, v).filter(isOpen)) {
+    m.custodies.delete(custody.id)
+    for (const item of m.voucherItems.values()) if (item.custody_id === custody.id) item.custody_id = null
+    if (carried.has(custody.equipment_id)) continue
+    const before = [...m.custodies.values()]
+      .filter((c) => c.equipment_id === custody.equipment_id && c.returned_at === custody.handed_at && c.return_notes === note)
+      .sort(byId)
+      .pop()
+    if (before && ![...m.custodies.values()].some((c) => c.equipment_id === custody.equipment_id && isOpen(c))) {
+      before.returned_at = null
+      before.return_notes = null
+      custodyChanged(m, before, ctx)
+    }
+  }
+  removeVoucher(m, v)
+  ctx.mark('voucher', v.id)
+}
+
+function addItem(m, v, equipmentId, ctx) {
+  const item = { id: ctx.newId(), voucher_id: v.id, equipment_id: equipmentId, custody_id: null, added_by: ctx.user?.id ?? null, created_at: ctx.at }
+  m.voucherItems.set(item.id, item)
+  return item
+}
+
+/** StocktakeController::serialFromCode */
+function serialFromCode(code) {
+  const text = phpTrim(code)
+  const match = /\/eq\/([^/?#]+)/.exec(text)
+  if (!match) return text
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return match[1]
+  }
+}
+
+/** VoucherController::findByCode: a system label or a serial number, else a maker's code in a field of exactly one equipment. */
+function findByCode(m, code) {
+  const serial = serialFromCode(code)
+  const all = [...m.equipment.values()].sort(byId)
+  let e = all.filter((x) => same(x.serial_number, serial)).sort((a, b) => (a.parent_id != null) - (b.parent_id != null) || a.id - b.id)[0]
+  if (!e && serial !== '') {
+    const ids = all.filter((x) => x.fields.some((f) => same(f.value, serial))).map((x) => x.id)
+    if (ids.length > 1) invalid('code', 'voucher_code_many')
+    e = ids.length ? m.equipment.get(ids[0]) : null
+  }
+  if (!e) invalid('code', 'voucher_unknown_code')
+  return e
+}
+
+/** What the sync needs to know of a custody the phone ended. */
+const custodyInfo = (c) => ({ id: c.id, equipment_id: c.equipment_id, voucher_id: c.voucher_id })
+
+function storeVoucher(m, input, ctx) {
+  vouchersOf(m)
+  check('recipient', input.recipient, { max: 191 })
+  const last = m.voucherSettings.last_fields
+  const v = {
+    id: ctx.newId(),
+    number: null,
+    status: DRAFT,
+    recipient: voucherText(input.recipient),
+    fields: Object.keys(last).length ? { ...last } : null,
+    replaces_id: null,
+    template_id: null,
+    layout: null,
+    revision: 0,
+    created_by: ctx.user?.id ?? null,
+    issued_by: null,
+    issued_at: null,
+    returned_at: null,
+    created_at: ctx.at,
+    updated_at: ctx.at,
+    creator: who(ctx.user),
+    issuer: null,
+    last_print: null,
+  }
+  m.vouchers.set(v.id, v)
+  ctx.mark('voucher', v.id, 'new')
+  return { body: pageOf(m, v, true), effect: { kind: 'voucher_created', label: voucherLabel(v) } }
+}
+
+function updateVoucher(m, input, ctx, id) {
+  const v = voucherOr404(m, id)
+  mustBeDraft(v)
+  if ('recipient' in input) check('recipient', input.recipient, { max: 191 })
+  if ('template_id' in input && input.template_id != null) {
+    check('template_id', input.template_id, { integer: true })
+    if (!m.voucherSettings.templates.some((t) => t.id === Number(input.template_id))) invalid('template_id')
+  }
+  if ('fields' in input) {
+    const fields = input.fields
+    if (!fields || typeof fields !== 'object' || fields.file || Object.keys(fields).length > 50) invalid('fields')
+    for (const [key, value] of Object.entries(fields)) check(`fields.${key}`, value, { max: 500 })
+  }
+  if ('recipient' in input) v.recipient = voucherText(input.recipient)
+  if ('template_id' in input) v.template_id = input.template_id == null ? null : Number(input.template_id)
+  if ('fields' in input) v.fields = Object.fromEntries(Object.entries(input.fields).map(([key, value]) => [key, voucherText(value)]))
+  v.revision++
+  v.updated_at = ctx.at
+  ctx.mark('voucher', v.id)
+  return { body: pageOf(m, v), effect: { kind: 'voucher_updated', label: voucherLabel(v) } }
+}
+
+/** Deleting an issued or returned voucher asks for the PIN again, as the server does; the phone checks it. */
+function voucherPinNeeded(m, method, path) {
+  if (!m.vouchers) return false
+  const match = (method === 'DELETE' && /^\/api\/vouchers\/(\d+)$/.exec(path)) || (method === 'POST' && /^\/api\/vouchers\/(\d+)\/return-all$/.exec(path))
+  const v = match && m.vouchers.get(Number(match[1]))
+  return !!v && v.status !== DRAFT
+}
+
+function deleteVoucher(m, input, ctx, id) {
+  const v = voucherOr404(m, id)
+  const name = voucherLabel(v)
+  for (const draft of [...m.vouchers.values()].sort(byId)) if (draft.replaces_id === v.id && draft.status === DRAFT) removeVoucher(m, draft)
+  discard(m, v, ctx)
+  return { status: 204, effect: { kind: 'voucher_deleted', label: name } }
+}
+
+function replaceVoucher(m, input, ctx, id) {
+  const v = voucherOr404(m, id)
+  if (v.status === DRAFT) invalid('voucher', 'voucher_not_issued')
+  const existing = [...m.vouchers.values()].sort(byId).find((d) => d.replaces_id === v.id && d.status === DRAFT)
+  if (existing) return { body: pageOf(m, existing), effect: null }
+  const out = custodiesOfVoucher(m, v)
+    .filter(isOpen)
+    .map((c) => c.equipment_id)
+  if (!out.length) invalid('voucher', 'voucher_nothing_out')
+  const templateId = Number(v.layout?.template_id ?? v.template_id)
+  const draft = {
+    id: ctx.newId(),
+    number: null,
+    status: DRAFT,
+    recipient: v.recipient,
+    fields: v.fields == null ? null : JSON.parse(JSON.stringify(v.fields)),
+    replaces_id: v.id,
+    template_id: m.voucherSettings.templates.some((t) => t.id === templateId) ? templateId : null,
+    layout: null,
+    revision: 0,
+    created_by: ctx.user?.id ?? null,
+    issued_by: null,
+    issued_at: null,
+    returned_at: null,
+    created_at: ctx.at,
+    updated_at: ctx.at,
+    creator: who(ctx.user),
+    issuer: null,
+    last_print: null,
+  }
+  m.vouchers.set(draft.id, draft)
+  for (const equipmentId of out) addItem(m, draft, equipmentId, ctx)
+  v.revision++
+  v.updated_at = ctx.at
+  ctx.mark('voucher', draft.id, 'new')
+  ctx.mark('voucher', v.id)
+  return { body: pageOf(m, draft, true), effect: { kind: 'voucher_replace_started', label: voucherLabel(v), n: out.length } }
+}
+
+function addVoucherItems(m, input, ctx, id) {
+  const v = voucherOr404(m, id)
+  mustBeDraft(v)
+  if (input.code == null && input.equipment_ids == null) throw new Refusal(422, { message: 'offline_invalid', errors: { code: ['offline_invalid'], equipment_ids: ['offline_invalid'] } })
+  check('code', input.code, { max: 500 })
+  const ids = input.equipment_ids != null ? idList('equipment_ids', input.equipment_ids, 500) : []
+  const move = checkBoolean('move', input.move)
+  let equipment
+  if (input.code != null) equipment = [findByCode(m, input.code)]
+  else {
+    const wanted = new Set(ids)
+    equipment = [...m.equipment.values()].filter((e) => wanted.has(e.id)).sort(byId)
+  }
+  const inVoucher = new Set(itemsOfVoucher(m, v).map((i) => i.equipment_id))
+  const fresh = equipment.filter((e) => !inVoucher.has(e.id))
+  if (!fresh.length) return { body: { status: 'already', equipment: equipment.map((e) => voucherBrief(m, e)), ...pageOf(m, v) }, effect: null }
+  const held = heldElsewhere(m, v, fresh.map((e) => e.id))
+  if (held.length && !move) return { body: { status: 'held', held: heldList(m, held), ...pageOf(m, v) }, effect: null }
+  const added = fresh.map((e) => addItem(m, v, e.id, ctx))
+  syncStatus(m, v, ctx)
+  return {
+    body: { status: 'added', added: added.map((i) => i.id), equipment: fresh.map((e) => voucherBrief(m, e)), ...pageOf(m, v) },
+    effect: { kind: 'voucher_items_added', label: voucherLabel(v), n: fresh.length, labels: fresh.map((e) => label(m, e)) },
+  }
+}
+
+function removeVoucherItem(m, input, ctx, id, itemId) {
+  const v = voucherOr404(m, id)
+  const item = m.voucherItems.get(Number(itemId))
+  if (!item || item.voucher_id !== v.id) notFound()
+  mustBeDraft(v)
+  m.voucherItems.delete(item.id)
+  syncStatus(m, v, ctx)
+  const unit = unitOf(m, item.equipment_id)
+  return { body: pageOf(m, v), effect: { kind: 'voucher_item_removed', label: voucherLabel(v), serial: unit?.brief.serial_number || unit?.brief.display_name || '' } }
+}
+
+/** VoucherController::queuePrint: on the phone the print waits for the sync. */
+function queuePrint(m, v, copies, ctx) {
+  m.voucherSettings.copies = copies
+  if (copies < 1) return null
+  const job = { id: ctx.newId(), copies, status: PRINT_AT_SYNC, created_at: ctx.at, finished_at: null }
+  v.last_print = job
+  return job
+}
+
+/** The print station is on the laptop: a phone without a connection cannot tell whether it is open. */
+const STATION_UNKNOWN = { online: false, seen_at: null }
+
+/** VoucherController::handOver: custody for each unit; a unit someone else holds is taken back from them first. */
+function handOver(m, v, items, ctx) {
+  const ids = new Set(items.map((i) => i.equipment_id))
+  const previous = [...m.custodies.values()].filter((c) => isOpen(c) && ids.has(c.equipment_id)).sort(byId)
+  for (const item of items) {
+    for (const old of previous.filter((c) => c.equipment_id === item.equipment_id)) {
+      old.returned_at = ctx.at
+      old.return_notes = `نُقلت إلى سند الصرف رقم ${v.number ?? ''}`
+      custodyChanged(m, old, ctx)
+    }
+    const custody = { id: ctx.newId(), equipment_id: item.equipment_id, voucher_id: v.id, holder: v.recipient, handed_at: ctx.at, returned_at: null, return_notes: null }
+    m.custodies.set(custody.id, custody)
+    item.custody_id = custody.id
+  }
+}
+
+/**
+ * Hands every unit over to the recipient. On the phone the voucher has no number until it syncs
+ * (a correction takes the number of the voucher it corrects); `m.numbered` numbers it as the
+ * server does (offlineSync.js keeps the server's data up to date with it).
+ */
+function issueVoucher(m, input, ctx, id) {
+  const v = voucherOr404(m, id)
+  check('recipient', input.recipient, { max: 191 })
+  const move = checkBoolean('move', input.move)
+  check('copies', input.copies, { integer: true, min: 0, maxValue: MAX_COPIES })
+  if (v.status !== DRAFT) invalid('voucher', 'voucher_not_draft')
+  const recipient = voucherText(input.recipient) ?? v.recipient
+  if (!recipient) invalid('recipient', 'voucher_no_recipient')
+  const items = itemsOfVoucher(m, v)
+  if (!items.length) invalid('voucher', 'voucher_empty')
+  const held = heldElsewhere(m, v, items.map((i) => i.equipment_id))
+  if (held.length && !move) return { body: { status: 'held', held: heldList(m, held), ...pageOf(m, v) }, effect: null }
+
+  const copies = input.copies == null ? 1 : Number(input.copies)
+  const template = currentTemplate(m, v.template_id)
+  const replaced = v.replaces_id != null ? m.vouchers.get(v.replaces_id) : null
+  const number = replaced?.number ?? null
+  if (replaced) discard(m, replaced, ctx, new Set(items.map((i) => i.equipment_id)))
+  Object.assign(v, {
+    number: number ?? (m.numbered ? nextNumber(m) : null),
+    replaces_id: null,
+    status: ISSUED,
+    recipient,
+    template_id: template?.id ?? null,
+    layout: template ? (m.voucherSettings.layouts[template.id] ?? null) : null,
+    issued_at: ctx.at,
+    issued_by: ctx.user?.id ?? null,
+    issuer: who(ctx.user),
+    updated_at: ctx.at,
+  })
+  handOver(m, v, items, ctx)
+  syncStatus(m, v, ctx)
+  const typed = Object.entries(v.fields || {}).filter(([, value]) => typeof value === 'string' && value !== '')
+  if (typed.length) m.voucherSettings.last_fields = { ...m.voucherSettings.last_fields, ...Object.fromEntries(typed) }
+  const job = queuePrint(m, v, copies, ctx)
+  return {
+    body: { status: 'issued', print: { job, station: STATION_UNKNOWN }, ...pageOf(m, v) },
+    effect: { kind: 'voucher_issued', label: voucherLabel(v), n: items.length, copies, replaces: replaced ? voucherLabel(replaced) : undefined },
+    info: { held: held.map(custodyInfo), replaced: replaced?.id ?? null },
+  }
+}
+
+function printVoucher(m, input, ctx, id) {
+  const v = voucherOr404(m, id)
+  check('copies', input.copies, { required: true, integer: true, min: 1, maxValue: MAX_COPIES })
+  if (v.status === DRAFT) invalid('voucher', 'voucher_not_issued')
+  const job = queuePrint(m, v, Number(input.copies), ctx)
+  v.revision++
+  v.updated_at = ctx.at
+  ctx.mark('voucher', v.id)
+  return { body: { print: { job, station: STATION_UNKNOWN }, ...pageOf(m, v) }, effect: { kind: 'voucher_printed', label: voucherLabel(v), copies: job.copies } }
+}
+
+function holderOf(m, e) {
+  const c = [...m.custodies.values()].filter((x) => x.equipment_id === e.id && isOpen(x)).sort(byId)[0]
+  return c ? { holder: c.holder, voucher_number: numberOf(m, c.voucher_id) } : null
+}
+
+function takeBack(m, custody, ctx) {
+  custody.returned_at = ctx.at
+  custodyChanged(m, custody, ctx)
+}
+
+function returnVoucherItem(m, input, ctx, id) {
+  const v = voucherOr404(m, id)
+  check('code', input.code, { required: true, max: 500 })
+  if (v.status === DRAFT) invalid('code', 'voucher_not_issued')
+  const e = findByCode(m, input.code)
+  const item = itemsOfVoucher(m, v).find((i) => i.equipment_id === e.id)
+  if (!item) return { body: { status: 'not_in_voucher', equipment: voucherBrief(m, e), holder: holderOf(m, e), ...pageOf(m, v) }, effect: null }
+  const custody = custodyOf(m, item)
+  if (!isOpen(custody)) return { body: { status: 'already', equipment: voucherBrief(m, e), ...pageOf(m, v) }, effect: null }
+  takeBack(m, custody, ctx)
+  return {
+    body: { status: 'returned', equipment: voucherBrief(m, e), ...pageOf(m, v) },
+    effect: { kind: 'voucher_item_returned', label: voucherLabel(v), serial: label(m, e) },
+    info: { custodies: [custodyInfo(custody)] },
+  }
+}
+
+function returnAllVoucher(m, input, ctx, id) {
+  const v = voucherOr404(m, id)
+  if (v.status === DRAFT) invalid('voucher', 'voucher_not_issued')
+  const open = custodiesOfVoucher(m, v).filter(isOpen)
+  if (!open.length) invalid('voucher', 'voucher_nothing_out')
+  for (const custody of open) {
+    custody.returned_at = ctx.at
+    custody.return_notes = `إرجاع كامل لسند الصرف رقم ${v.number ?? ''}`
+  }
+  syncStatus(m, v, ctx)
+  return { body: { status: 'returned', returned: open.length, ...pageOf(m, v) }, effect: { kind: 'voucher_returned_all', label: voucherLabel(v), n: open.length }, info: { custodies: open.map(custodyInfo) } }
+}
+
+function returnAnyUnit(m, input, ctx) {
+  vouchersOf(m)
+  check('code', input.code, { required: true, max: 500 })
+  const e = findByCode(m, input.code)
+  const custody = [...m.custodies.values()].filter((c) => c.equipment_id === e.id && isOpen(c)).sort((a, b) => (b.handed_at > a.handed_at) - (b.handed_at < a.handed_at) || b.id - a.id)[0]
+  if (!custody) return { body: { status: 'not_held', equipment: voucherBrief(m, e) }, effect: null }
+  takeBack(m, custody, ctx)
+  const v = custody.voucher_id != null ? m.vouchers.get(custody.voucher_id) : null
+  const items = v ? itemsOfVoucher(m, v) : []
+  return {
+    body: {
+      status: 'returned',
+      equipment: voucherBrief(m, e),
+      holder: custody.holder,
+      voucher: v ? { id: v.id, number: v.number, recipient: v.recipient, status: v.status, items_count: items.length, held_count: items.filter((i) => isOpen(custodyOf(m, i))).length } : null,
+    },
+    effect: { kind: 'voucher_unit_returned', label: label(m, e), holder: custody.holder, voucher: v ? voucherLabel(v) : '' },
+    info: { custodies: [custodyInfo(custody)] },
+  }
+}
+
+/** What a voucher holds that the sync compares (offlineSync.js). */
+const voucherState = (m, v) => ({
+  recipient: v.recipient,
+  template_id: v.template_id,
+  status: v.status,
+  number: v.number,
+  replaces_id: v.replaces_id,
+  fields: Object.entries(v.fields && typeof v.fields === 'object' ? v.fields : {}).map(([key, value]) => ({ key, value })),
+  items: itemsOfVoucher(m, v).map((i) => i.equipment_id),
+  open: itemsOfVoucher(m, v)
+    .filter((i) => isOpen(custodyOf(m, i)))
+    .map((i) => i.equipment_id),
+  revision: v.revision,
+})
+
+/** Open custody of an equipment (for the sync): who holds it now. */
+const openCustodies = (m, equipmentId) => [...(m.custodies?.values() || [])].filter((c) => c.equipment_id === equipmentId && isOpen(c)).sort(byId)
+
 /** The changes a phone can make without a connection; anything else waits for the server. */
 const CHANGES = [
   ['POST', /^\/api\/equipment$/, storeEquipment],
@@ -2640,6 +3389,17 @@ const CHANGES = [
   ['POST', /^\/api\/scan-documents\/(\d+)\/rows$/, addScanRow],
   ['PUT', /^\/api\/scan-documents\/(\d+)\/rows\/(\d+)$/, updateScanRow],
   ['DELETE', /^\/api\/scan-documents\/(\d+)\/rows\/(\d+)$/, deleteScanRow],
+  ['POST', /^\/api\/vouchers$/, storeVoucher],
+  ['PUT', /^\/api\/vouchers\/(\d+)$/, updateVoucher],
+  ['DELETE', /^\/api\/vouchers\/(\d+)$/, deleteVoucher],
+  ['POST', /^\/api\/vouchers\/(\d+)\/replace$/, replaceVoucher],
+  ['POST', /^\/api\/vouchers\/(\d+)\/items$/, addVoucherItems],
+  ['DELETE', /^\/api\/vouchers\/(\d+)\/items\/(\d+)$/, removeVoucherItem],
+  ['POST', /^\/api\/vouchers\/(\d+)\/issue$/, issueVoucher],
+  ['POST', /^\/api\/vouchers\/(\d+)\/print$/, printVoucher],
+  ['POST', /^\/api\/vouchers\/(\d+)\/return$/, returnVoucherItem],
+  ['POST', /^\/api\/vouchers\/(\d+)\/return-all$/, returnAllVoucher],
+  ['POST', /^\/api\/vouchers\/return$/, returnAnyUnit],
 ]
 
 /** Whether the phone can make this change without the server. */
@@ -2648,8 +3408,8 @@ const canChangeOffline = (method, path) => CHANGES.some(([m, pattern]) => m === 
 /**
  * Applies one change to the records, as the server would. A refused change answers 4xx and
  * changes nothing. `replay`: the change was made before, it takes the ids it was given then.
- * Returns { status, body, effect, touched }: effect describes it for the list of changes, touched
- * is what it changed ([type, id, 'new' | 'changed']).
+ * Returns { status, body, effect, touched, info }: effect describes it for the list of changes,
+ * touched is what it changed ([type, id, 'new' | 'changed']), info what the sync needs besides.
  */
 function applyChange(m, change, { replay = false } = {}) {
   const route = CHANGES.find(([method, pattern]) => method === change.method && pattern.test(change.path))
@@ -2670,9 +3430,9 @@ function applyChange(m, change, { replay = false } = {}) {
     mark: (type, id, state = 'changed') => touched.push([type, id, state]),
   }
   try {
-    const { status = 200, body = null, effect } = route[2](m, asInput(change.body ?? {}), ctx, ...change.path.match(route[1]).slice(1))
+    const { status = 200, body = null, effect, info } = route[2](m, asInput(change.body ?? {}), ctx, ...change.path.match(route[1]).slice(1))
     if (!replay) change.ids = ids
-    return { status, body, effect, touched }
+    return { status, body, effect, touched, info }
   } catch (error) {
     if (error instanceof Refusal) return { status: error.status, body: error.body }
     throw error
@@ -2718,5 +3478,5 @@ function undoPlan(saved, changes, id) {
   return [id, ...rest.filter((c, i) => results[i].status >= 400).map((c) => c.id)]
 }
 
-return { TEMP_ID, isTempId, normalizeName, groupNameKey, fieldDiff, laravelTime, toModel, fromModel, equipmentLabel, equipmentState, LARGE_DELETE, deleteCount, localPhotoUrl, localIssuePhotoUrl, groupState, boxState, scanRowFrom, localScanPhotoUrl, scanFolderState, scanDocumentState, scanRowState, canChangeOffline, applyChange, notesFrom, applyAll, undoPlan }
+return { TEMP_ID, isTempId, normalizeName, groupNameKey, fieldDiff, laravelTime, toModel, fromModel, equipmentLabel, equipmentState, LARGE_DELETE, deleteCount, localPhotoUrl, localIssuePhotoUrl, groupState, boxState, scanRowFrom, localScanPhotoUrl, scanFolderState, scanDocumentState, scanRowState, PRINT_AT_SYNC, arabicWords, voucherPinNeeded, voucherState, openCustodies, canChangeOffline, applyChange, notesFrom, applyAll, undoPlan }
 })()
