@@ -1564,40 +1564,6 @@
   border-radius: 13px;
 }
 
-/* An open custody: the row, and its buttons under it */
-.phone-custody .phone-row {
-  align-items: flex-start;
-  padding-bottom: 6px;
-}
-
-.phone-custody .phone-row .phone-chevron {
-  align-self: center;
-}
-
-.phone-custody-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 0 14px 12px;
-  padding-inline-start: 68px;
-}
-
-.phone-custody-actions .ant-btn {
-  height: 32px;
-  border-radius: 10px;
-}
-
-.phone-custody-actions > :last-child {
-  margin-inline-start: auto;
-}
-
-.phone-call {
-  display: inline-flex;
-  align-items: center;
-  font-variant-numeric: tabular-nums;
-}
-
 /* The equipment's photo */
 .phone-photo {
   position: relative;

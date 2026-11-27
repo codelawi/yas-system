@@ -14,7 +14,7 @@ class Custody extends Model
 
     protected static function booted(): void
     {
-        // Taken back anywhere (equipment page, custody page, another voucher): its voucher follows
+        // Taken back anywhere (its voucher, the general return, another voucher): its voucher follows
         static::saved(function (Custody $custody) {
             if ($custody->voucher_id && $custody->wasChanged('returned_at')) {
                 $custody->voucher?->syncStatus();

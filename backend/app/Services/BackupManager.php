@@ -53,8 +53,8 @@ class BackupManager
             throw new RuntimeException('backup_folder_not_writable');
         }
         $zip->addFile($sqlFile, 'database.sql');
-        $files = 0; // Word files + damage-report photos + custody form templates + equipment photos + scanned text photos
-        foreach ([...Storage::files('imports'), ...Storage::files('issues'), ...Storage::files('custody_forms'), ...Storage::files('equipment_photos'), ...Storage::files('scan_photos')] as $file) {
+        $files = 0; // Word files + damage-report photos + equipment photos + scanned text photos
+        foreach ([...Storage::files('imports'), ...Storage::files('issues'), ...Storage::files('equipment_photos'), ...Storage::files('scan_photos')] as $file) {
             $zip->addFile(Storage::path($file), $file);
             $files++;
         }
@@ -124,7 +124,7 @@ class BackupManager
         // Word files: add back the ones from the backup (current files are kept)
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $name = $zip->getNameIndex($i);
-            if (preg_match('#^(imports|issues|custody_forms|equipment_photos|scan_photos)/[^/]+$#', $name) && ! Storage::exists($name)) {
+            if (preg_match('#^(imports|issues|equipment_photos|scan_photos)/[^/]+$#', $name) && ! Storage::exists($name)) {
                 Storage::put($name, $zip->getFromIndex($i));
             }
         }

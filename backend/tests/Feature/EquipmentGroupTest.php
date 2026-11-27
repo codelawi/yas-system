@@ -48,7 +48,7 @@ class EquipmentGroupTest extends TestCase
         $this->getJson("/api/groups/{$group->id}")->assertJsonPath('equipment.0.display_name', 'وحدة الفتح والقص');
     }
 
-    public function test_the_group_name_also_shows_on_custody_home_stocktake_and_accessories(): void
+    public function test_the_group_name_also_shows_on_home_stocktake_and_accessories(): void
     {
         $this->signIn();
         $group = EquipmentGroup::create(['name' => 'وحدة الفتح والقص']);
@@ -56,18 +56,12 @@ class EquipmentGroupTest extends TestCase
         $accessory = Equipment::create(['serial_number' => 'G-2', 'parent_id' => $unit->id]);
         $box = Box::create(['number' => '1']);
         $box->equipment()->attach($accessory->id);
-        $unit->custodies()->create(['holder' => 'سالم', 'handed_at' => now(), 'due_back_at' => now()->addDay()]);
         $unit->schedules()->create(['title' => 'فحص', 'due_date' => now()->addDay()]);
         $unit->issues()->create(['description' => 'عطل']);
 
-        $this->getJson('/api/custody')
-            ->assertJsonPath('open.0.equipment.display_name', 'وحدة الفتح والقص')
-            ->assertJsonMissingPath('open.0.equipment.fields');
-
         $this->getJson('/api/stats')
             ->assertJsonPath('maintenance.items.0.equipment.display_name', 'وحدة الفتح والقص')
-            ->assertJsonPath('issues.items.0.equipment.display_name', 'وحدة الفتح والقص')
-            ->assertJsonPath('custody.items.0.equipment.display_name', 'وحدة الفتح والقص');
+            ->assertJsonPath('issues.items.0.equipment.display_name', 'وحدة الفتح والقص');
 
         $stocktake = $this->postJson('/api/stocktakes', ['name' => 'جرد'])->assertSuccessful()->json('id');
         $this->postJson("/api/stocktakes/{$stocktake}/scan", ['code' => 'G-1'])

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
-use App\Models\Custody;
 use App\Models\Equipment;
 use App\Models\EquipmentField;
 use App\Models\EquipmentGroup;
@@ -451,15 +450,6 @@ class EquipmentController extends Controller
                 'open' => IssueReport::whereHas('equipment')->where('status', 'open')->count(),
                 'items' => IssueReport::with(Equipment::NAME_RELATIONS)->whereHas('equipment')->where('status', 'open')->latest('id')->limit(5)->get()
                     ->each(fn (IssueReport $issue) => $issue->equipment->withDisplayName()),
-            ],
-            'custody' => [
-                'open' => Custody::open()->whereHas('equipment')->count(),
-                'overdue' => Custody::open()->whereHas('equipment')->where('due_back_at', '<', now()->toDateString())->count(),
-                // Names of people only with a PIN
-                'items' => $withPin
-                    ? Custody::open()->with(Equipment::NAME_RELATIONS)->whereHas('equipment')->whereNotNull('due_back_at')->orderBy('due_back_at')->limit(5)->get()
-                        ->each(fn (Custody $custody) => $custody->equipment->withDisplayName())
-                    : null,
             ],
             'recent_equipment' => Equipment::with(['fields', 'group:id,name'])->withCount('accessories')->whereNull('parent_id')->latest('created_at')->latest('id')->limit(6)->get()
                 ->map(fn (Equipment $e) => [

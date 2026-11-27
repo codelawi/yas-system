@@ -246,10 +246,10 @@ function HealthCard({ health }) {
   )
 }
 
-/** Maintenance due, overdue custody and open problem reports. */
+/** Maintenance due and open problem reports. */
 function FollowUpCard({ stats }) {
   const { t } = useLang()
-  const { maintenance, custody, issues } = stats
+  const { maintenance, issues } = stats
   const badge = (n, color) => (n > 0 ? <Tag color={color} style={{ marginInlineStart: 6 }}>{n}</Tag> : null)
   const empty = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('no_data')} />
 
@@ -278,35 +278,6 @@ function FollowUpCard({ stats }) {
                     <span className="mini-date">{dayjs(m.due_date).fromNow()}</span>
                   </Link>
                 ))}
-              </div>
-            ) : (
-              empty
-            ),
-          },
-          {
-            key: 'custody',
-            label: (
-              <span>
-                {t('custodies')}
-                {badge(custody.overdue, 'red')}
-              </span>
-            ),
-            children: custody.items === null ? (
-              <HistoryLocked title={t('custodies')} />
-            ) : custody.items.length ? (
-              <div className="mini-list">
-                {custody.items.map((c) => (
-                  <Link key={c.id} to={`/equipment/${c.equipment.id}`} className="mini-row">
-                    <Tag color={dayjs(c.due_back_at).isBefore(dayjs(), 'day') ? 'red' : 'blue'}>{dayjs(c.due_back_at).format('YYYY-MM-DD')}</Tag>
-                    <span className="mini-sub">
-                      <b className="serial">{c.equipment.serial_number || '—'}</b>
-                      {c.equipment.display_name && ` · ${c.equipment.display_name}`} · {c.holder}
-                    </span>
-                  </Link>
-                ))}
-                <Link to="/custody" className="mini-row">
-                  {t('custodies')} ({custody.open}) →
-                </Link>
               </div>
             ) : (
               empty

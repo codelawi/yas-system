@@ -19,12 +19,10 @@ import SettingsPage from './pages/SettingsPage'
 import NetworkPage from './pages/NetworkPage'
 import QrPage from './pages/QrPage'
 import HistoryPage from './pages/HistoryPage'
-import CustodyPage from './pages/CustodyPage'
 import { StocktakePage, StocktakesPage } from './pages/StocktakePages'
 import LabelsPrint from './pages/LabelsPrint'
 import ScanLabelPage from './pages/ScanLabelPage'
-import { PrintCustodyForm, PrintList, PrintSheet } from './pages/PrintPages'
-import { CustodyFormPage, CustodyFormsPage } from './pages/CustodyFormsPage'
+import { PrintList, PrintSheet } from './pages/PrintPages'
 import { BoxDetail, BoxesPage, ScanBoxPage } from './pages/BoxPages'
 import { GroupDetail, GroupsPage } from './pages/GroupPages'
 import { VoucherCodeImportPage, VoucherCodesPage } from './pages/VoucherCodePages'
@@ -62,7 +60,6 @@ export default function App() {
               <Route path="/boxes/:id/report" element={<BoxReport />} />
               <Route path="/print/equipment/:id" element={<PrintSheet />} />
               <Route path="/print/list" element={<PrintList />} />
-              <Route path="/print/custody/:custodyId" element={<PrintCustodyForm />} />
               {/* Phones: every page except the printed ones in the app layout (bottom tabs) */}
               <Route element={phone ? <PhoneShell /> : <Outlet />}>
                 {/* Opened by phones scanning a QR code */}
@@ -104,9 +101,6 @@ function Shell() {
       <Route path="/import" element={<ImportPage />} />
       <Route path="/qr" element={<QrPage />} />
       <Route path="/history" element={<HistoryPage />} />
-      <Route path="/custody" element={<CustodyPage />} />
-      <Route path="/custody/forms" element={<CustodyFormsPage />} />
-      <Route path="/custody/forms/:id" element={<CustodyFormPage />} />
       <Route path="/vouchers" element={<VouchersPage />} />
       <Route path="/vouchers/return" element={<VoucherReturnPage />} />
       <Route path="/vouchers/templates" element={<VoucherTemplatesPage />} />
