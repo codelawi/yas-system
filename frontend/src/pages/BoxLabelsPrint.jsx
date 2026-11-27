@@ -50,7 +50,8 @@ export default function BoxLabelsPrint() {
   useEffect(() => {
     if (!boxes?.length) return
     const base = boxUrl(settings, 'x').replace(/\/box\/x$/, '')
-    const onAfterPrint = () => api.post('/labels/printed', { url: base, count: boxes.length }).catch(() => {})
+    // Printed labels also leave the dashboard's «waiting for a label» list
+    const onAfterPrint = () => api.post('/labels/printed', { url: base, count: boxes.length, box_ids: boxes.map((box) => box.id) }).catch(() => {})
     window.addEventListener('afterprint', onAfterPrint)
     return () => window.removeEventListener('afterprint', onAfterPrint)
   }, [boxes, settings])

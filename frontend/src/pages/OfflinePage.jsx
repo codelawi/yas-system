@@ -8,6 +8,7 @@ import { useSettings } from '../settings'
 import { useAuth } from '../auth'
 import { tokenStore } from '../api'
 import { OfflineNeedsPin, clearOffline, downloadOffline, offlineSupported, readOfflineMeta } from '../offline'
+import { PendingChanges } from '../components/OfflineChanges'
 
 const PHOTOS_KEY = 'offline_with_photos'
 
@@ -75,6 +76,8 @@ export default function OfflinePage() {
   const [meta, setMeta] = useState(undefined)
   const [withPhotos, setWithPhotos] = useState(readPhotosChoice)
   const [progress, setProgress] = useState(null)
+  // Changes waiting on the phone: a new copy would lose them, they are synced first
+  const [pending, setPending] = useState(0)
   const supported = offlineSupported()
   const labelsOrigin = originOf(settings.base_url)
   const wrongAddress = labelsOrigin && labelsOrigin !== window.location.origin
@@ -94,10 +97,11 @@ export default function OfflinePage() {
 
   const download = async () => {
     // The copy holds vouchers and recipients
-    if (!(await requirePin())) return
+    const who = await requirePin()
+    if (!who) return
     setProgress({ step: 'app' })
     try {
-      const saved = await downloadOffline({ token: tokenStore.get(), withPhotos, onProgress: setProgress })
+      const saved = await downloadOffline({ token: tokenStore.get(), user: who, withPhotos, onProgress: setProgress })
       setMeta(saved)
       message.success(t('offline_saved'))
       if (saved.photos_failed) message.warning(t('offline_photos_failed', { n: saved.photos_failed }))
@@ -155,6 +159,8 @@ export default function OfflinePage() {
                 />
               )}
 
+              <PendingChanges onCount={setPending} />
+
               <Card title={t('offline_on_this_phone')}>
                 {meta ? (
                   <dl className="offline-meta">
@@ -191,9 +197,14 @@ export default function OfflinePage() {
                 <Checkbox checked={withPhotos} onChange={(e) => choosePhotos(e.target.checked)} disabled={!!progress} style={{ margin: '16px 0' }}>
                   {t('offline_with_photos')}
                 </Checkbox>
-                <Button type="primary" size="large" block icon={<CloudDownloadOutlined />} loading={!!progress} onClick={download}>
+                <Button type="primary" size="large" block icon={<CloudDownloadOutlined />} loading={!!progress} disabled={pending > 0} onClick={download}>
                   {t(meta ? 'offline_update' : 'offline_download')}
                 </Button>
+                {pending > 0 && (
+                  <Typography.Paragraph type="warning" className="offline-hint">
+                    {t('offline_update_blocked')}
+                  </Typography.Paragraph>
+                )}
                 {!user && !progress && (
                   <Typography.Paragraph type="secondary" className="offline-hint">
                     {t('offline_download_pin')}
@@ -206,7 +217,7 @@ export default function OfflinePage() {
                   </div>
                 )}
                 {meta && (
-                  <Popconfirm title={t('offline_remove_confirm')} okText={t('delete')} cancelText={t('cancel')} okButtonProps={{ danger: true }} onConfirm={remove}>
+                  <Popconfirm title={pending > 0 ? t('offline_remove_pending', { n: pending }) : t('offline_remove_confirm')} okText={t('delete')} cancelText={t('cancel')} okButtonProps={{ danger: true }} onConfirm={remove}>
                     <Button danger type="text" icon={<DeleteOutlined />} block style={{ marginTop: 8 }} disabled={!!progress}>
                       {t('offline_remove')}
                     </Button>

@@ -17,9 +17,9 @@ class Equipment extends Model
 
     protected $table = 'equipment';
 
-    protected $fillable = ['parent_id', 'group_id', 'serial_number', 'name', 'row_no', 'category', 'photo_path', 'import_id', 'created_by', 'updated_by'];
+    protected $fillable = ['parent_id', 'group_id', 'serial_number', 'name', 'row_no', 'category', 'photo_path', 'import_id', 'created_by', 'updated_by', 'label_pending'];
 
-    protected $hidden = ['photo_path'];
+    protected $hidden = ['photo_path', 'label_pending'];
 
     /** What to load on a model's `equipment` relation for withDisplayName(). */
     public const NAME_RELATIONS = ['equipment:id,serial_number,name,group_id', 'equipment.fields', 'equipment.group:id,name'];
@@ -112,7 +112,7 @@ class Equipment extends Model
         return $this->hasMany(ActivityLog::class)->latest('created_at');
     }
 
-    protected $casts = ['row_no' => 'integer'];
+    protected $casts = ['row_no' => 'integer', 'label_pending' => 'boolean'];
 
     /** A deleted main equipment must not block its serial number from being used again. */
     public static function purgeTrashedSerial(string $serial): void

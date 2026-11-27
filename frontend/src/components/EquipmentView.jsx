@@ -18,6 +18,7 @@ import IssuesCard, { ReportProblemModal } from './IssuesCard'
 import EquipmentPhoto from './EquipmentPhoto'
 import { usePhone } from '../nav'
 import { PhoneActions } from './PhoneUI'
+import { UnsyncedCard } from './OfflineChanges'
 
 /** Full equipment page, shared by the dashboard and the phone scan page. */
 const HISTORY_OPEN_KEY = 'history_open'
@@ -234,6 +235,9 @@ export default function EquipmentView({ equipment, onChange, onDeleted, onReload
         {!mobile && actions}
       </div>
       {phone && <PhoneActions actions={phoneActions} />}
+
+      {/* Changed on this phone without a connection: not on the server yet */}
+      <UnsyncedCard changes={equipment.offline_changes} />
 
       {isAccessory && (
         <Alert

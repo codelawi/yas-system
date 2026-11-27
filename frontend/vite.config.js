@@ -13,10 +13,22 @@ const BASE = '/app/'
 const isOcrFile = (file) => /\.onnx$/.test(file) || /(^|\/)ort-wasm[^/]*\.wasm$/.test(file)
 
 /**
+ * src/offlineEdit.js for the service worker: inside a function of its own (its helpers keep their
+ * names), with what it exports as OfflineEdit.applyAll and so on. It imports from offlineData.js
+ * only, which the worker has as plain functions.
+ */
+function offlineEditScope() {
+  const source = readFileSync('src/offlineEdit.js', 'utf8')
+  const exported = [...source.matchAll(/^export (?:const|function|class) (\w+)/gm)].map((match) => match[1])
+  const body = source.replace(/^import .*$/gm, '').replace(/^export /gm, '')
+  return `const OfflineEdit = (() => {\n${body}\nreturn { ${exported.join(', ')} }\n})()`
+}
+
+/**
  * Builds the service worker (src/sw.js) next to the app as sw.js, with the list of app
- * files it saves on the phone and the answers it gives from the phone's copy (src/offlineData.js,
- * included as plain functions). Its version changes whenever a file does (the names carry
- * a hash), so phones pick up each new build.
+ * files it saves on the phone, the answers it gives from the phone's copy (src/offlineData.js,
+ * included as plain functions) and the changes it keeps on the phone (offlineEditScope). Its
+ * version changes whenever a file does (the names carry a hash), so phones pick up each new build.
  */
 function serviceWorker() {
   return {
@@ -37,6 +49,7 @@ function serviceWorker() {
         .replace('/* ASSETS */ []', JSON.stringify(assets))
         .replace('/* OCR_ASSETS */ []', JSON.stringify(ocr))
         .replace('/* OFFLINE_DATA */', () => offlineData)
+        .replace('/* OFFLINE_EDIT */', offlineEditScope)
       this.emitFile({ type: 'asset', fileName: 'sw.js', source })
     },
   }

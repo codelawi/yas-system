@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Box;
 use App\Models\Equipment;
 use App\Models\EquipmentGroup;
+use App\Models\OfflineChange;
 use App\Models\ScanDocument;
 use App\Models\ScanFolder;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\Voucher;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\Request;
 
 /**
  * Everything a phone needs to open the system's pages without a connection, in one download.
@@ -136,6 +138,22 @@ class OfflineController extends Controller
             'folder_revisions' => (object) $folderRevisions,
             'documents' => (object) $documents,
         ];
+    }
+
+    /**
+     * Which of a phone's changes the server already saved (App\Http\Middleware\ApplyOfflineChange):
+     * a sync cut off half way starts again without asking about what already went through.
+     *
+     * @return array{done: list<string>}
+     */
+    public function done(Request $request): array
+    {
+        $data = $request->validate([
+            'keys' => ['required', 'array', 'max:5000'],
+            'keys.*' => ['string', 'max:100'],
+        ]);
+
+        return ['done' => OfflineChange::whereIn('key', $data['keys'])->pluck('key')->all()];
     }
 
     /**

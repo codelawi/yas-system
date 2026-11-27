@@ -20,6 +20,7 @@ import EquipmentForm from '../components/EquipmentForm'
 import EquipmentPicker from '../components/EquipmentPicker'
 import { usePhone } from '../nav'
 import { Fab, PhoneActions, PhoneHeader, PhoneList, PhoneRow, PhoneSearch, PhoneSkeleton } from '../components/PhoneUI'
+import { OfflineMark } from '../components/OfflineChanges'
 
 /** Create (no `group`) or edit a group: its name, and what an issue voucher prints for it. */
 function GroupForm({ open, group, onClose, onSaved }) {
@@ -237,7 +238,11 @@ export function GroupsPage() {
                 to={`/groups/${g.id}`}
                 icon={<ClusterOutlined />}
                 tone="cyan"
-                title={g.name}
+                title={
+                  <>
+                    {g.name} <OfflineMark mark={g.offline} />
+                  </>
+                }
                 subtitle={[t('n_items', { n: g.equipment_count }), g.voucher_code].filter(Boolean).join(' · ')}
               />
             ))}
@@ -456,7 +461,9 @@ export function GroupDetail() {
                     </span>
                   )}
                   <span className="box-item-text">
-                    <span className="box-item-name">{eq.display_name || eq.serial_number}</span>
+                    <span className="box-item-name">
+                      {eq.display_name || eq.serial_number} <OfflineMark mark={eq.offline} />
+                    </span>
                     <span className="box-item-serial serial">{eq.serial_number}</span>
                     <Typography.Text type="secondary" className="box-item-extra">
                       {[eq.row_no != null && `${t('row_no')} ${eq.row_no}`, eq.category, eq.accessories_count > 0 && t('accessories_n', { n: eq.accessories_count })]

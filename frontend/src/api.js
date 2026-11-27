@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { isOffline, setOffline } from './offline'
+import { isOffline, setOfflineState } from './offline'
 
 const TOKEN_KEY = 'repo_token'
 
@@ -20,8 +20,15 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-/** Answers from the phone's saved copy carry this header (see sw.js); any answer from the server clears it. */
-const noteOffline = (res) => setOffline(!!res.headers?.['x-repo-offline'])
+/**
+ * Answers from the phone's saved copy carry these headers (see sw.js); any answer from the server
+ * means the phone is back on it, with nothing waiting to be synced.
+ */
+function noteOffline(res) {
+  const headers = res.headers || {}
+  if (headers['x-repo-offline']) setOfflineState({ offline: true, changes: Number(headers['x-repo-changes'] || 0), server: headers['x-repo-server'] === '1' })
+  else setOfflineState({ offline: false, changes: 0, server: true })
+}
 
 api.interceptors.response.use(
   (res) => {

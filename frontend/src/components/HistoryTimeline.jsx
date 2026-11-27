@@ -3,7 +3,7 @@ import { Empty, Tag, Timeline, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { useLang } from '../i18n'
 
-export const ACTION_COLORS = { created: 'green', imported: 'blue', updated: 'orange', deleted: 'red', accessory_added: 'purple', accessory_removed: 'gray', custody_out: 'cyan', custody_in: 'geekblue', maintenance_done: 'gold', issue_reported: 'volcano', issue_closed: 'lime', box_added: 'purple', box_removed: 'gray', photo_changed: 'blue', photo_removed: 'gray', group_changed: 'cyan' }
+export const ACTION_COLORS = { created: 'green', imported: 'blue', updated: 'orange', deleted: 'red', accessory_added: 'purple', accessory_removed: 'gray', custody_out: 'cyan', custody_in: 'geekblue', maintenance_done: 'gold', issue_reported: 'volcano', issue_closed: 'lime', box_added: 'purple', box_removed: 'gray', photo_changed: 'blue', photo_removed: 'gray', group_changed: 'cyan', restored: 'green' }
 
 export function Changes({ changes, t }) {
   if (!changes) return null
@@ -70,6 +70,12 @@ export default function HistoryTimeline({ logs, showSerial }) {
               {log.user?.name && `${t('by')} ${log.user.name} · `}
               {dayjs(log.created_at).format('YYYY-MM-DD HH:mm')}
             </Typography.Text>
+            {/* Made on a phone without a connection, saved when it synced */}
+            {log.changes?.offline && (
+              <Tag className="offline-mark" style={{ marginInlineStart: 6 }}>
+                {t('made_offline')}
+              </Tag>
+            )}
             {/* The full field list on creation is noise; show changes only for edits */}
             {!showSerial && log.action !== 'created' && !(log.action === 'imported' && !log.changes?.overwrite) && (
               <Changes changes={log.changes} t={t} />

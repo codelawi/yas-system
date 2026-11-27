@@ -1,11 +1,13 @@
 <?php
 
+use App\Http\Middleware\ApplyOfflineChange;
 use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\TrackDevice;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,7 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias(['admin' => EnsureAdmin::class]);
+        $middleware->alias(['admin' => EnsureAdmin::class, 'offline' => ApplyOfflineChange::class]);
+        // A change a phone sends again when it syncs gets its first answer, even if its record is gone since
+        $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: ApplyOfflineChange::class);
         // API only: never redirect guests to a login page, just answer 401
         $middleware->redirectGuestsTo(fn () => null);
         $middleware->appendToGroup('api', TrackDevice::class);

@@ -60,7 +60,7 @@ Route::get('/lookup', [LookupController::class, 'show']);
 Route::get('/equipment/{equipment}/maintenance', [MaintenanceController::class, 'index'])->whereNumber('equipment');
 Route::get('/maintenance/due', [MaintenanceController::class, 'due']);
 Route::get('/equipment/{equipment}/issues', [IssueController::class, 'equipmentIndex'])->whereNumber('equipment');
-Route::post('/equipment/{equipment}/issues', [IssueController::class, 'store'])->whereNumber('equipment')->middleware('throttle:10,1');
+Route::post('/equipment/{equipment}/issues', [IssueController::class, 'store'])->whereNumber('equipment')->middleware(['throttle:issue-reports', 'offline']);
 Route::get('/issues', [IssueController::class, 'index']);
 Route::get('/issues/{issue}/photo', [IssueController::class, 'photo']);
 Route::get('/network/ping', [NetworkController::class, 'ping']);
@@ -83,10 +83,12 @@ Route::get('/print-station/next', [PrintStationController::class, 'next']);
 Route::post('/print-station/jobs/{print}/printed', [PrintStationController::class, 'printed'])->whereNumber('print');
 Route::post('/print-station/jobs/{print}/cancel', [PrintStationController::class, 'cancel'])->whereNumber('print');
 
-Route::middleware('auth:sanctum')->group(function () {
+// Changes need a PIN. A phone that worked without a connection sends its changes here too (see App\Http\Middleware\ApplyOfflineChange)
+Route::middleware(['auth:sanctum', 'offline'])->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     // Everything a phone keeps for working without a connection (it holds vouchers and recipients)
     Route::get('/offline/snapshot', [OfflineController::class, 'snapshot'])->middleware('throttle:10,1');
+    Route::post('/offline/done', [OfflineController::class, 'done']);
     Route::get('/activity', [ActivityController::class, 'index']);
     Route::get('/activity/export', [ActivityController::class, 'export']);
     Route::get('/equipment/export', [EquipmentController::class, 'export']);
@@ -97,6 +99,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/equipment/bulk-update', [FieldController::class, 'bulkUpdate']);
     Route::put('/equipment/{equipment}', [EquipmentController::class, 'update']);
     Route::delete('/equipment/{equipment}', [EquipmentController::class, 'destroy']);
+    // A phone that changed equipment deleted meanwhile can bring it back when it syncs
+    Route::post('/equipment/{equipment}/restore', [EquipmentController::class, 'restore'])->whereNumber('equipment')->withTrashed();
+    // Equipment and boxes added on a phone without a connection, waiting for their labels
+    Route::post('/labels/pending/clear', [SettingController::class, 'clearPendingLabels']);
     Route::post('/equipment/{equipment}/photo', [EquipmentPhotoController::class, 'store']);
     Route::delete('/equipment/{equipment}/photo', [EquipmentPhotoController::class, 'destroy']);
 

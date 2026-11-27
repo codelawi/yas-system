@@ -70,17 +70,17 @@ export function compareText(a, b) {
 }
 
 /** `=`; null never equals anything. */
-const same = (a, b) => a != null && b != null && compareText(a, b) === 0
+export const same = (a, b) => a != null && b != null && compareText(a, b) === 0
 
 /** Texts that `=` finds equal share this key (what GROUP BY and DISTINCT merge). */
-const groupKey = (text) => weigh(text).key.replace(/ȉ+$/, '')
+export const groupKey = (text) => weigh(text).key.replace(/ȉ+$/, '')
 
 /** What `like '%q%'` looks for; it compares character by character, so a diacritic in between stops a match. */
-const pattern = (q) => weigh(q).chars
-const has = (value, wanted) => value != null && weigh(value).chars.includes(wanted)
+export const pattern = (q) => weigh(q).chars
+export const has = (value, wanted) => value != null && weigh(value).chars.includes(wanted)
 
 /** The database's order: null before any value. */
-function compareValues(a, b) {
+export function compareValues(a, b) {
   if (a == null || b == null) return (a == null ? 0 : 1) - (b == null ? 0 : 1)
   if (typeof a === 'number' && typeof b === 'number') return a - b
   return compareText(a, b)
@@ -89,7 +89,7 @@ function compareValues(a, b) {
 const byText = (key) => (a, b) => compareValues(a[key], b[key])
 
 /** PHP's natural order (SORT_NATURAL): numbers by their value, the rest character by character. */
-function naturalCompare(a, b) {
+export function naturalCompare(a, b) {
   const parts = (text) => String(text).match(/\d+|\D+/g) || []
   const x = parts(a)
   const y = parts(b)
@@ -195,7 +195,11 @@ const listItem = (e) => ({
   accessories_count: e.accessories.length,
   fields: e.fields,
   updated_at: e.updated_at,
+  ...offlineMark(e),
 })
+
+/** Changed on this phone and not synced yet ('new' or 'changed', see offlineEdit.js). */
+const offlineMark = (item) => (item.offline ? { offline: item.offline } : {})
 
 /** Laravel's paginate() as JSON (without the page links, which no page reads). */
 function paginate(items, query, path) {
@@ -301,6 +305,7 @@ function groupPage(copy, id) {
       category: e.category,
       accessories_count: e.accessories.length,
       photo_url: e.photo_url,
+      ...offlineMark(e),
     })),
   }
 }
@@ -310,7 +315,7 @@ function boxList(copy, query) {
   return copy.data.boxes
     .filter((b) => q === '' || has(b.number, pattern(q)) || has(b.name, pattern(q)))
     .sort((a, b) => naturalCompare(a.number, b.number))
-    .map((b) => ({ id: b.id, number: b.number, name: b.name, weight: b.weight, equipment_count: b.equipment.length, updated_at: b.updated_at }))
+    .map((b) => ({ id: b.id, number: b.number, name: b.name, weight: b.weight, equipment_count: b.equipment.length, updated_at: b.updated_at, ...offlineMark(b) }))
 }
 
 /* ---------- Dashboard, vouchers, scan documents: the server's own answers */
@@ -485,7 +490,7 @@ export function findRoute(url) {
 
 const fromBase64 = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0))
 
-async function pinMatches(pin, hash) {
+export async function pinMatches(pin, hash) {
   const [kind, iterations, salt, expected] = String(hash || '').split('$')
   if (kind !== 'pbkdf2_sha256' || !(Number(iterations) >= 1) || !salt || !expected) return false
   try {
