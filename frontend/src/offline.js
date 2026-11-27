@@ -16,6 +16,28 @@ const META_KEY = '/__offline__/meta.json'
 /** Photos downloaded at the same time. */
 const PARALLEL = 4
 
+/** Whether the copy holds the photos: the last choice on this phone (yes at first). */
+const PHOTOS_KEY = 'offline_with_photos'
+
+export function readPhotosChoice() {
+  try {
+    return localStorage.getItem(PHOTOS_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
+export function savePhotosChoice(value) {
+  try {
+    localStorage.setItem(PHOTOS_KEY, value ? '1' : '0')
+  } catch {
+    /* not remembered */
+  }
+}
+
+/** A new copy was saved on this phone. */
+export const COPY_SAVED = 'offline:copy-saved'
+
 export const offlineSupported = () => window.isSecureContext && 'serviceWorker' in navigator && 'caches' in window
 
 /*
@@ -148,6 +170,8 @@ export async function downloadOffline({ token, user, withPhotos, onProgress = ()
     version: snapshot.version,
     saved_at: new Date().toISOString(),
     generated_at: snapshot.generated_at,
+    // What the system's data was at (App\Support\DataRevision): another value means it changed since
+    revision: snapshot.revision ?? null,
     equipment: snapshot.equipment.length,
     boxes: snapshot.boxes.length,
     groups: snapshot.groups.length,
@@ -166,6 +190,7 @@ export async function downloadOffline({ token, user, withPhotos, onProgress = ()
   registration.active?.postMessage('snapshot-changed')
   // Changes made with this token without a connection are kept under this person's name
   if (user) registration.active?.postMessage({ type: 'token', token, user })
+  window.dispatchEvent(new Event(COPY_SAVED))
 
   // Ask the browser not to clear the copy when the phone runs low on space
   try {
@@ -174,6 +199,24 @@ export async function downloadOffline({ token, user, withPhotos, onProgress = ()
     /* not supported: the copy may be cleared, the page says when it was saved */
   }
   return meta
+}
+
+/**
+ * Connected, with a copy on this phone and nothing waiting to be synced: the system's revision when
+ * its data changed since the copy was made, else null (also when the server cannot be reached).
+ */
+export async function staleCopyRevision() {
+  const meta = await readOfflineMeta()
+  if (!meta || (await readSavedChanges()).length) return null
+  try {
+    // From the server itself, never the phone's copy (X-Repo-Direct, see sw.js)
+    const response = await fetch('/api/offline/revision', { headers: { Accept: 'application/json', 'X-Repo-Direct': '1' }, cache: 'no-store' })
+    if (!response.ok) return null
+    const { revision } = await response.json()
+    return revision && revision !== meta.revision ? revision : null
+  } catch {
+    return null
+  }
 }
 
 /* ---------- Changes kept on the phone (written by sw.js) */

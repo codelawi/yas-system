@@ -64,6 +64,8 @@ Route::post('/equipment/{equipment}/issues', [IssueController::class, 'store'])-
 Route::get('/issues', [IssueController::class, 'index']);
 Route::get('/issues/{issue}/photo', [IssueController::class, 'photo']);
 Route::get('/network/ping', [NetworkController::class, 'ping']);
+// Phones compare it with the copy they downloaded (App\Support\DataRevision)
+Route::get('/offline/revision', [OfflineController::class, 'revision'])->middleware('throttle:60,1');
 Route::get('/network/check-address', [NetworkController::class, 'checkAddress'])->middleware('throttle:30,1');
 Route::post('/labels/printed', [SettingController::class, 'labelsPrinted'])->middleware('throttle:30,1');
 

@@ -1,15 +1,107 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Alert, App, Button, Result, Space } from 'antd'
-import { CloudSyncOutlined, DisconnectOutlined } from '@ant-design/icons'
+import { Alert, App, Button, Modal, Result, Space } from 'antd'
+import { CloudDownloadOutlined, CloudSyncOutlined, DisconnectOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api from '../api'
 import { useLang } from '../i18n'
-import { readOfflineMeta, useOfflineState } from '../offline'
+import { COPY_SAVED, offlineSupported, readOfflineMeta, readPhotosChoice, staleCopyRevision, useOfflineState } from '../offline'
 import { startSync } from './OfflineChanges'
+import { DownloadProgress, useOfflineDownload } from './OfflineDownload'
 
 /** While changes wait, how often the worker is asked whether the server can be reached. */
 const CHECK_EVERY = 15000
+
+/** Connected: how often the phone asks whether the system changed since its copy was saved. */
+const STALE_CHECK_EVERY = 60000
+
+/** The system's revision when the notice was hidden: it shows again only after another change. */
+const HIDDEN_KEY = 'offline_stale_hidden'
+
+function readHidden() {
+  try {
+    return localStorage.getItem(HIDDEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Connected, while the copy on this phone is out of date (something changed on the system since it
+ * was saved): a light strip to update it in place, or hide it until the next change.
+ */
+function StaleCopyNotice() {
+  const { t } = useLang()
+  const [stale, setStale] = useState(null)
+  const [hidden, setHidden] = useState(readHidden)
+  const { progress, download } = useOfflineDownload()
+
+  useEffect(() => {
+    if (!offlineSupported()) return undefined
+    let alive = true
+    const check = () => staleCopyRevision().then((revision) => alive && setStale(revision))
+    const onVisible = () => document.visibilityState === 'visible' && check()
+    check()
+    const timer = setInterval(check, STALE_CHECK_EVERY)
+    window.addEventListener('focus', check)
+    window.addEventListener(COPY_SAVED, check)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      alive = false
+      clearInterval(timer)
+      window.removeEventListener('focus', check)
+      window.removeEventListener(COPY_SAVED, check)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
+
+  const hide = () => {
+    setHidden(stale)
+    try {
+      localStorage.setItem(HIDDEN_KEY, stale)
+    } catch {
+      /* hidden until the page is opened again */
+    }
+  }
+
+  return (
+    <>
+      {stale && stale !== hidden && (
+        <Alert
+          banner
+          type="info"
+          icon={<CloudDownloadOutlined />}
+          className="offline-banner offline-stale"
+          title={t('offline_stale')}
+          action={
+            <Space size={4}>
+              <Button size="small" type="text" onClick={hide} disabled={!!progress}>
+                {t('offline_stale_later')}
+              </Button>
+              <Button size="small" type="primary" icon={<CloudDownloadOutlined />} loading={!!progress} onClick={() => download(readPhotosChoice())}>
+                {t('offline_stale_update')}
+              </Button>
+            </Space>
+          }
+        />
+      )}
+      <Modal
+        open={!!progress}
+        title={
+          <span>
+            <CloudDownloadOutlined /> {t('offline_stale_updating')}
+          </span>
+        }
+        footer={null}
+        closable={false}
+        mask={{ closable: false }}
+        destroyOnHidden
+      >
+        <DownloadProgress progress={progress} />
+      </Modal>
+    </>
+  )
+}
 
 /**
  * Shown on every page while the data comes from the copy saved on this phone: without a
@@ -51,7 +143,7 @@ export default function OfflineBanner() {
     })
   }, [changes, server, modal, t])
 
-  if (!offline) return null
+  if (!offline) return <StaleCopyNotice />
   const connected = changes > 0 && server
   // The date is isolated (U+2066…U+2069) so it reads left to right inside the Arabic text
   const date = meta && `⁦${dayjs(meta.generated_at).format('YYYY-MM-DD HH:mm')}⁩`
