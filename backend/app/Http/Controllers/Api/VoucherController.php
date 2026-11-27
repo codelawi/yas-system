@@ -10,7 +10,10 @@ use App\Models\EquipmentField;
 use App\Models\Setting;
 use App\Models\Voucher;
 use App\Models\VoucherItem;
+use App\Models\VoucherPrint;
+use App\Models\VoucherTemplate;
 use App\Support\PinConfirmation;
+use App\Support\PrintStation;
 use App\Support\VoucherRows;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -25,6 +28,9 @@ use Illuminate\Validation\ValidationException;
 class VoucherController extends Controller
 {
     private const STATUSES = [Voucher::DRAFT, Voucher::ISSUED, Voucher::RETURNED];
+
+    /** Most copies one print can ask for. */
+    private const MAX_COPIES = 20;
 
     public function index(Request $request)
     {
@@ -50,13 +56,14 @@ class VoucherController extends Controller
         ];
     }
 
-    /** A new, empty draft. */
+    /** A new, empty draft; the template's fields start with what was typed on the last voucher. */
     public function store(Request $request)
     {
         $data = $request->validate(['recipient' => ['nullable', 'string', 'max:191']]);
         $voucher = Voucher::create([
             'status' => Voucher::DRAFT,
             'recipient' => self::clean($data['recipient'] ?? null),
+            'fields' => self::lastFields() ?: null,
             'created_by' => $request->user()->id,
         ]);
 
@@ -87,12 +94,13 @@ class VoucherController extends Controller
             ->values();
     }
 
-    /** The recipient and the voucher's own fields, while it is a draft. */
+    /** The recipient, the template and the template's fields, while it is a draft. */
     public function update(Request $request, Voucher $voucher)
     {
         self::mustBeDraft($voucher);
         $data = $request->validate([
             'recipient' => ['sometimes', 'nullable', 'string', 'max:191'],
+            'template_id' => ['sometimes', 'nullable', 'integer', 'exists:voucher_templates,id'],
             'fields' => ['sometimes', 'nullable', 'array', 'max:50'],
             'fields.*' => ['nullable', 'string', 'max:500'],
         ]);
@@ -100,8 +108,11 @@ class VoucherController extends Controller
         if (array_key_exists('recipient', $data)) {
             $voucher->recipient = self::clean($data['recipient']);
         }
+        if (array_key_exists('template_id', $data)) {
+            $voucher->template_id = $data['template_id'];
+        }
         if (array_key_exists('fields', $data)) {
-            $voucher->fields = $data['fields'];
+            $voucher->fields = array_map(fn ($value) => self::clean($value), $data['fields']);
         }
         $voucher->revision++;
         $voucher->save();
@@ -150,6 +161,7 @@ class VoucherController extends Controller
                     'status' => Voucher::DRAFT,
                     'recipient' => $voucher->recipient,
                     'fields' => $voucher->fields,
+                    'template_id' => VoucherTemplate::whereKey($voucher->layout['template_id'] ?? $voucher->template_id)->value('id'),
                     'replaces_id' => $voucher->id,
                     'created_by' => $userId,
                 ]);
@@ -218,12 +230,16 @@ class VoucherController extends Controller
         return $this->payload($voucher);
     }
 
-    /** Numbers the draft and hands every unit over to the recipient. */
+    /**
+     * Numbers the draft, hands every unit over to the recipient and sends `copies` prints to the
+     * print station. The template is kept with the voucher as it is now.
+     */
     public function issue(Request $request, Voucher $voucher)
     {
         $data = $request->validate([
             'recipient' => ['nullable', 'string', 'max:191'],
             'move' => ['boolean'],
+            'copies' => ['nullable', 'integer', 'min:0', 'max:'.self::MAX_COPIES],
         ]);
         if (! $voucher->isDraft()) {
             throw ValidationException::withMessages(['voucher' => 'voucher_not_draft']);
@@ -244,7 +260,9 @@ class VoucherController extends Controller
         }
 
         $userId = $request->user()->id;
-        DB::transaction(function () use ($voucher, $items, $recipient, $userId) {
+        $copies = (int) ($data['copies'] ?? 1);
+        $template = VoucherTemplate::current($voucher->template_id);
+        $print = DB::transaction(function () use ($voucher, $items, $recipient, $userId, $copies, $template) {
             // A correction takes the place (and the number) of the voucher it corrects
             $replaced = $voucher->replaces()->lockForUpdate()->first();
             $number = $replaced?->number;
@@ -256,14 +274,32 @@ class VoucherController extends Controller
                 'replaces_id' => null,
                 'status' => Voucher::ISSUED,
                 'recipient' => $recipient,
+                'template_id' => $template->id,
+                'layout' => $template->layout(),
                 'issued_at' => now(),
                 'issued_by' => $userId,
             ]);
             $this->handOver($voucher, $items, $userId);
             $voucher->syncStatus();
+            self::rememberFields($voucher->fields ?? []);
+
+            return $this->queuePrint($voucher, $copies, $userId);
         });
 
-        return ['status' => 'issued'] + $this->payload($voucher);
+        return ['status' => 'issued', 'print' => $this->printState($print)] + $this->payload($voucher);
+    }
+
+    /** Prints an issued voucher again, as it was printed the first time. */
+    public function print(Request $request, Voucher $voucher)
+    {
+        $data = $request->validate(['copies' => ['required', 'integer', 'min:1', 'max:'.self::MAX_COPIES]]);
+        if ($voucher->isDraft()) {
+            throw ValidationException::withMessages(['voucher' => 'voucher_not_issued']);
+        }
+        $print = $this->queuePrint($voucher, (int) $data['copies'], $request->user()->id);
+        $voucher->increment('revision');
+
+        return ['print' => $this->printState($print)] + $this->payload($voucher);
     }
 
     /** Return by scanning, inside one voucher. */
@@ -532,6 +568,36 @@ class VoucherController extends Controller
         return trim(preg_replace('/\s+/u', ' ', (string) $text)) ?: null;
     }
 
+    private function queuePrint(Voucher $voucher, int $copies, int $userId): ?VoucherPrint
+    {
+        Setting::updateOrCreate(['key' => 'voucher_last_copies'], ['value' => (string) $copies]);
+        if ($copies < 1) {
+            return null;
+        }
+
+        return $voucher->prints()->create(['copies' => $copies, 'status' => VoucherPrint::PENDING, 'requested_by' => $userId]);
+    }
+
+    /** @return array{job: ?array<string, mixed>, station: array{online: bool, seen_at: ?int}} */
+    private function printState(?VoucherPrint $print): array
+    {
+        return ['job' => $print?->brief(), 'station' => PrintStation::state()];
+    }
+
+    /** What was typed in each field last time, offered on the next voucher. */
+    private static function lastFields(): array
+    {
+        return json_decode((string) Setting::get('voucher_last_fields'), true) ?: [];
+    }
+
+    private static function rememberFields(array $fields): void
+    {
+        $typed = array_filter($fields, fn ($value) => is_string($value) && $value !== '');
+        if ($typed) {
+            Setting::updateOrCreate(['key' => 'voucher_last_fields'], ['value' => json_encode($typed + self::lastFields(), JSON_UNESCAPED_UNICODE)]);
+        }
+    }
+
     /** The voucher, its scanned units (in scan order) and its lines. */
     private function payload(Voucher $voucher): array
     {
@@ -546,12 +612,15 @@ class VoucherController extends Controller
         $movedTo = $this->movedTo($voucher, $items);
 
         return [
-            'voucher' => $voucher->only(['id', 'number', 'status', 'recipient', 'fields', 'revision', 'issued_at', 'returned_at', 'created_at']) + [
+            'voucher' => $voucher->only(['id', 'number', 'status', 'recipient', 'fields', 'template_id', 'revision', 'issued_at', 'returned_at', 'created_at']) + [
                 'creator' => $voucher->creator?->only(['id', 'name']),
                 'issuer' => $voucher->issuer?->only(['id', 'name']),
                 'replaces' => $voucher->replaces?->only(['id', 'number']),
                 'replacement_id' => $voucher->isDraft() ? null : Voucher::where('replaces_id', $voucher->id)->value('id'),
+                'last_print' => $voucher->prints()->latest('id')->first()?->brief(),
             ],
+            'layout' => $voucher->printLayout(),
+            'copies' => max(1, (int) Setting::get('voucher_last_copies')),
             'items' => $items->filter(fn (VoucherItem $i) => $i->equipment)->map(function (VoucherItem $item) use ($held, $movedTo) {
                 $e = $item->equipment;
                 $holder = $held[$e->id] ?? null;

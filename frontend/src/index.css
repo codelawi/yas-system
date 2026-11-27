@@ -2541,68 +2541,6 @@ h5,
   font-family: 'Inter Variable', 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
 }
 
-/* The voucher as it will be printed */
-.voucher-sheet {
-  overflow-x: auto;
-  padding: 14px;
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  color: #0f172a;
-  font-size: 14px;
-}
-.voucher-sheet-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-  line-height: 1.9;
-}
-.voucher-sheet-kind {
-  font-weight: 700;
-  text-decoration: underline;
-}
-.voucher-sheet-muted {
-  font-size: 13px;
-  color: #64748b;
-}
-.voucher-sheet-meta {
-  white-space: nowrap;
-}
-.voucher-sheet-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.voucher-sheet-table th,
-.voucher-sheet-table td {
-  padding: 6px 8px;
-  border: 1px solid #334155;
-  text-align: center;
-}
-.voucher-sheet-table th {
-  background: #f1f5f9;
-  font-weight: 600;
-}
-.voucher-sheet-table td:nth-child(2) {
-  text-align: start;
-}
-.voucher-sheet-code,
-.voucher-sheet-qty,
-.voucher-sheet-table td:last-child {
-  white-space: nowrap;
-  font-weight: 600;
-}
-.voucher-sheet-table td.voucher-sheet-empty {
-  padding: 18px;
-  color: #94a3b8;
-  text-align: center;
-}
-.voucher-no-code {
-  font-size: 12px;
-  font-weight: 500;
-  color: #b45309;
-}
-
 /* Return: by scanning, or everything with one press */
 .voucher-return-all {
   display: flex;
@@ -2623,4 +2561,154 @@ h5,
   flex: 1;
   height: 1px;
   background: #e2e8f0;
+}
+
+/* Voucher templates (pages/VoucherTemplatePages.jsx) */
+.vt-card {
+  margin-bottom: 12px;
+}
+.vt-sticky {
+  position: sticky;
+  top: 12px;
+}
+.vt-preview .ant-card-body {
+  padding: 12px;
+  background: #f1f5f9;
+}
+.vt-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.vt-column {
+  display: grid;
+  grid-template-columns: auto 92px 1fr 88px;
+  align-items: center;
+  gap: 8px;
+}
+.vt-column.is-off .vt-column-what {
+  color: #94a3b8;
+  text-decoration: line-through;
+}
+.vt-column-what {
+  font-size: 13px;
+  color: #475569;
+}
+.vt-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.vt-row label {
+  font-size: 13px;
+  color: #475569;
+}
+.vt-hint {
+  margin-bottom: 8px !important;
+  font-size: 13px;
+}
+.vt-field-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.vt-style {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.vt-style label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #475569;
+}
+.vt-phone-save {
+  position: sticky;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+.vt-phone-save .ant-btn {
+  min-width: 160px;
+  height: 44px;
+  border-radius: 22px;
+  box-shadow: 0 8px 20px rgba(29, 78, 216, 0.3);
+}
+@media (max-width: 640px) {
+  .vt-column {
+    grid-template-columns: auto 1fr 80px;
+  }
+  .vt-column-what {
+    display: none;
+  }
+  .vt-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
+/* Voucher printing (pages/VoucherPages.jsx) */
+.voucher-template {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.voucher-template:empty {
+  display: none;
+}
+.voucher-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.voucher-field > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+.voucher-print {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  color: #334155;
+}
+.voucher-print-text {
+  flex: 1;
+  min-width: 160px;
+}
+.voucher-print.is-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+.voucher-print.is-printed {
+  background: #dcfce7;
+  color: #166534;
+}
+.voucher-print.is-cancelled {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.voucher-copies label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+}
+.voucher-no-code-note {
+  margin-bottom: 10px;
+}
+.voucher-preview-card .ant-card-body {
+  background: #f1f5f9;
 }

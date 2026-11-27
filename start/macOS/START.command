@@ -3,6 +3,7 @@
 #  Equipment Repository on a Mac - double-click this file to start everything.
 #    PHP 8.3+  ->  MySQL  ->  https certificate  ->  Apache on http 80 + https 443
 #    ->  the system (on this Mac only, 127.0.0.1:8000)
+#    ->  the print station (Edge or Chrome): prints issued vouchers by itself
 #  Keep the Terminal window open while the system is used. Closing it stops the system.
 #
 #  Once, before printing labels: double-click network-setup.command. Phones then open the
@@ -308,6 +309,55 @@ echo '    Keep this window open. Close it (or press Ctrl+C) to stop the system.'
 echo '  ============================================================'
 printf '%s\n' "$C_OFF"
 open "$URL"
-wait "$SERVER_PID"
+
+# ------------------------------------------------------------------ 7. print station
+# A browser window of its own that prints each issued voucher on the default printer without
+# asking (--kiosk-printing). A phone can ask for it again: the system then writes $STATION_ASK.
+step '7. Print station'
+STATION_URL=''; STATION_ASK=''; STATION_OPEN=''
+while IFS= read -r line; do
+    case "$line" in
+        'Print station: '*) STATION_URL="${line#Print station: }" ;;
+        'Open requests: '*) STATION_ASK="${line#Open requests: }" ;;
+        'Open now: yes'*) STATION_OPEN=yes ;;
+    esac
+done < <("$PHP" artisan repo:print-station --base="http://127.0.0.1:$APP_PORT" 2>/dev/null)
+STATION_APP=''
+for app in 'Microsoft Edge' 'Google Chrome'; do
+    for dir in /Applications "$HOME/Applications"; do
+        if [ -z "$STATION_APP" ] && [ -d "$dir/$app.app" ]; then STATION_APP="$dir/$app.app"; fi
+    done
+done
+STATION_NAME="$(basename "$STATION_APP" .app)"
+open_station() {
+    [ -n "$STATION_APP" ] && [ -n "$STATION_URL" ] || return 1
+    # -n with its own profile: a copy of the browser of its own, the one you browse with is not touched
+    open -na "$STATION_APP" --args --user-data-dir="$APP/storage/app/print-station/browser" --kiosk-printing \
+        --no-first-run --no-default-browser-check --disable-background-timer-throttling \
+        --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --app="$STATION_URL" >/dev/null 2>&1
+}
+if [ -z "$STATION_URL" ]; then
+    warn 'The print station address could not be read - vouchers will not print by themselves.'
+elif [ -z "$STATION_APP" ]; then
+    warn 'Neither Microsoft Edge nor Google Chrome was found - vouchers will not print by themselves.'
+else
+    [ -n "$STATION_ASK" ] && rm -f "$STATION_ASK"
+    if [ -n "$STATION_OPEN" ]; then
+        ok 'Already open in another window.'
+    elif open_station; then
+        ok "Opened in $STATION_NAME: vouchers print on the default printer (put A5 paper in it)."
+    else
+        warn "$STATION_NAME did not start - vouchers will not print by themselves."
+    fi
+fi
+
+# Keep running while the system runs; open the print station again when a phone asks for it
+while kill -0 "$SERVER_PID" 2>/dev/null; do
+    if [ -n "$STATION_ASK" ] && [ -f "$STATION_ASK" ]; then
+        rm -f "$STATION_ASK"
+        if open_station; then ok "$(date +%H:%M) Print station opened (asked from a phone)."; fi
+    fi
+    sleep 1
+done
 echo
 warn "The system stopped. Its messages are in $RUN/php-server.log"
