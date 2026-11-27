@@ -6,6 +6,8 @@ use App\Models\ActivityLog;
 use App\Models\Box;
 use App\Models\Equipment;
 use App\Models\OfflineChange;
+use App\Models\ScanDocument;
+use App\Models\ScanFolder;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -128,6 +130,46 @@ class OfflineSyncTest extends TestCase
         $this->assertSoftDeleted($equipment);
     }
 
+    public function test_a_change_sent_as_it_is_made_is_an_ordinary_one_saved_with_its_key(): void
+    {
+        $worker = User::factory()->create();
+        $live = ['X-Offline-Change' => 'live-key', 'X-Offline-Live' => '1', 'X-Offline-User' => (string) $worker->id, 'X-Offline-At' => now()->subHours(2)->toIso8601String()];
+
+        $id = $this->postJson('/api/equipment', ['serial_number' => 'OF-L'], $live)->assertOk()->json('id');
+
+        $equipment = Equipment::find($id);
+        $this->assertSame($this->syncing->id, $equipment->created_by);
+        $this->assertFalse($equipment->label_pending);
+        $log = ActivityLog::where('equipment_id', $id)->sole();
+        $this->assertArrayNotHasKey('offline', $log->changes ?? []);
+        $this->assertTrue($log->created_at->diffInSeconds(now(), true) < 5);
+        $change = OfflineChange::sole();
+        $this->assertSame(['live-key', $this->syncing->id, $this->syncing->id], [$change->key, $change->user_id, $change->synced_by]);
+    }
+
+    public function test_a_change_whose_answer_came_too_late_is_not_done_again_by_the_sync(): void
+    {
+        $this->postJson('/api/scan-folders', ['name' => 'مجلد'], ['X-Offline-Change' => 'slow-key', 'X-Offline-Live' => '1'])->assertCreated();
+
+        // The phone did not hear back in time: it kept the change and syncs it with the same key
+        $this->postJson('/api/offline/done', ['keys' => ['slow-key']])->assertExactJson(['done' => ['slow-key']]);
+        $again = $this->postJson('/api/scan-folders', ['name' => 'مجلد'], $this->offline(key: 'slow-key'));
+
+        $again->assertCreated()->assertHeader('X-Offline-Replayed', '1');
+        $this->assertSame(1, ScanFolder::count());
+        $this->assertSame(ScanFolder::sole()->id, $again->json('id'));
+    }
+
+    public function test_a_change_sent_as_it_is_made_still_needs_the_pin_for_large_deletes(): void
+    {
+        $ids = collect(range(1, 7))->map(fn ($i) => Equipment::create(['serial_number' => "OF-LD$i"])->id)->all();
+
+        $this->postJson('/api/equipment/bulk-delete', ['ids' => $ids], ['X-Offline-Change' => 'live-delete', 'X-Offline-Live' => '1'])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.pin.0', 'pin_required:7');
+        $this->assertSame(0, OfflineChange::count());
+    }
+
     public function test_the_phone_checked_the_pin_for_large_deletes(): void
     {
         $ids = collect(range(1, 7))->map(fn ($i) => Equipment::create(['serial_number' => "OF-D$i"])->id)->all();
@@ -205,6 +247,23 @@ class OfflineSyncTest extends TestCase
         }
         $this->assertSame(12, $equipment->issues()->count());
         $this->assertSame(12, ActivityLog::where('action', 'issue_reported')->get()->filter(fn (ActivityLog $log) => $log->changes['offline'] ?? false)->count());
+    }
+
+    public function test_a_code_scanned_on_a_phone_keeps_when_and_by_whom(): void
+    {
+        $worker = User::factory()->create(['name' => 'على الهاتف']);
+        $folder = ScanFolder::create(['name' => 'مجلد']);
+        $document = ScanDocument::create(['scan_folder_id' => $folder->id, 'title' => 'مستند', 'columns' => ScanDocument::defaultColumns()]);
+        $at = now()->subHours(2)->startOfSecond();
+        $headers = $this->offline($worker, $at->toIso8601String());
+
+        $first = $this->postJson("/api/scan-documents/{$document->id}/scan", ['code' => 'OF-SCAN'], $headers)->assertOk()->assertJsonPath('status', 'added');
+        // Sent again after a sync was cut off: the same answer, not "already scanned"
+        $this->postJson("/api/scan-documents/{$document->id}/scan", ['code' => 'OF-SCAN'], $headers)->assertOk()->assertJsonPath('status', 'added')->assertJsonPath('row.id', $first->json('row.id'));
+
+        $row = $document->rows()->sole();
+        $this->assertTrue($row->scanned_at->equalTo($at));
+        $this->assertSame($worker->id, $row->scanned_by);
     }
 
     public function test_reports_without_a_sync_are_still_limited(): void

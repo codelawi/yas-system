@@ -22,6 +22,11 @@ use Throwable;
  *    the whole sync with their own;
  *  - X-Offline-At: when it was made, which the history keeps.
  *
+ * A phone with a copy sends a change to the server as it is made when it can, with the key it would
+ * keep it under and X-Offline-Live: 1. That is an ordinary request (whoever is signed in, now, with
+ * the usual PINs), only saved with its key: when its answer is too slow for the phone, the phone
+ * keeps the change and syncs it later, and the server does not do it twice.
+ *
  * Runs before route model binding, so a change whose record is gone since still gets its answer.
  */
 class ApplyOfflineChange
@@ -43,15 +48,28 @@ class ApplyOfflineChange
             return response($done->response ?? '', $done->status, ['Content-Type' => 'application/json', 'X-Offline-Replayed' => '1']);
         }
 
+        if ($request->header('X-Offline-Live') === '1') {
+            return $this->saved($request, $key, $syncedBy, now(), fn () => $next($request));
+        }
+
         $actor = User::where('is_active', true)->find((int) $request->header('X-Offline-User')) ?? $syncedBy;
         Auth::guard('sanctum')->setUser($actor);
         $request->setUserResolver(fn () => $actor);
         $doneAt = $this->doneAt($request);
 
-        // The change and its key are saved together, or neither is
+        return $this->saved($request, $key, $actor, $doneAt, fn () => OfflineContext::run($doneAt, fn () => $next($request)), $syncedBy);
+    }
+
+    /**
+     * The change and its key are saved together, or neither is.
+     *
+     * @param  Closure(): Response  $work
+     */
+    private function saved(Request $request, string $key, User $actor, Carbon $doneAt, Closure $work, ?User $syncedBy = null): Response
+    {
         DB::beginTransaction();
         try {
-            $response = OfflineContext::run($doneAt, fn () => $next($request));
+            $response = $work();
             if (! $response->isSuccessful()) {
                 DB::rollBack();
 
@@ -60,7 +78,7 @@ class ApplyOfflineChange
             OfflineChange::create([
                 'key' => $key,
                 'user_id' => $actor->id,
-                'synced_by' => $syncedBy->id,
+                'synced_by' => ($syncedBy ?? $actor)->id,
                 'method' => $request->method(),
                 'path' => mb_substr($request->path(), 0, 255),
                 'status' => $response->getStatusCode(),
@@ -71,6 +89,10 @@ class ApplyOfflineChange
         } catch (Throwable $e) {
             DB::rollBack();
             throw $e;
+        }
+        // Keys from more than a month ago are not sent again
+        if (random_int(1, 50) === 1) {
+            OfflineChange::where('created_at', '<', now()->subDays(self::MAX_AGE_DAYS))->delete();
         }
 
         return $response;

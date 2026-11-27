@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ScanDocument;
 use App\Models\ScanDocumentRow;
 use App\Models\ScanFolder;
+use App\Support\OfflineContext;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -114,7 +115,8 @@ class ScanDocumentController extends Controller
                     'position' => $this->nextPosition($scanDocument),
                     'code' => $code,
                     'cells' => [],
-                    'scanned_at' => now(),
+                    // Scanned on a phone without a connection: when it really was (App\Support\OfflineContext)
+                    'scanned_at' => OfflineContext::at() ?? now(),
                     'scanned_by' => $request->user()->id,
                 ])];
             });

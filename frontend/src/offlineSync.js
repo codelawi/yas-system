@@ -13,7 +13,7 @@
  * or what the phone added already exists on the server, the person decides at the end: the
  * rest goes on meanwhile, and what depends on an open question waits for the answer.
  */
-import { applyChange, boxState, equipmentLabel, equipmentState, groupState, isTempId, toModel } from './offlineEdit'
+import { applyChange, boxState, equipmentLabel, equipmentState, groupState, isTempId, scanDocumentState, scanFolderState, scanRowFrom, scanRowState, toModel } from './offlineEdit'
 import { readSavedChanges, readSavedCopy, readSavedFile } from './offline'
 
 /** The sync stopped (no connection, or the server refused): what was sent stays sent, the rest can be sent again. */
@@ -94,7 +94,35 @@ function stateOf(m, type, id) {
     const g = m.groups.get(id)
     return g ? groupState(g) : null
   }
+  if (type === 'scan_folder') {
+    const f = m.scanFolders.get(id)
+    return f ? scanFolderState(f) : null
+  }
+  if (type === 'scan_document') {
+    const d = m.scanDocuments.get(id)
+    return d ? scanDocumentState(d) : null
+  }
+  if (type === 'scan_row') {
+    const r = m.scanRows.get(id)
+    return r ? scanRowState(r) : null
+  }
   return null
+}
+
+/** What tells that someone changed it on the server: a scan document's revision goes up with every change in it. */
+function stampOf(m, type, id) {
+  if (type === 'scan_folder') {
+    const f = m.scanFolders.get(id)
+    const documents = [...m.scanDocuments.values()].filter((d) => d.scan_folder_id === id).map((d) => [d.id, d.revision])
+    return f ? JSON.stringify([f.name, f.revision, documents.sort((a, b) => a[0] - b[0])]) : null
+  }
+  if (type === 'scan_document') return m.scanDocuments.has(id) ? String(m.scanDocuments.get(id).revision) : null
+  if (type === 'scan_row') {
+    const r = m.scanRows.get(id)
+    return r ? JSON.stringify([r.code, r.cells, r.updated_at]) : null
+  }
+  const state = stateOf(m, type, id)
+  return state && JSON.stringify(state)
 }
 
 /** The changes applied again to the copy they were made on, each with what it touched before and after. */
@@ -105,6 +133,9 @@ function replay(saved, changes) {
   for (const id of m.equipment.keys()) current.set(keyOf('equipment', id), stateOf(m, 'equipment', id))
   for (const id of m.boxes.keys()) current.set(keyOf('box', id), stateOf(m, 'box', id))
   for (const id of m.groups.keys()) current.set(keyOf('group', id), stateOf(m, 'group', id))
+  for (const type of ['scan_folder', 'scan_document', 'scan_row']) {
+    for (const id of m[SCAN_MAPS[type]].keys()) current.set(keyOf(type, id), stateOf(m, type, id))
+  }
   const records = changes.map((change) => {
     const result = applyChange(m, change, { replay: true })
     const before = new Map()
@@ -180,6 +211,23 @@ function merge(before, after, server, attrs) {
 
 const sameState = (a, b, attrs) => attrs.every((attr) => sameValue(valueOf(a, attr), valueOf(b, attr))) && (!a.fields || JSON.stringify(a.fields) === JSON.stringify(b.fields))
 
+/** Where the records of each kind are kept (offlineEdit.js toModel). */
+const SCAN_MAPS = { scan_folder: 'scanFolders', scan_document: 'scanDocuments', scan_row: 'scanRows' }
+const SCAN_DOCUMENT_ATTRS = ['title', 'duplicate_scope']
+
+const cellsOf = (state) => JSON.stringify([...state.fields].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)).map((f) => [f.key, f.value ?? null]))
+const sameRow = (a, b) => sameValue(a.code, b.code) && cellsOf(a) === cellsOf(b)
+
+/** A row's edit: its text and every cell (a cell another state has and this one not is emptied). */
+function scanRowBody(state, others) {
+  const cells = {}
+  for (const other of others) for (const f of other?.fields || []) cells[f.key] = null
+  for (const f of state.fields) cells[f.key] = f.value
+  return { code: state.code ?? null, cells }
+}
+
+const scanDocumentBody = (state) => ({ title: state.title, duplicate_scope: state.duplicate_scope, columns: state.fields.map((f) => ({ key: f.key, label: f.value })) })
+
 const equipmentBody = (state) => ({ serial_number: state.serial_number, name: state.name, row_no: state.row_no, category: state.category, group_id: state.group_id, fields: state.fields })
 
 /* ---------- The sync */
@@ -208,6 +256,16 @@ const ROUTES = [
   ['POST', /^\/api\/boxes\/(\d+)\/equipment$/, 'boxItems', true],
   ['DELETE', /^\/api\/boxes\/(\d+)\/equipment\/(\d+)$/, 'boxItems'],
   ['POST', /^\/api\/boxes\/(\d+)\/equipment\/remove$/, 'boxItems', true],
+  ['POST', /^\/api\/scan-folders$/, 'createScanFolder'],
+  ['PUT', /^\/api\/scan-folders\/(\d+)$/, 'updateScanFolder'],
+  ['DELETE', /^\/api\/scan-folders\/(\d+)$/, 'deleteScanFolder'],
+  ['POST', /^\/api\/scan-documents$/, 'createScanDocument'],
+  ['PUT', /^\/api\/scan-documents\/(\d+)$/, 'updateScanDocument'],
+  ['DELETE', /^\/api\/scan-documents\/(\d+)$/, 'deleteScanDocument'],
+  ['POST', /^\/api\/scan-documents\/(\d+)\/scan$/, 'scanCode'],
+  ['POST', /^\/api\/scan-documents\/(\d+)\/rows$/, 'addScanRow'],
+  ['PUT', /^\/api\/scan-documents\/(\d+)\/rows\/(\d+)$/, 'updateScanRow'],
+  ['DELETE', /^\/api\/scan-documents\/(\d+)\/rows\/(\d+)$/, 'deleteScanRow'],
 ]
 
 const routeOf = (change) => ROUTES.find(([method, pattern]) => method === change.method && pattern.test(change.path))
@@ -226,7 +284,7 @@ export async function syncChanges({ token, ask, onProgress = () => {} }) {
 
 /** The same, for these changes made on this copy. */
 export async function syncFrom({ token, ask, onProgress = () => {}, saved, changes }) {
-  if (!saved || !changes.length) return { sent: 0, skipped: 0, dropped: [], failed: [] }
+  if (!saved || !changes.length) return { sent: 0, skipped: 0, merged: 0, dropped: [], failed: [] }
   const sync = new Sync(token, saved, changes, onProgress)
   await sync.run(ask)
   return sync.report
@@ -239,6 +297,11 @@ class Sync {
     this.base = toModel(saved)
     const { records, final, last } = replay(saved, changes)
     this.records = records
+    /** This copy of the data: what it brings back has the same keys in every sync of it. */
+    this.copy = saved.generated_at || records[0]?.change.key
+    this.startedAt = Date.now()
+    /** Brought back by an earlier sync of this copy and deleted again since: made again. */
+    this.anew = new Set()
     this.final = final
     this.last = last
     /** Phone id → server id (added on the phone, or a box or group made again). */
@@ -248,7 +311,11 @@ class Sync {
     this.dropped = new Set()
     this.deferred = []
     this.conflicts = []
-    this.report = { sent: 0, skipped: 0, dropped: [], failed: [] }
+    /** Rows the phone scanned that the server already had (the same code): one row now. */
+    this.merged = new Set()
+    /** Rows added and deleted again on the phone: never sent, nor what was done to them. */
+    this.vanished = new Set()
+    this.report = { sent: 0, skipped: 0, merged: 0, dropped: [], failed: [] }
     this.done = 0
   }
 
@@ -265,11 +332,14 @@ class Sync {
       this.done++
     }
     while (this.conflicts.length) {
-      const conflicts = this.conflicts
+      const raised = this.conflicts
       this.conflicts = []
-      const answers = await ask(conflicts.map((c) => c.question))
-      this.onProgress({ step: 'send', done: this.done, total: this.records.length })
-      await this.resolve(conflicts, answers)
+      const conflicts = await this.restoredBefore(raised)
+      if (conflicts.length) {
+        const answers = await ask(conflicts.map((c) => c.question))
+        this.onProgress({ step: 'send', done: this.done, total: this.records.length })
+        await this.resolve(conflicts, answers)
+      }
       // Equipment brought back is not in the data the sync keeps up to date
       if (this.stale) await this.loadServer()
       this.stale = false
@@ -301,6 +371,7 @@ class Sync {
     if (type === 'group') return this.server.groups.has(id)
     if (type === 'schedule') return [...this.server.maintenance.values()].some((m) => m.schedules.some((s) => s.id === id))
     if (type === 'issue') return [...this.server.issues.values()].some((list) => list.some((i) => i.id === id))
+    if (SCAN_MAPS[type]) return this.server[SCAN_MAPS[type]].has(id)
     return false
   }
 
@@ -321,8 +392,11 @@ class Sync {
   }
 
   async process(record) {
+    // What it adds itself waited with it, not for it
+    for (const id of record.change.ids || []) this.waiting.delete(`t:${id}`)
     const { must, items } = this.deps(record)
     if (record.result.status >= 400) return this.drop(record, 'sync_no_longer_applies')
+    if ([...must].some((key) => this.vanished.has(key))) return this.skip()
     if ([...must].some((key) => this.dropped.has(key))) return this.drop(record, 'sync_depends_on_dropped')
     if ([...must, ...items].some((key) => this.waiting.has(key))) return this.defer(record)
     if (this.saved.has(record.change.key)) return this.again(record)
@@ -334,7 +408,9 @@ class Sync {
     const { change } = record
     const path = change.path.replace(/\d+/g, (id) => String(this.serverId(Number(id)) ?? id))
     const res = await this.send(record, change.method, path, change.method === 'DELETE' ? undefined : this.mapBody(change.body))
-    if (ok(res)) this.created(record, res)
+    if (!ok(res)) return
+    if (routeOf(change)[2] === 'scanCode') return this.scanned(res, this.serverId(pathIds(change)[0]), change.ids?.[0])
+    this.created(record, res)
   }
 
   drop(record, reason) {
@@ -356,8 +432,11 @@ class Sync {
     for (const id of record.change.ids || []) this.dropped.add(`t:${id}`)
   }
 
-  /** Sends one request of a change, as the person who made it, when they made it. */
-  async send(record, method, path, body, suffix = '') {
+  /**
+   * Sends one request of a change, as the person who made it, when they made it. `emulate`: the
+   * server's data here is kept up to date by doing the same to it (a scan does that itself).
+   */
+  async send(record, method, path, body, suffix = '', { emulate = true, key = record.change.key + suffix } = {}) {
     const { change } = record
     const hasFile = body && Object.values(body).some((v) => v?.file)
     let payload = body
@@ -375,10 +454,10 @@ class Sync {
     const res = await call(method, path, {
       token: this.token,
       body: method === 'DELETE' && !body ? undefined : payload,
-      headers: { 'X-Offline-Change': change.key + suffix, 'X-Offline-User': String(change.user?.id ?? ''), 'X-Offline-At': change.at },
+      headers: { 'X-Offline-Change': key, 'X-Offline-User': String(change.user?.id ?? ''), 'X-Offline-At': change.at },
     })
     // Applied to the server's data here as the server applied it, for the next changes
-    if (ok(res) && !res.replayed) applyChange(this.server, { ...change, method, path, body: body ?? {}, ids: this.createdIds(path, res) }, { replay: true })
+    if (emulate && ok(res) && !res.replayed) applyChange(this.server, { ...change, method, path, body: body ?? {}, ids: this.createdIds(path, res) }, { replay: true })
     if (ok(res)) this.report.sent++
     return res
   }
@@ -389,7 +468,7 @@ class Sync {
   }
 
   created(record, res) {
-    const id = res.json?.record?.id ?? res.json?.id
+    const id = res.json?.record?.id ?? res.json?.row?.id ?? res.json?.id
     const phoneId = record.change.ids?.[0]
     if (phoneId != null && id != null) this.ids.set(phoneId, id)
   }
@@ -399,21 +478,37 @@ class Sync {
     const id = this.serverId(phoneId)
     if (this.exists(type, id)) return id
     if (isTempId(phoneId) || id == null) this.drop(record, 'sync_depends_on_dropped')
-    else this.gone(record, type, id)
+    else this.gone(record, type, phoneId)
     return null
   }
 
   /** Changed on the phone, deleted on the server: bring it back, or leave it deleted. */
   gone(record, type, id) {
+    ;[type, id] = this.goneRoot(type, id)
     // Deleted on the phone later too: nothing to ask
-    const final = { equipment: this.final.equipment, box: this.final.boxes, group: this.final.groups }[type]
+    const final = { equipment: this.final.equipment, box: this.final.boxes, group: this.final.groups, ...Object.fromEntries(Object.entries(SCAN_MAPS).map(([t, map]) => [t, this.final[map]])) }[type]
     if (!final.has(id)) return this.skip()
     const key = keyOf(type, id)
+    if (this.dropped.has(key)) return this.drop(record, 'sync_depends_on_dropped')
     if (!this.waiting.has(key)) {
       this.waiting.add(key)
       this.ask({ kind: `${type}_deleted`, type, id, label: this.label(type, id), record })
     }
     this.defer(record)
+  }
+
+  /** A row whose document is gone too is asked about as its document; a document whose folder is gone, as its folder. */
+  goneRoot(type, id) {
+    const phone = (map) => this.final[map].get(id) || this.base[map].get(id)
+    if (type === 'scan_row') {
+      const doc = phone('scanRows')?.scan_document_id
+      if (doc != null && !this.exists('scan_document', this.serverId(doc))) return this.goneRoot('scan_document', doc)
+    }
+    if (type === 'scan_document') {
+      const folder = phone('scanDocuments')?.scan_folder_id
+      if (folder != null && !this.exists('scan_folder', this.serverId(folder))) return ['scan_folder', folder]
+    }
+    return [type, id]
   }
 
   ask(conflict) {
@@ -431,6 +526,14 @@ class Sync {
       return `#${id}`
     }
     if (type === 'box') return (this.final.boxes.get(phoneId) || this.server.boxes.get(id) || this.base.boxes.get(phoneId))?.number ?? `#${id}`
+    if (SCAN_MAPS[type]) {
+      const pick = (map, server, phone) => this.final[map].get(phone) || this.server[map].get(server) || this.base[map].get(phone)
+      const item = pick(SCAN_MAPS[type], id, phoneId)
+      if (type === 'scan_folder') return item?.name ?? `#${id}`
+      if (type === 'scan_document') return item?.title ?? `#${id}`
+      const doc = item && pick('scanDocuments', item.scan_document_id, item.scan_document_id)
+      return [doc?.title, item?.code].filter(Boolean).join(' · ') || `#${id}`
+    }
     return (this.final.groups.get(phoneId) || this.server.groups.get(id) || this.base.groups.get(phoneId))?.name ?? `#${id}`
   }
 
@@ -443,12 +546,39 @@ class Sync {
     for (const c of conflicts) {
       const same = this.conflicts.find((x) => x.kind === 'field' && x.type === type && x.id === id && x.attr === c.attr)
       const shown = (value) => (value === ABSENT ? null : c.attr === 'group_id' ? this.groupName(this.server, value) : value)
-      const show = { type, attr: c.attr, phone: shown(c.phone), server: shown(c.server), removedOnPhone: c.phone === ABSENT, removedOnServer: c.server === ABSENT, user: record.change.user?.name ?? null }
+      const show = { type, attr: c.attr, attrName: this.attrName(type, id, phoneId, c.attr), phone: shown(c.phone), server: shown(c.server), removedOnPhone: c.phone === ABSENT, removedOnServer: c.server === ABSENT, user: record.change.user?.name ?? null }
       if (same) {
         Object.assign(same, { phone: c.phone, record })
         Object.assign(same.question, show)
       } else this.ask({ kind: 'field', type, id, attr: c.attr, phone: c.phone, record, label: this.label(type, id, phoneId), show })
     }
+  }
+
+  /** A scan document's column as its table names it (null: the pages name it). */
+  attrName(type, id, phoneId, attr) {
+    const columnOf = (doc, key) => doc?.columns.find((c) => c.key === key)?.label
+    if (type === 'scan_row') {
+      const key = attr.startsWith('field:') ? attr.slice(6) : attr
+      const doc = this.server.scanDocuments.get(this.server.scanRows.get(id)?.scan_document_id)
+      return columnOf(doc, key) ?? key
+    }
+    if (type === 'scan_document' && attr.startsWith('field:')) return columnOf(this.final.scanDocuments.get(phoneId), attr.slice(6)) ?? columnOf(this.server.scanDocuments.get(id), attr.slice(6)) ?? attr.slice(6)
+    return null
+  }
+
+  /** Where an item's edit is sent, and what with. */
+  pathOf(type, id) {
+    if (type === 'scan_row') return `/api/scan-documents/${this.server.scanRows.get(id)?.scan_document_id}/rows/${id}`
+    return `${{ equipment: '/api/equipment', box: '/api/boxes', group: '/api/groups', scan_folder: '/api/scan-folders', scan_document: '/api/scan-documents' }[type]}/${id}`
+  }
+
+  bodyOf(type, state, server) {
+    if (type === 'equipment') return equipmentBody(state)
+    if (type === 'box') return boxState(state)
+    if (type === 'group') return groupState(state)
+    if (type === 'scan_folder') return { name: state.name }
+    if (type === 'scan_document') return scanDocumentBody(state)
+    return scanRowBody(state, [server])
   }
 
   /** The states the phone had before and after a change, with its own ids as the server's. */
@@ -495,9 +625,9 @@ class Sync {
 
   /** Changed on the server since the phone saved its copy (by someone else: this sync is not counted). */
   changedOnServer(type, id) {
-    const then = stateOf(this.base, type, id)
-    const now = stateOf(this.serverAtStart, type, id)
-    return !!then && !!now && JSON.stringify(then) !== JSON.stringify(now)
+    const then = stampOf(this.base, type, id)
+    const now = stampOf(this.serverAtStart, type, id)
+    return !!then && !!now && then !== now
   }
 
   async deleteEquipment(record, phoneId) {
@@ -690,6 +820,173 @@ class Sync {
     if (!ok(res)) this.fail(record, res)
   }
 
+  /* --- Scan documents */
+
+  createScanFolder(record) {
+    return this.createScan(record, '/api/scan-folders', this.mapBody(record.change.body))
+  }
+
+  async createScan(record, path, body) {
+    const res = await this.send(record, 'POST', path, body)
+    if (ok(res)) return this.created(record, res)
+    this.fail(record, res)
+  }
+
+  updateScanFolder(record, phoneId) {
+    return this.update(record, 'scan_folder', phoneId, ['name'], '/api/scan-folders')
+  }
+
+  /** Deleted on the phone; asked about when someone changed it on the server meanwhile. */
+  async deleteScan(record, type, phoneId) {
+    const id = this.serverId(phoneId)
+    if (!this.exists(type, id)) return this.skip()
+    const path = this.pathOf(type, id)
+    if (!isTempId(phoneId) && this.changedOnServer(type, id)) return this.ask({ kind: 'changed_deleted', type, paths: [path], record, label: this.label(type, id, phoneId), show: { type } })
+    const res = await this.send(record, 'DELETE', path)
+    if (!ok(res)) this.fail(record, res)
+  }
+
+  deleteScanFolder(record, phoneId) {
+    return this.deleteScan(record, 'scan_folder', phoneId)
+  }
+
+  async createScanDocument(record) {
+    const folder = this.target(record, 'scan_folder', Number(record.change.body.scan_folder_id))
+    if (folder == null) return
+    return this.createScan(record, '/api/scan-documents', { ...this.mapBody(record.change.body), scan_folder_id: folder })
+  }
+
+  async updateScanDocument(record, phoneId) {
+    const id = this.target(record, 'scan_document', phoneId)
+    if (id == null) return
+    const [before, after] = this.states(record, 'scan_document', phoneId)
+    const server = stateOf(this.server, 'scan_document', id)
+    const { state, conflicts } = merge(before, after, server, SCAN_DOCUMENT_ATTRS)
+    this.conflictsOn(record, 'scan_document', id, phoneId, conflicts)
+    if (sameState(state, server, SCAN_DOCUMENT_ATTRS)) return this.skip()
+    const res = await this.send(record, 'PUT', `/api/scan-documents/${id}`, scanDocumentBody(state))
+    if (!ok(res)) this.fail(record, res)
+  }
+
+  deleteScanDocument(record, phoneId) {
+    return this.deleteScan(record, 'scan_document', phoneId)
+  }
+
+  /** Added on the phone and deleted again there: nothing goes, nor what was done to it in between. */
+  deletedOnPhone(record) {
+    const row = record.change.ids?.[0]
+    if (row == null || this.final.scanRows.has(row)) return false
+    this.vanished.add(`t:${row}`)
+    this.skip()
+    return true
+  }
+
+  async scanCode(record, phoneDoc) {
+    if (this.deletedOnPhone(record)) return
+    const doc = this.target(record, 'scan_document', phoneDoc)
+    if (doc == null) return
+    const res = await this.send(record, 'POST', `/api/scan-documents/${doc}/scan`, record.change.body, '', { emulate: false })
+    if (!ok(res)) return this.fail(record, res)
+    this.scanned(res, doc, record.change.ids?.[0])
+  }
+
+  /** A code sent: the phone's row is the row the server added, or the one that already had the code (merged). */
+  scanned(res, doc, phoneRow) {
+    const { status, row } = res.json
+    if (phoneRow != null) this.ids.set(phoneRow, row.id)
+    if (status === 'duplicate') {
+      this.merged.add(phoneRow)
+      this.report.merged++
+      this.report.sent--
+    }
+    if (!this.server.scanRows.has(row.id)) this.server.scanRows.set(row.id, scanRowFrom(row))
+    const d = this.server.scanDocuments.get(doc)
+    if (status === 'added' && !res.replayed && d) d.revision++
+  }
+
+  async addScanRow(record, phoneDoc) {
+    if (this.deletedOnPhone(record)) return
+    const doc = this.target(record, 'scan_document', phoneDoc)
+    if (doc == null) return
+    return this.createScan(record, `/api/scan-documents/${doc}/rows`, {})
+  }
+
+  /** The text and cells the phone changed; a cell both changed to different values is asked about. */
+  async updateScanRow(record, phoneDoc, phoneRow) {
+    const id = this.target(record, 'scan_row', phoneRow)
+    if (id == null) return
+    const [before, after] = this.states(record, 'scan_row', phoneRow)
+    const server = stateOf(this.server, 'scan_row', id)
+    const { state, conflicts } = merge(before, after, server, ['code'])
+    this.conflictsOn(record, 'scan_row', id, phoneRow, conflicts)
+    if (sameRow(state, server)) return this.skip()
+    const res = await this.send(record, 'PUT', this.pathOf('scan_row', id), scanRowBody(state, [server, before, after]))
+    if (!ok(res)) this.fail(record, res)
+  }
+
+  deleteScanRow(record, phoneDoc, phoneRow) {
+    // Merged into a row someone else scanned: that row stays
+    if (this.merged.has(phoneRow)) return this.skip()
+    return this.deleteScan(record, 'scan_row', phoneRow)
+  }
+
+  /** Deleted on the server, brought back as the phone has it: a folder with its documents, a document with its rows. */
+  async restoreScan(type, id, record, anew = this.anew.has(keyOf(type, id))) {
+    const phone = (map) => [...this.final[map].values()].filter((x) => !isTempId(x.id))
+    if (type === 'scan_folder') {
+      const res = await this.send(record, 'POST', '/api/scan-folders', { name: this.final.scanFolders.get(id).name }, '', { key: this.restoreKey(type, id, anew) })
+      if (!ok(res)) {
+        this.fail(record, res)
+        return false
+      }
+      this.ids.set(id, res.json.id)
+      for (const doc of phone('scanDocuments').filter((d) => d.scan_folder_id === id).sort((a, b) => a.id - b.id)) await this.restoreScan('scan_document', doc.id, record, anew)
+      return true
+    }
+    if (type === 'scan_document') {
+      const doc = this.final.scanDocuments.get(id)
+      const body = { scan_folder_id: this.serverId(doc.scan_folder_id), title: doc.title, columns: doc.columns, duplicate_scope: doc.duplicate_scope }
+      const res = await this.send(record, 'POST', '/api/scan-documents', body, '', { key: this.restoreKey(type, id, anew) })
+      if (!ok(res)) {
+        this.fail(record, res)
+        return false
+      }
+      this.ids.set(id, res.json.id)
+      const rows = phone('scanRows').filter((r) => r.scan_document_id === id).sort((a, b) => a.position - b.position || a.id - b.id)
+      for (const row of rows) await this.restoreRow(row, res.json.id, record, anew)
+      return true
+    }
+    const row = this.final.scanRows.get(id)
+    return this.restoreRow(row, this.serverId(row.scan_document_id), record, anew)
+  }
+
+  /** A row added again at the end of its document, as who scanned it, when they scanned it. */
+  async restoreRow(row, doc, record, anew) {
+    const as = { ...record, change: { ...record.change, at: row.scanned_at || record.change.at, user: row.scanner || record.change.user } }
+    const key = this.restoreKey('scan_row', row.id, anew)
+    let res
+    if (row.code != null) {
+      res = await this.send(as, 'POST', `/api/scan-documents/${doc}/scan`, { code: row.code }, '', { emulate: false, key })
+      if (ok(res)) this.scanned(res, doc, row.id)
+    } else {
+      res = await this.send(as, 'POST', `/api/scan-documents/${doc}/rows`, {}, '', { key })
+      if (ok(res)) this.ids.set(row.id, res.json.id)
+    }
+    if (!ok(res)) {
+      this.fail(record, res)
+      return false
+    }
+    const id = this.ids.get(row.id)
+    const server = stateOf(this.server, 'scan_row', id)
+    // Merged with a row someone else scanned: only its empty cells are filled in
+    const cells = Object.fromEntries(scanRowState(row).fields.filter((f) => fieldValue(server, f.key) === ABSENT).map((f) => [f.key, f.value]))
+    if (Object.keys(cells).length) {
+      const put = await this.send(as, 'PUT', this.pathOf('scan_row', id), { cells }, '', { key: `${key}:cells` })
+      if (!ok(put)) this.fail(record, put)
+    }
+    return true
+  }
+
   /* --- The answers */
 
   async resolve(conflicts, answers) {
@@ -707,8 +1004,8 @@ class Sync {
         if (answer.choice === 'phone') await this.sendPhoto(record, conflict.id)
       } else if (kind === 'changed_deleted') {
         if (answer.choice !== 'delete') continue
-        for (const id of conflict.ids) {
-          const res = await this.send(record, 'DELETE', `/api/equipment/${id}`, undefined, `:${id}`)
+        for (const path of conflict.paths || conflict.ids.map((id) => `/api/equipment/${id}`)) {
+          const res = await this.send(record, 'DELETE', path, undefined, conflict.paths ? `:${path}` : `:${path.split('/').pop()}`)
           if (!ok(res)) this.fail(record, res)
         }
       } else if (kind.endsWith('_taken')) {
@@ -719,12 +1016,11 @@ class Sync {
     }
     for (const { type, id, record, values } of picked.values()) {
       if (!this.exists(type, id)) continue
-      const state = stateOf(this.server, type, id)
+      const server = stateOf(this.server, type, id)
+      const state = { ...server, fields: server.fields?.map((f) => ({ ...f })) }
       const phoneFields = this.last.get(keyOf(type, id))?.fields || []
       for (const conflict of values) setValue(state, conflict.attr, conflict.phone, phoneFields)
-      const path = { equipment: '/api/equipment', box: '/api/boxes', group: '/api/groups' }[type]
-      const body = type === 'equipment' ? equipmentBody(state) : type === 'box' ? boxState(state) : groupState(state)
-      const res = await this.send(record, 'PUT', `${path}/${id}`, body, ':chosen')
+      const res = await this.send(record, 'PUT', this.pathOf(type, id), this.bodyOf(type, state, server), ':chosen')
       if (!ok(res)) this.fail(record, res)
     }
   }
@@ -762,6 +1058,43 @@ class Sync {
     if (!ok(res)) this.fail(record, res)
   }
 
+  /**
+   * The key of bringing this back: the same whichever change asks about it, so a sync of this copy
+   * that starts again after a cut does not bring it back twice.
+   */
+  restoreKey(type, id, anew = this.anew.has(keyOf(type, id))) {
+    return `restore:${this.copy}:${type}:${id}${anew ? `:${this.startedAt}` : ''}`
+  }
+
+  /**
+   * Brought back by a sync of this copy that was cut off: brought back the same way (the server
+   * answers with what it made then), and not asked about again. Deleted again on the server
+   * since: asked about again, and made anew.
+   */
+  async restoredBefore(conflicts) {
+    const restorable = (c) => c.kind === `${c.type}_deleted` && c.type !== 'equipment'
+    const keys = conflicts.filter(restorable).map((c) => this.restoreKey(c.type, c.id))
+    if (!keys.length) return conflicts
+    const res = await call('POST', '/api/offline/done', { token: this.token, body: { keys } })
+    if (!ok(res)) throw new SyncStopped('sync_server_error', errorOf(res))
+    const done = new Set(res.json.done)
+    const left = []
+    for (const conflict of conflicts) {
+      const key = restorable(conflict) && this.restoreKey(conflict.type, conflict.id)
+      if (key && done.has(key)) {
+        const before = await call('POST', '/api/offline/done', { token: this.token, headers: { 'X-Offline-Change': key } })
+        const made = before.json?.row?.id ?? before.json?.id
+        if (ok(before) && before.replayed && this.exists(conflict.type, made)) {
+          await this.resolveDeleted(conflict, { choice: 'restore' })
+          continue
+        }
+        this.anew.add(keyOf(conflict.type, conflict.id))
+      }
+      left.push(conflict)
+    }
+    return left
+  }
+
   /** Changed on the phone, deleted on the server: brought back (as the phone has it), or left deleted. */
   async resolveDeleted(conflict, answer) {
     const { type, id, record } = conflict
@@ -769,6 +1102,10 @@ class Sync {
     this.waiting.delete(key)
     if (answer.choice !== 'restore') {
       this.dropped.add(key)
+      return
+    }
+    if (SCAN_MAPS[type]) {
+      if (!(await this.restoreScan(type, id, record))) this.dropped.add(key)
       return
     }
     if (type === 'equipment') {
@@ -783,7 +1120,7 @@ class Sync {
     // A box or group is made again, as the phone last had it
     const last = this.last.get(key) || stateOf(this.base, type, id)
     const body = type === 'box' ? boxState(last) : groupState(last)
-    const res = await this.send(record, 'POST', type === 'box' ? '/api/boxes' : '/api/groups', body, ':recreate')
+    const res = await this.send(record, 'POST', type === 'box' ? '/api/boxes' : '/api/groups', body, '', { key: this.restoreKey(type, id) })
     if (!ok(res)) {
       this.dropped.add(key)
       return this.fail(record, res)
@@ -794,7 +1131,7 @@ class Sync {
       const members = [...this.final.equipment.values()].filter((e) => e.group_id === id && e.parent_id == null).map((e) => this.serverId(e.id)).filter((x) => x != null)
       const ids = members.filter((x) => this.exists('equipment', x))
       if (ids.length) {
-        const sent = await this.send(record, 'POST', '/api/groups/assign', { ids, group_id: res.json.id }, ':members')
+        const sent = await this.send(record, 'POST', '/api/groups/assign', { ids, group_id: res.json.id }, '', { key: `${this.restoreKey(type, id)}:members` })
         if (!ok(sent)) this.fail(record, sent)
       }
     }

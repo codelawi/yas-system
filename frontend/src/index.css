@@ -2347,6 +2347,19 @@ h5,
 .scan-doc-table .scan-doc-row-new > td {
   animation: scan-doc-row-flash 4s ease-out;
 }
+/* Added or changed on this phone, not synced yet */
+.scan-doc-table .scan-doc-row-offline > td:first-child {
+  box-shadow: inset -3px 0 0 #f59e0b;
+}
+.scan-doc-table .scan-doc-row-offline-new > td:first-child {
+  box-shadow: inset -3px 0 0 #22c55e;
+}
+[dir='ltr'] .scan-doc-table .scan-doc-row-offline > td:first-child {
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+[dir='ltr'] .scan-doc-table .scan-doc-row-offline-new > td:first-child {
+  box-shadow: inset 3px 0 0 #22c55e;
+}
 
 /* ---------- Voucher codes (رموز السند) */
 .voucher-group-info {

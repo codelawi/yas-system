@@ -18,10 +18,17 @@ const CHOICES = {
   equipment_deleted: ['restore', 'keep'],
   box_deleted: ['restore', 'keep'],
   group_deleted: ['restore', 'keep'],
+  scan_folder_deleted: ['restore', 'keep'],
+  scan_document_deleted: ['restore', 'keep'],
+  scan_row_deleted: ['restore', 'keep'],
 }
 
 /** A field's name as the pages show it. */
 function attrName(t, q) {
+  // A scan document's column, as its table names it
+  if (q.attrName) return q.attrName
+  if (q.type === 'scan_folder') return t('scan_folder_name')
+  if (q.type === 'scan_document') return t({ title: 'scan_doc_title', duplicate_scope: 'scan_dup_scope' }[q.attr] || q.attr)
   if (q.attr.startsWith('field:')) return q.attr.slice(6)
   if (q.type === 'box') return t({ number: 'box_number', name: 'box_name' }[q.attr] || q.attr)
   if (q.type === 'group') return t({ name: 'group_name' }[q.attr] || q.attr)
@@ -31,7 +38,8 @@ function attrName(t, q) {
 function choiceLabel(t, q, choice) {
   if (q.kind === 'field') {
     const removed = choice === 'phone' ? q.removedOnPhone : q.removedOnServer
-    const value = removed ? t('cf_removed') : (choice === 'phone' ? q.phone : q.server) || '—'
+    let value = removed ? t('cf_removed') : (choice === 'phone' ? q.phone : q.server) || '—'
+    if (q.type === 'scan_document' && q.attr === 'duplicate_scope' && !removed) value = t(value === 'folder' ? 'scan_dup_folder' : 'scan_dup_document')
     return (
       <span>
         {t(choice === 'phone' ? 'cf_from_phone' : 'cf_from_server')}: <bdi className="cf-value">{String(value)}</bdi>
@@ -50,6 +58,7 @@ function questionTitle(t, q) {
   if (q.kind === 'field') return t('cf_field', { label: q.label, field: attrName(t, q) })
   if (q.kind === 'serial_taken') return t('cf_serial_taken', { value: q.value, other: q.other || '' })
   if (q.kind === 'box_taken' || q.kind === 'group_taken') return t(`cf_${q.kind}`, { value: q.value })
+  if (q.kind === 'changed_deleted' && q.type && q.type !== 'equipment') return t(`cf_changed_deleted_${q.type}`, { label: q.label })
   return t(`cf_${q.kind}`, { label: q.label })
 }
 
@@ -97,7 +106,7 @@ function Summary({ report }) {
     <Result
       status={report.failed.length ? 'warning' : 'success'}
       title={t('sync_done')}
-      subTitle={[t('sync_sent', { n: report.sent }), report.skipped > 0 && t('sync_skipped', { n: report.skipped })].filter(Boolean).join(' · ')}
+      subTitle={[t('sync_sent', { n: report.sent }), report.merged > 0 && t('sync_merged', { n: report.merged }), report.skipped > 0 && t('sync_skipped', { n: report.skipped })].filter(Boolean).join(' · ')}
       extra={
         problems.length > 0 && (
           <List

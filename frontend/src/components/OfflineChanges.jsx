@@ -26,7 +26,9 @@ export function changeText(t, change) {
   const { kind } = change
   let key = `chg_${kind}`
   if (kind === 'equipment_deleted' && change.n > 1) key = 'chg_equipment_deleted_many'
-  if ((kind === 'group_updated' || kind === 'box_updated') && change.from) key = `${key}_from`
+  if ((kind === 'group_updated' || kind === 'box_updated' || kind === 'scan_folder_updated') && change.from) key = `${key}_from`
+  // A row typed by hand has no scanned text
+  if ((kind === 'scan_row_updated' || kind === 'scan_row_deleted') && !change.code) key = `${key}_blank`
   return t(key, change)
 }
 
@@ -108,11 +110,21 @@ export function useUndoChange() {
   }
 }
 
-/** On an equipment, box or group page: what was changed on it on this phone and is not synced yet. */
+/** A long list (a document scanned into for an hour) shows a page at a time. */
+const PAGE = 20
+const pages = (list) => (list.length > PAGE ? { pageSize: PAGE, size: 'small', simple: true, align: 'center' } : false)
+
+/** Shown at first on a page, newest first: the page itself stays in sight (a document scanned into for an hour). */
+const FIRST = 3
+
+/** On an equipment, box, group or scan document page: what was changed on it on this phone and is not synced yet. */
 export function UnsyncedCard({ changes }) {
   const { t } = useLang()
   const undo = useUndoChange()
+  const [all, setAll] = useState(false)
   if (!changes?.length) return null
+  const newest = [...changes].reverse()
+  const shown = all ? newest : newest.slice(0, FIRST)
   return (
     <Card
       size="small"
@@ -129,7 +141,12 @@ export function UnsyncedCard({ changes }) {
       }
       style={{ marginBottom: 16 }}
     >
-      <List size="small" dataSource={changes} rowKey="id" renderItem={(change) => <ChangeItem change={change} onUndo={undo} />} />
+      <List size="small" dataSource={shown} rowKey="id" pagination={all && pages(changes)} renderItem={(change) => <ChangeItem change={change} onUndo={undo} />} />
+      {changes.length > FIRST && (
+        <Button type="link" size="small" block onClick={() => setAll((x) => !x)}>
+          {all ? t('unsynced_show_less') : t('unsynced_show_all', { n: changes.length })}
+        </Button>
+      )}
     </Card>
   )
 }
@@ -165,7 +182,7 @@ export function PendingChanges({ onCount }) {
       <Button type="primary" size="large" block icon={<CloudSyncOutlined />} onClick={startSync} style={{ marginBottom: 12 }}>
         {t('sync')}
       </Button>
-      <List size="small" dataSource={[...changes].reverse()} rowKey="id" renderItem={(change) => <ChangeItem change={change} onUndo={undo} />} />
+      <List size="small" dataSource={[...changes].reverse()} rowKey="id" pagination={pages(changes)} renderItem={(change) => <ChangeItem change={change} onUndo={undo} />} />
     </Card>
   )
 }

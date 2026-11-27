@@ -242,10 +242,16 @@ async function change(request, path) {
   if (!(await onCopy())) {
     if (!offlineEdit) return fetch(request)
     const kept = request.clone()
+    // Saved on the server with this key (App\Http\Middleware\ApplyOfflineChange): when its answer
+    // comes too late, the phone keeps the change too, and the sync does not make it twice
+    const key = crypto.randomUUID()
+    const headers = new Headers(request.headers)
+    headers.set('X-Offline-Change', key)
+    headers.set('X-Offline-Live', '1')
     try {
-      return await fromNetwork(request, { cancel: true })
+      return await fromNetwork(new Request(request, { headers }), { cancel: true })
     } catch {
-      return keep(kept, path)
+      return keep(kept, path, key)
     }
   }
   if (!offlineEdit) {
@@ -262,8 +268,11 @@ const inTurn = (work) => {
   return turn
 }
 
-/** The change applied to the copy and saved with the others, as the server would answer it. */
-function keep(request, path) {
+/**
+ * The change applied to the copy and saved with the others, as the server would answer it (`key`:
+ * the one it was sent to the server with, when that got no answer in time).
+ */
+function keep(request, path, key = crypto.randomUUID()) {
   return inTurn(async () => {
     const current = await loadState()
     if (!current) return json(503, { message: 'offline_no_data' })
@@ -287,7 +296,7 @@ function keep(request, path) {
 
     const entry = {
       id: changes.reduce((max, c) => Math.max(max, c.id), 0) + 1,
-      key: crypto.randomUUID(),
+      key,
       at: OfflineEdit.laravelTime(Date.now()),
       user: { id: user.id, name: user.name },
       method: request.method,
@@ -295,8 +304,8 @@ function keep(request, path) {
       body,
     }
     const result = OfflineEdit.applyChange(model, entry)
-    if (result.status >= 400) {
-      // Refused, as the server would: nothing is kept
+    if (result.status >= 400 || !result.effect) {
+      // Refused as the server would, or nothing changed (a code already scanned): nothing is kept
       await dropFiles(files)
       return json(result.status, result.body)
     }
@@ -319,6 +328,14 @@ function pageAfter(copy, entry, result) {
   if (/^\/api\/boxes(\/\d+)?$/.test(path) && method !== 'DELETE') return page(`/api/boxes/${body.id}`)
   if (/^\/api\/boxes\/\d+\/equipment$/.test(path)) return { ...body, box: page(`/api/boxes/${body.box.id}`) }
   if (/^\/api\/boxes\/\d+\/equipment\//.test(path) && body?.id) return page(`/api/boxes/${body.id}`)
+  if (/^\/api\/scan-documents\/\d+$/.test(path) && method === 'PUT') return page(path)
+  // A row of a scan document, with its mark
+  const row = /^\/api\/scan-documents\/(\d+)\/(scan|rows)/.exec(path) && (body?.row ?? body)
+  if (row?.id && method !== 'DELETE') {
+    const shown = page(`/api/scan-documents/${row.scan_document_id}`)?.rows?.find((r) => r.id === row.id)
+    const marked = shown?.offline ? { ...row, offline: shown.offline } : row
+    return body?.row ? { ...body, row: marked } : marked
+  }
   return body
 }
 
