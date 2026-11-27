@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Alert, App, AutoComplete, Button, Card, Checkbox, Col, Empty, Input, InputNumber, Modal, Popconfirm, Progress, Result, Row, Segmented, Spin, Table, Tag, Typography } from 'antd'
-import { ApartmentOutlined, CheckOutlined, DeleteOutlined, EditOutlined, FileDoneOutlined, ImportOutlined, NumberOutlined, PlusOutlined, ScanOutlined, UnlockOutlined } from '@ant-design/icons'
+import { Alert, App, AutoComplete, Button, Card, Checkbox, Col, Empty, Input, InputNumber, Modal, Popconfirm, Progress, Result, Row, Segmented, Select, Spin, Table, Tag, Typography } from 'antd'
+import { ApartmentOutlined, CheckOutlined, DeleteOutlined, EditOutlined, FileDoneOutlined, ImportOutlined, LayoutOutlined, NumberOutlined, PlusOutlined, PrinterOutlined, ScanOutlined, UnlockOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api, { errorKey } from '../api'
 import { useLang } from '../i18n'
@@ -11,6 +11,7 @@ import CodeScanner from '../components/CodeScanner'
 import { usePhone } from '../nav'
 import { ChipRow, Fab, PhoneActions, PhoneHeader, PhoneList, PhoneRow, PhoneSearch, PhoneSkeleton } from '../components/PhoneUI'
 import useRevisionPoll from '../revisionPoll'
+import VoucherPaper from '../components/VoucherPaper'
 
 /*
  * Issue vouchers (سند صرف عهدة): scan what someone takes from the store, issue the voucher to hand
@@ -20,9 +21,6 @@ import useRevisionPoll from '../revisionPoll'
  */
 
 const STATUS_COLOR = { draft: 'gold', issued: 'blue', returned: 'green' }
-const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩'
-/** The voucher's numbers are written as on the paper: ١٢٣ */
-const arabicDigits = (value) => String(value ?? '').replace(/[0-9]/g, (d) => AR_DIGITS[d])
 const formatTime = (value) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '—')
 
 function NeedPin() {
@@ -129,7 +127,10 @@ export function VouchersPage() {
         <PhoneHeader
           title={t('vouchers')}
           subtitle={data ? t('vouchers_n', { n: total }) : ' '}
-          more={[{ key: 'number', icon: <NumberOutlined />, label: `${t('voucher_next_number')}: ${data?.next_number ?? '…'}`, onClick: askNumber }]}
+          more={[
+            { key: 'number', icon: <NumberOutlined />, label: `${t('voucher_next_number')}: ${data?.next_number ?? '…'}`, onClick: askNumber },
+            { key: 'templates', icon: <LayoutOutlined />, label: t('vt_title'), onClick: () => navigate('/vouchers/templates') },
+          ]}
         />
         <PhoneActions actions={[{ key: 'return', icon: <ImportOutlined />, label: t('voucher_return_title'), onClick: goReturn }]} />
         <PhoneSearch value={text} onChange={setText} onSearch={setSearch} placeholder={t('voucher_search')} />
@@ -182,6 +183,9 @@ export function VouchersPage() {
           <Button icon={<NumberOutlined />} onClick={askNumber}>
             {`${t('voucher_next_number')}: ${data?.next_number ?? '…'}`}
           </Button>
+          <Button icon={<LayoutOutlined />} onClick={() => navigate('/vouchers/templates')}>
+            {t('vt_title')}
+          </Button>
           <Button icon={<ImportOutlined />} onClick={goReturn}>
             {t('voucher_return_title')}
           </Button>
@@ -227,69 +231,99 @@ export function VouchersPage() {
 
 /* ---------- One voucher */
 
-/** The voucher as it will be printed: one line per kind of equipment. */
-function VoucherSheet({ voucher, rows }) {
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * The print station is not open on the laptop: one press opens it there (the START script's window does
+ * it), then this waits for it to answer, or says the laptop does not answer.
+ */
+function StationDialog({ open, onClose }) {
   const { t } = useLang()
-  const date = voucher.issued_at ? dayjs(voucher.issued_at) : dayjs()
-  // A replacement takes the number of the voucher it replaces
-  const number = voucher.number || voucher.replaces?.number
+  const [state, setState] = useState('closed') // closed | opening | open | no_answer | unreachable
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+    }
+  }, [])
+
+  const openStation = async () => {
+    setState('opening')
+    try {
+      const { data } = await api.post('/print-station/open')
+      if (data.online) return setState('open')
+      for (let i = 0; i < 20; i++) {
+        await wait(1000)
+        if (!alive.current) return undefined
+        const { data: now } = await api.get('/print-station')
+        if (now.online) return setState('open')
+      }
+      setState('no_answer')
+    } catch (e) {
+      setState(e.response ? 'no_answer' : 'unreachable')
+    }
+    return undefined
+  }
+  const close = () => {
+    setState('closed')
+    onClose()
+  }
+
+  const body = {
+    closed: <Result status="warning" title={t('station_closed')} subTitle={t('station_closed_hint')} />,
+    opening: <Result icon={<Spin size="large" />} title={t('station_opening')} />,
+    open: <Result status="success" title={t('station_open')} subTitle={t('station_open_hint')} />,
+    no_answer: <Result status="error" title={t('station_no_answer')} subTitle={t('station_no_answer_hint')} />,
+    unreachable: <Result status="error" title={t('station_unreachable')} subTitle={t('station_unreachable_hint')} />,
+  }[state]
+  const again = state === 'no_answer' || state === 'unreachable'
   return (
-    <div className="voucher-sheet" dir="rtl" lang="ar">
-      <div className="voucher-sheet-head">
-        <div>
-          <div className="voucher-sheet-kind">سند صرف فرعي</div>
-          <div>
-            الى / <b>{voucher.recipient || '…'}</b>
-          </div>
-          <div className="voucher-sheet-muted">بواسطة الموقعين ادناه</div>
-        </div>
-        <div className="voucher-sheet-meta">
-          <div>
-            رقم السند: <b>{number ? arabicDigits(number) : '—'}</b>
-          </div>
-          <div>التاريخ: {arabicDigits(date.format('D / M / YYYY'))} م</div>
-        </div>
-      </div>
-      <table className="voucher-sheet-table">
-        <thead>
-          <tr>
-            <th rowSpan={2}>الحرف والرقم</th>
-            <th rowSpan={2}>النوع</th>
-            <th colSpan={2}>الكمية</th>
-          </tr>
-          <tr>
-            <th>رقماً</th>
-            <th>كتابةً</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length ? (
-            rows.map((r) => (
-              <tr key={r.key}>
-                <td className="voucher-sheet-code">
-                  {r.code ||
-                    (!r.accessory && (
-                      <Link to="/groups/codes" className="voucher-no-code" title={t('voucher_no_code_hint')}>
-                        {t('voucher_no_code')}
-                      </Link>
-                    ))}
-                </td>
-                <td>{r.name}</td>
-                <td className="voucher-sheet-qty">{arabicDigits(r.quantity)}</td>
-                <td>{r.quantity_words}</td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={4} className="voucher-sheet-empty">
-                {t('voucher_empty_hint')}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <Modal
+      open={open}
+      onCancel={close}
+      destroyOnHidden
+      footer={
+        state === 'open' ? (
+          <Button type="primary" onClick={close}>
+            {t('ok')}
+          </Button>
+        ) : (
+          <>
+            <Button onClick={close}>{t('station_later')}</Button>
+            {state !== 'opening' && (
+              <Button type="primary" icon={<PrinterOutlined />} onClick={openStation}>
+                {t(again ? 'station_try_again' : 'station_open_it')}
+              </Button>
+            )}
+          </>
+        )
+      }
+    >
+      {body}
+    </Modal>
   )
+}
+
+/** "How many copies?" with the last answer filled in; `run(copies)` keeps the dialog open if it throws. */
+function askCopies(modal, t, { title, initial, okText, extra, run }) {
+  let copies = initial
+  modal.confirm({
+    title,
+    icon: <PrinterOutlined />,
+    okText,
+    cancelText: t('cancel'),
+    content: (
+      <div className="voucher-copies">
+        {extra}
+        <label>
+          {t('voucher_copies')}
+          <InputNumber min={1} max={20} precision={0} size="large" defaultValue={initial} onChange={(v) => (copies = v || 1)} />
+        </label>
+      </div>
+    ),
+    onOk: () => run(copies),
+  })
 }
 
 /** Choose the accessories of a main equipment to add. */
@@ -360,15 +394,20 @@ export function VoucherPage() {
   const [recipient, setRecipient] = useState('')
   const [recipients, setRecipients] = useState([])
   const [picking, setPicking] = useState(null)
+  const [templates, setTemplates] = useState([])
+  const [fieldValues, setFieldValues] = useState({})
+  const [stationAsk, setStationAsk] = useState(false)
   const revision = useRef(null)
   const typingRecipient = useRef(false)
+  const typingField = useRef(false)
   const recipientBox = useRef(null)
   const input = useRef(null)
 
   const show = useCallback((data) => {
     revision.current = data.voucher.revision
-    setReport({ voucher: data.voucher, items: data.items, rows: data.rows })
+    setReport({ voucher: data.voucher, items: data.items, rows: data.rows, layout: data.layout, copies: data.copies })
     if (!typingRecipient.current) setRecipient(data.voucher.recipient || '')
+    if (!typingField.current) setFieldValues(data.voucher.fields || {})
   }, [])
   const load = useCallback(
     () =>
@@ -387,6 +426,11 @@ export function VoucherPage() {
         .get('/vouchers/recipients')
         .then(({ data }) => setRecipients(data))
         .catch(() => {})
+    if (user)
+      api
+        .get('/voucher-templates')
+        .then(({ data }) => setTemplates(data))
+        .catch(() => {})
   }, [user])
   useRevisionPoll(user && !missing ? `/vouchers/${id}/revision` : null, revision, load)
 
@@ -394,7 +438,7 @@ export function VoucherPage() {
   if (missing) return <Result status="404" title={t('voucher_not_found')} extra={<Button onClick={() => navigate('/vouchers')}>{t('vouchers')}</Button>} />
   if (!report) return <Spin size="large" className="page-spin" />
 
-  const { voucher, items, rows } = report
+  const { voucher, items, rows, layout } = report
   const isDraft = voucher.status === 'draft'
   // A draft takes scans; an issued voucher is locked and only takes back what it gave
   const current = isDraft ? 'add' : 'return'
@@ -488,24 +532,70 @@ export function VoucherPage() {
     }
   }
 
-  const issue = async (move = false) => {
+  const saveField = async (key, value) => {
+    typingField.current = false
+    const text = value.trim()
+    if (!isDraft || text === (voucher.fields?.[key] || '')) return
+    try {
+      const { data } = await api.put(`/vouchers/${id}`, { fields: { ...(voucher.fields || {}), ...fieldValues, [key]: text } })
+      show(data)
+    } catch (e) {
+      message.error(t(errorKey(e) || 'error'))
+    }
+  }
+
+  const chooseTemplate = async (templateId) => {
+    try {
+      const { data } = await api.put(`/vouchers/${id}`, { template_id: templateId })
+      show(data)
+    } catch (e) {
+      message.error(t(errorKey(e) || 'error'))
+    }
+  }
+
+  /** Sent to the print station: says so, or offers to open it when it is not open. */
+  const afterPrint = (print) => {
+    if (!print?.job) return
+    if (print.station.online) message.success(t('voucher_printing_now', { n: print.job.copies }))
+    else setStationAsk(true)
+  }
+
+  const issue = async (move = false, copies = report.copies) => {
     setIssuing(true)
     try {
-      const { data } = await api.post(`/vouchers/${id}/issue`, { recipient: recipient.trim(), move })
+      const { data } = await api.post(`/vouchers/${id}/issue`, { recipient: recipient.trim(), move, copies })
       show(data)
       if (data.status === 'held') {
-        askMove(data.held, () => issue(true))
+        askMove(data.held, () => issue(true, copies))
         return
       }
       beep(true)
       setLast(null)
       message.success(t(voucher.replaces ? 'voucher_replaced_n' : 'voucher_issued_n', { n: data.voucher.number }))
+      afterPrint(data.print)
     } catch (e) {
       message.error(t(errorKey(e) || 'error'))
     } finally {
       setIssuing(false)
     }
   }
+
+  const reprint = () =>
+    askCopies(modal, t, {
+      title: t('voucher_print_title', { n: voucher.number }),
+      initial: report.copies,
+      okText: t('voucher_print'),
+      run: async (copies) => {
+        try {
+          const { data } = await api.post(`/vouchers/${id}/print`, { copies })
+          show(data)
+          afterPrint(data.print)
+        } catch (e) {
+          message.error(t(errorKey(e) || 'error'))
+          throw e
+        }
+      },
+    })
 
   const askIssue = () => {
     const name = recipient.trim()
@@ -518,17 +608,17 @@ export function VoucherPage() {
       message.error(t('voucher_empty'))
       return
     }
-    modal.confirm({
+    askCopies(modal, t, {
       title: t('voucher_issue'),
-      content: (
+      initial: report.copies,
+      okText: t('voucher_issue'),
+      extra: (
         <>
           <p>{t('voucher_issue_confirm', { name, n: items.length })}</p>
           {voucher.replaces && <p>{t('voucher_issue_replaces', { n: voucher.replaces.number })}</p>}
         </>
       ),
-      okText: t('voucher_issue'),
-      cancelText: t('cancel'),
-      onOk: () => issue(),
+      run: (copies) => issue(false, copies),
     })
   }
 
@@ -789,6 +879,75 @@ export function VoucherPage() {
 
   const heldWarning = isDraft && heldItems.length > 0 && <Alert type="warning" showIcon title={t('voucher_held_warning', { n: heldItems.length })} className="voucher-held-warning" />
 
+  // The template and its own fields (signatories...), typed on each voucher; the last ones come back
+  const templateChoice = isDraft && (
+    <div className="voucher-template">
+      {templates.length > 1 && (
+        <label className="voucher-field">
+          <span>{t('voucher_template')}</span>
+          <Select value={layout.template_id} onChange={chooseTemplate} options={templates.map((tpl) => ({ value: tpl.id, label: tpl.name }))} />
+        </label>
+      )}
+      {layout.fields.map((f) => (
+        <label key={f.key} className="voucher-field">
+          <span>{f.label}</span>
+          <Input
+            value={fieldValues[f.key] || ''}
+            maxLength={500}
+            onChange={(e) => {
+              typingField.current = true
+              setFieldValues((v) => ({ ...v, [f.key]: e.target.value }))
+            }}
+            onBlur={(e) => saveField(f.key, e.target.value)}
+            onPressEnter={(e) => e.currentTarget.blur()}
+          />
+        </label>
+      ))}
+    </div>
+  )
+
+  // Printed? (the print station on the laptop says when)
+  const lastPrint = voucher.last_print
+  const printRow = !isDraft && (
+    <div className={`voucher-print is-${lastPrint?.status || 'none'}`}>
+      <PrinterOutlined />
+      <span className="voucher-print-text">
+        {lastPrint ? t(`voucher_print_${lastPrint.status}`, { n: lastPrint.copies, time: formatTime(lastPrint.finished_at || lastPrint.created_at).slice(11) }) : t('voucher_print_none')}
+      </span>
+      {lastPrint?.status === 'pending' && (
+        <Button size="small" onClick={() => setStationAsk(true)}>
+          {t('station_check')}
+        </Button>
+      )}
+      <Button size="small" type={lastPrint ? 'default' : 'primary'} icon={<PrinterOutlined />} onClick={reprint}>
+        {t(lastPrint ? 'voucher_reprint' : 'voucher_print')}
+      </Button>
+    </div>
+  )
+
+  // What prints: the A5 pages, with the number a replacement will take
+  const paperVoucher = { ...voucher, number: voucher.number || voucher.replaces?.number, recipient: recipient.trim() || voucher.recipient, fields: { ...(voucher.fields || {}), ...fieldValues } }
+  const noCode = rows.filter((r) => !r.code && !r.accessory).length
+  const preview = (
+    <>
+      {noCode > 0 && (
+        <Alert
+          type="info"
+          showIcon
+          className="voucher-no-code-note"
+          title={t('voucher_no_code_n', { n: noCode, text: layout.item_table.no_code || '—' })}
+          action={
+            <Link to="/groups/codes">
+              <Button size="small">{t('voucher_add_codes')}</Button>
+            </Link>
+          }
+        />
+      )}
+      <VoucherPaper layout={layout} voucher={paperVoucher} rows={rows} />
+    </>
+  )
+  const station = <StationDialog open={stationAsk} onClose={() => setStationAsk(false)} />
+
   const tags = (
     <span className="phone-tags">
       <StatusTag voucher={voucher} />
@@ -808,7 +967,9 @@ export function VoucherPage() {
           title={voucherTitle(voucher, t)}
           subtitle={tags}
           more={[
+            { key: 'print', icon: <PrinterOutlined />, label: t(lastPrint ? 'voucher_reprint' : 'voucher_print'), hidden: isDraft, onClick: reprint },
             { key: 'return', icon: <ImportOutlined />, label: t('voucher_return_title'), onClick: () => navigate('/vouchers/return') },
+            { key: 'templates', icon: <LayoutOutlined />, label: t('vt_title'), onClick: () => navigate('/vouchers/templates') },
             { key: 'delete', icon: <DeleteOutlined />, label: t('voucher_delete_draft'), danger: true, hidden: !isDraft, onClick: removeDraft, confirm: { title: t('voucher_delete_confirm') } },
             { key: 'replace', icon: <EditOutlined />, label: t(voucher.replacement_id ? 'voucher_open_replacement' : 'voucher_replace'), hidden: !canReplace, onClick: replace },
             { key: 'delete-issued', icon: <DeleteOutlined />, label: t('voucher_delete'), danger: true, hidden: isDraft, onClick: removeIssued },
@@ -816,7 +977,9 @@ export function VoucherPage() {
         />
         <div className="voucher-panel">
           {replaceNote}
+          {printRow}
           {recipientField}
+          {templateChoice}
           {scanLabel}
           {scanBar}
           {returnAllButton}
@@ -825,7 +988,7 @@ export function VoucherPage() {
           {returnProgress}
         </div>
         <h2 className="voucher-section-title">{t('voucher_preview')}</h2>
-        <VoucherSheet voucher={{ ...voucher, recipient: recipient.trim() || voucher.recipient }} rows={rows} />
+        {preview}
         {items.length > 0 && (
           <>
             <h2 className="voucher-section-title">{`${t('voucher_scanned')} (${items.length})`}</h2>
@@ -849,6 +1012,7 @@ export function VoucherPage() {
         {isDraft && <Fab icon={<CheckOutlined />} label={t('voucher_issue')} onClick={askIssue} loading={issuing} />}
         {camera}
         {picker}
+        {station}
       </div>
     )
 
@@ -873,6 +1037,11 @@ export function VoucherPage() {
             </Popconfirm>
           )}
           {!isDraft && (
+            <Button icon={<PrinterOutlined />} onClick={reprint}>
+              {t(lastPrint ? 'voucher_reprint' : 'voucher_print')}
+            </Button>
+          )}
+          {!isDraft && (
             <Button danger icon={<DeleteOutlined />} onClick={removeIssued}>
               {t('voucher_delete')}
             </Button>
@@ -893,7 +1062,9 @@ export function VoucherPage() {
         <Col xs={24} lg={13}>
           <Card style={{ marginBottom: 16 }}>
             {replaceNote}
+            {printRow}
             {recipientField}
+            {templateChoice}
             {scanLabel}
             {scanBar}
             {returnAllButton}
@@ -934,13 +1105,14 @@ export function VoucherPage() {
           </Card>
         </Col>
         <Col xs={24} lg={11}>
-          <Card title={t('voucher_preview')}>
-            <VoucherSheet voucher={{ ...voucher, recipient: recipient.trim() || voucher.recipient }} rows={rows} />
+          <Card title={t('voucher_preview')} className="voucher-preview-card">
+            {preview}
           </Card>
         </Col>
       </Row>
       {camera}
       {picker}
+      {station}
     </div>
   )
 }

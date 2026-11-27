@@ -29,6 +29,8 @@ import { BoxDetail, BoxesPage, ScanBoxPage } from './pages/BoxPages'
 import { GroupDetail, GroupsPage } from './pages/GroupPages'
 import { VoucherCodeImportPage, VoucherCodesPage } from './pages/VoucherCodePages'
 import { VoucherPage, VoucherReturnPage, VouchersPage } from './pages/VoucherPages'
+import { VoucherTemplatePage, VoucherTemplatesPage } from './pages/VoucherTemplatePages'
+import PrintStationPage from './pages/PrintStationPage'
 import BoxLabelsPrint from './pages/BoxLabelsPrint'
 import BoxReport from './pages/BoxReport'
 import OfflinePage from './pages/OfflinePage'
@@ -54,6 +56,8 @@ export default function App() {
             {!phone && <OfflineBanner />}
             <Routes>
               <Route path="/labels" element={<LabelsPrint />} />
+              {/* The laptop's print station: no menus, no PIN (it has its own key) */}
+              <Route path="/print-station" element={<PrintStationPage />} />
               <Route path="/boxes/labels" element={<BoxLabelsPrint />} />
               <Route path="/boxes/:id/report" element={<BoxReport />} />
               <Route path="/print/equipment/:id" element={<PrintSheet />} />
@@ -105,6 +109,8 @@ function Shell() {
       <Route path="/custody/forms/:id" element={<CustodyFormPage />} />
       <Route path="/vouchers" element={<VouchersPage />} />
       <Route path="/vouchers/return" element={<VoucherReturnPage />} />
+      <Route path="/vouchers/templates" element={<VoucherTemplatesPage />} />
+      <Route path="/vouchers/templates/:id" element={<VoucherTemplatePage />} />
       <Route path="/vouchers/:id" element={<VoucherPage />} />
       <Route path="/stocktakes" element={<StocktakesPage />} />
       <Route path="/stocktakes/:id" element={<StocktakePage />} />

@@ -19,9 +19,12 @@ class Voucher extends Model
     /** Every unit came back. */
     public const RETURNED = 'returned';
 
-    protected $fillable = ['number', 'status', 'recipient', 'fields', 'replaces_id', 'revision', 'created_by', 'issued_by', 'issued_at', 'returned_at'];
+    protected $fillable = ['number', 'status', 'recipient', 'fields', 'replaces_id', 'template_id', 'layout', 'revision', 'created_by', 'issued_by', 'issued_at', 'returned_at'];
 
-    protected $casts = ['number' => 'integer', 'fields' => 'array', 'revision' => 'integer', 'issued_at' => 'datetime', 'returned_at' => 'datetime'];
+    /** Lists do not need the layout; the voucher's own screen asks for it (printLayout). */
+    protected $hidden = ['layout'];
+
+    protected $casts = ['number' => 'integer', 'fields' => 'array', 'layout' => 'array', 'revision' => 'integer', 'issued_at' => 'datetime', 'returned_at' => 'datetime'];
 
     public function items(): HasMany
     {
@@ -47,6 +50,23 @@ class Voucher extends Model
     public function replaces(): BelongsTo
     {
         return $this->belongsTo(self::class, 'replaces_id');
+    }
+
+    /** The template chosen for this voucher (none = the default one). */
+    public function template(): BelongsTo
+    {
+        return $this->belongsTo(VoucherTemplate::class, 'template_id');
+    }
+
+    public function prints(): HasMany
+    {
+        return $this->hasMany(VoucherPrint::class);
+    }
+
+    /** How it prints: as it was when issued, or (a draft) with its template as it is now. */
+    public function printLayout(): array
+    {
+        return $this->layout ?? VoucherTemplate::current($this->template_id)->layout();
     }
 
     public function isDraft(): bool

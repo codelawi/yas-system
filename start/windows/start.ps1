@@ -2,6 +2,7 @@
 #   MySQL (XAMPP)  ->  https certificate for repo.local (and this PC's addresses)
 #   ->  XAMPP Apache on http 80 + https 443  ->  the system (PHP 8.3+)
 #   ->  check that https://repo.local works, and print QR labels with it
+#   ->  the print station: an Edge window that prints issue vouchers by itself
 # Phones open the system at https://repo.local on any hotspot, whatever IP this PC gets:
 # Windows announces its computer name on the network (mDNS), so the PC must be called "repo"
 # (hotspot-setup.ps1 renames it, once).
@@ -287,4 +288,46 @@ Write-Host '    Keep this window open. Close it to stop the system.' -Foreground
 Write-Host '  ============================================================' -ForegroundColor $color
 Write-Host ''
 Start-Process $openUrl
-Wait-Process -Id $server.Id
+
+# ------------------------------------------------------------------ 10. print station
+# Edge in its own profile with silent printing (--kiosk-printing): issue vouchers print on the
+# default printer (with A5 paper in it) without a dialog. Opened now, and again whenever a phone
+# asks for it (the system leaves a file for this window to see). Your own Edge is not touched.
+Step '8. Print station'
+$StationUrl = $null; $StationAsk = $null; $StationOpen = $false
+foreach ($line in (Invoke-Native $Php "$App\artisan" repo:print-station)) {
+    if ($line -match '^Print station: (\S+)') { $StationUrl = $Matches[1] }
+    elseif ($line -match '^Open requests: (.+)$') { $StationAsk = $Matches[1].Trim() }
+    elseif ($line -match '^Open now: yes') { $StationOpen = $true }
+}
+function Find-Edge {
+    $paths = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe", "$env:LOCALAPPDATA\Microsoft\Edge\Application\msedge.exe")
+    $reg = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe' -ErrorAction SilentlyContinue).'(default)'
+    @($paths + $reg) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+}
+$Edge = Find-Edge
+$EdgeProfile = Join-Path $App 'storage\app\print-station\edge'   # git ignores storage\app
+function Open-Station {
+    if (-not $Edge -or -not $StationUrl) { return $false }
+    # One string: Windows PowerShell does not quote list items that contain spaces
+    $edgeArgs = "--user-data-dir=`"$EdgeProfile`" --kiosk-printing --no-first-run --no-default-browser-check " +
+        "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --app=`"$StationUrl`""
+    try { Start-Process -FilePath $Edge -ArgumentList $edgeArgs | Out-Null; $true } catch { $false }
+}
+if (-not $StationUrl) { Bad 'The print station address could not be read - vouchers will not print by themselves.' }
+elseif (-not $Edge) { Bad 'Microsoft Edge was not found - vouchers will not print by themselves.' }
+else {
+    if ($StationAsk) { Remove-Item $StationAsk -Force -ErrorAction SilentlyContinue }
+    if ($StationOpen) { Ok 'Already open in another window.' }
+    elseif (Open-Station) { Ok 'Opened in Edge: vouchers print on the default printer (put A5 paper in it).' }
+    else { Bad 'Edge did not start - vouchers will not print by themselves.' }
+}
+
+# Keep running while the system runs; open the print station again when a phone asks for it
+while (-not $server.HasExited) {
+    if ($StationAsk -and (Test-Path $StationAsk)) {
+        Remove-Item $StationAsk -Force -ErrorAction SilentlyContinue
+        if (Open-Station) { Write-Host "   [OK] $(Get-Date -Format HH:mm) Print station opened (asked from a phone)." -ForegroundColor Green }
+    }
+    Start-Sleep -Seconds 1
+}

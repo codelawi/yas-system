@@ -17,12 +17,14 @@ use App\Http\Controllers\Api\LookupController;
 use App\Http\Controllers\Api\MaintenanceController;
 use App\Http\Controllers\Api\NetworkController;
 use App\Http\Controllers\Api\OfflineController;
+use App\Http\Controllers\Api\PrintStationController;
 use App\Http\Controllers\Api\ScanDocumentController;
 use App\Http\Controllers\Api\ScanFolderController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\StocktakeController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VoucherController;
+use App\Http\Controllers\Api\VoucherTemplateController;
 use Illuminate\Support\Facades\Route;
 
 // Viewing is open to everyone on the network; changes need a PIN.
@@ -78,6 +80,11 @@ Route::get('/scan-documents/{scanDocument}/rows/{row}/photo', [ScanDocumentContr
 
 // Phones download everything once, then open scanned labels without a connection
 Route::get('/offline/snapshot', [OfflineController::class, 'snapshot'])->middleware('throttle:10,1');
+
+// The print station on the laptop: no PIN, its own key (see App\Support\PrintStation)
+Route::get('/print-station/next', [PrintStationController::class, 'next']);
+Route::post('/print-station/jobs/{print}/printed', [PrintStationController::class, 'printed'])->whereNumber('print');
+Route::post('/print-station/jobs/{print}/cancel', [PrintStationController::class, 'cancel'])->whereNumber('print');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
@@ -144,6 +151,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/vouchers/{voucher}/return', [VoucherController::class, 'returnItem'])->whereNumber('voucher');
     Route::post('/vouchers/{voucher}/return-all', [VoucherController::class, 'returnAll'])->whereNumber('voucher');
     Route::post('/vouchers/{voucher}/replace', [VoucherController::class, 'replace'])->whereNumber('voucher');
+    Route::post('/vouchers/{voucher}/print', [VoucherController::class, 'print'])->whereNumber('voucher');
+    Route::get('/print-station', [PrintStationController::class, 'status']);
+    Route::post('/print-station/open', [PrintStationController::class, 'open']);
+    Route::get('/voucher-templates', [VoucherTemplateController::class, 'index']);
+    Route::post('/voucher-templates', [VoucherTemplateController::class, 'store']);
+    Route::get('/voucher-templates/{template}', [VoucherTemplateController::class, 'show'])->whereNumber('template');
+    Route::put('/voucher-templates/{template}', [VoucherTemplateController::class, 'update'])->whereNumber('template');
+    Route::delete('/voucher-templates/{template}', [VoucherTemplateController::class, 'destroy'])->whereNumber('template');
+    Route::post('/voucher-templates/{template}/default', [VoucherTemplateController::class, 'makeDefault'])->whereNumber('template');
 
     Route::post('/issues/{issue}/close', [IssueController::class, 'close']);
 
