@@ -77,7 +77,6 @@ Route::get('/scan-documents/{scanDocument}/revision', [ScanDocumentController::c
 Route::get('/scan-documents/{scanDocument}/rows/{row}/photo', [ScanDocumentController::class, 'rowPhoto'])->whereNumber(['scanDocument', 'row']);
 
 // Phones download everything once, then open scanned labels without a connection
-Route::get('/offline/snapshot', [OfflineController::class, 'snapshot'])->middleware('throttle:10,1');
 
 // The print station on the laptop: no PIN, its own key (see App\Support\PrintStation)
 Route::get('/print-station/next', [PrintStationController::class, 'next']);
@@ -86,6 +85,8 @@ Route::post('/print-station/jobs/{print}/cancel', [PrintStationController::class
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
+    // Everything a phone keeps for working without a connection (it holds vouchers and recipients)
+    Route::get('/offline/snapshot', [OfflineController::class, 'snapshot'])->middleware('throttle:10,1');
     Route::get('/activity', [ActivityController::class, 'index']);
     Route::get('/activity/export', [ActivityController::class, 'export']);
     Route::get('/equipment/export', [EquipmentController::class, 'export']);

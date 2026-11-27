@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\OfflinePin;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'pin', 'role', 'is_active'])]
-#[Hidden(['pin'])]
+#[Hidden(['pin', 'offline_pin'])]
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory;
@@ -38,5 +39,13 @@ class User extends Authenticatable
             ->when($exceptId, fn ($q) => $q->where('id', '!=', $exceptId))
             ->get()
             ->first(fn (self $user) => Hash::check($pin, $user->pin));
+    }
+
+    /** Keeps the hash a phone checks this PIN with when it cannot reach the server; call it once the PIN is known to be right. */
+    public function rememberOfflinePin(string $pin): void
+    {
+        if (! OfflinePin::matches($pin, $this->offline_pin)) {
+            $this->forceFill(['offline_pin' => OfflinePin::make($pin)])->saveQuietly();
+        }
     }
 }

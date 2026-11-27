@@ -17,6 +17,7 @@ class AuthController extends Controller
         if (! $user || ! $user->is_active) {
             throw ValidationException::withMessages(['pin' => 'wrong_pin']);
         }
+        $user->rememberOfflinePin($data['pin']);
 
         $token = $user->createToken('pin', ['*'], now()->addMinutes((int) config('sanctum.expiration', 720)));
 

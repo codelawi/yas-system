@@ -3,8 +3,8 @@ import { OCR_CACHE, saveOcrFiles } from './ocr/files'
 
 /*
  * Working without a connection: the "Work offline" page saves a copy of everything on the
- * phone, and the service worker (sw.js) answers the scan pages from it when the server
- * cannot be reached. Browsers only run service workers on https (or localhost).
+ * phone, and the service worker (sw.js) answers the pages from it when the server cannot be
+ * reached. Browsers only run service workers on https (or localhost).
  */
 
 // Keep these names in sync with sw.js
@@ -42,7 +42,11 @@ export const useOffline = () =>
 
 /* ---------- The saved copy */
 
-/** What is saved on this phone: { saved_at, generated_at, equipment, boxes, photos, photos_failed, with_photos, bytes }, or null. */
+/**
+ * What is saved on this phone, or null: { version, saved_at, generated_at, equipment, boxes, groups,
+ * vouchers, scan_documents, photos, photos_failed, with_photos, bytes }. A copy saved before
+ * version 2 only opens equipment and box pages.
+ */
 export async function readOfflineMeta() {
   if (!offlineSupported()) return null
   try {
@@ -73,11 +77,15 @@ async function inParallel(items, count, work) {
   await Promise.all(Array.from({ length: Math.min(count, items.length) }, run))
 }
 
+/** The download needs a PIN (it holds vouchers and recipients): the token was refused. */
+export class OfflineNeedsPin extends Error {}
+
 /**
- * Downloads everything to this phone (the app, the data, and the photos if asked).
- * onProgress({ step: 'app' | 'data' | 'photos', done, total }). Returns the new meta.
+ * Downloads everything to this phone (the app, the data, and the photos if asked), with the
+ * token of a PIN entered on it. onProgress({ step: 'app' | 'ocr' | 'data' | 'photos', done, total }).
+ * Returns the new meta.
  */
-export async function downloadOffline({ withPhotos, onProgress = () => {} }) {
+export async function downloadOffline({ token, withPhotos, onProgress = () => {} }) {
   onProgress({ step: 'app' })
   const registration = await navigator.serviceWorker.register('/sw.js')
   await whenActive(registration)
@@ -87,7 +95,8 @@ export async function downloadOffline({ withPhotos, onProgress = () => {} }) {
   await saveOcrFiles()
 
   onProgress({ step: 'data' })
-  const response = await fetch('/api/offline/snapshot', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+  const response = await fetch('/api/offline/snapshot', { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }, cache: 'no-store' })
+  if (response.status === 401) throw new OfflineNeedsPin()
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   const text = await response.text()
   const snapshot = JSON.parse(text)
@@ -122,10 +131,14 @@ export async function downloadOffline({ withPhotos, onProgress = () => {} }) {
   }
 
   const meta = {
+    version: snapshot.version,
     saved_at: new Date().toISOString(),
     generated_at: snapshot.generated_at,
     equipment: snapshot.equipment.length,
     boxes: snapshot.boxes.length,
+    groups: snapshot.groups.length,
+    vouchers: snapshot.vouchers.list.length,
+    scan_documents: Object.keys(snapshot.scan.documents).length,
     photos,
     photos_failed: failed,
     with_photos: withPhotos,

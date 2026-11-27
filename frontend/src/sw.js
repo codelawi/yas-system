@@ -1,13 +1,14 @@
 /**
- * Service worker: lets a phone open scanned labels (/eq/<serial>, /box/<number>) with no
- * connection to the system, from the copy saved on the "Work offline" page (offline.js).
+ * Service worker: lets a phone open the system's pages with no connection to it, from the copy
+ * saved on the "Work offline" page (offline.js).
  *
  * Online nothing changes: pages and data come from the server. When the server cannot be
- * reached, the app comes from this worker's cache and the scan pages' data from the copy,
- * with an X-Repo-Offline header so the app shows a banner.
+ * reached, the app comes from this worker's cache and the data from the copy (offlineData.js),
+ * with an X-Repo-Offline header so the app shows a banner. A PIN is then checked on the phone.
  *
- * Not part of the app bundle: vite.config.js copies it to /app/sw.js and fills in VERSION
- * and ASSETS. Laravel serves it at /sw.js so it can answer every page.
+ * Not part of the app bundle: vite.config.js copies it to /app/sw.js, fills in VERSION and
+ * ASSETS and puts offlineData.js in place of OFFLINE_DATA. Laravel serves it at /sw.js so it
+ * can answer every page.
  */
 
 const VERSION = '__VERSION__'
@@ -60,10 +61,11 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event
-  if (request.method !== 'GET') return
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
   const path = url.pathname
+  if (request.method === 'POST' && path === '/api/auth/login') return event.respondWith(login(request))
+  if (request.method !== 'GET') return
 
   // Pages: the same ones Laravel answers with the app (routes/web.php)
   if (request.mode === 'navigate') {
@@ -73,9 +75,9 @@ self.addEventListener('fetch', (event) => {
   if (path.startsWith('/app/')) return event.respondWith(asset(request))
   if (/^\/api\/equipment\/\d+\/photo$/.test(path)) return event.respondWith(photo(request))
   if (path.startsWith('/api/')) {
-    const answer = routeFor(url)
-    if (answer) return event.respondWith(data(request, answer))
-    // Anything else (history, custody, lists...) is not in the copy
+    const route = findRoute(url)
+    if (route) return event.respondWith(data(request, route))
+    // Anything else (history, stocktakes, settings pages...) is not in the copy
     if (isOffline()) event.respondWith(json(503, { message: 'offline_no_edit' }))
   }
 })
@@ -154,7 +156,7 @@ async function photo(request) {
   return new Response('', { status: 404 })
 }
 
-async function data(request, answer) {
+async function data(request, route) {
   if (!isOffline()) {
     try {
       return await fromNetwork(request)
@@ -164,45 +166,60 @@ async function data(request, answer) {
   }
   const copy = await loadSnapshot()
   if (!copy) return json(503, { message: 'offline_no_data' })
-  const body = answer(copy)
-  return body === undefined ? json(404, { message: 'not_found' }) : json(200, body)
+  // The app only keeps a token it got by entering a PIN (online, or on this phone below)
+  const { status, body } = route.answer(copy, request.headers.has('Authorization'))
+  return json(status, body)
 }
+
+/** Wrong PINs in a row before the phone waits, and how long (as PinConfirmation on the server). */
+const PIN_TRIES = 5
+const PIN_WAIT = 60000
+let wrongPins = 0
+let pinsBlockedUntil = 0
+
+/**
+ * Unlocking with a PIN: by the server when it can be reached, otherwise on the phone against the
+ * PIN hashes in the copy. The phone's token is not one the server knows: it only unlocks the copy.
+ */
+async function login(request) {
+  const sent = request.clone()
+  if (!isOffline()) {
+    try {
+      return await fromNetwork(request)
+    } catch {
+      /* check the PIN on the phone */
+    }
+  }
+  const copy = await loadSnapshot()
+  if (!copy?.data.users?.length) return json(503, { message: 'offline_no_login' })
+  if (Date.now() < pinsBlockedUntil) return pinError('too_many_attempts')
+
+  let pin = ''
+  try {
+    pin = String((await sent.json()).pin ?? '')
+  } catch {
+    /* no PIN sent */
+  }
+  const user = pin ? await findUserByPin(copy.data.users, pin) : null
+  if (!user) {
+    if (++wrongPins >= PIN_TRIES) {
+      wrongPins = 0
+      pinsBlockedUntil = Date.now() + PIN_WAIT
+    }
+    return pinError('wrong_pin')
+  }
+  wrongPins = 0
+  return json(200, { token: `offline.${crypto.randomUUID()}`, user })
+}
+
+/** A validation error as Laravel sends it. */
+const pinError = (message) => json(422, { message, errors: { pin: [message] } })
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json', 'X-Repo-Offline': '1' },
   })
-}
-
-const decode = (part) => {
-  try {
-    return decodeURIComponent(part)
-  } catch {
-    return part
-  }
-}
-
-/** The GET requests the scan pages make, answered from the copy (undefined = not found). */
-const ROUTES = [
-  [/^\/api\/settings$/, (copy) => copy.data.settings],
-  [/^\/api\/equipment\/serial-list$/, (copy) => ({ serials: Object.keys(copy.data.serials) })],
-  [/^\/api\/equipment\/serial\/(.+)$/, (copy, serial) => copy.equipmentBySerial(decode(serial))],
-  [/^\/api\/equipment\/(\d+)$/, (copy, id) => copy.equipment.get(Number(id))],
-  [/^\/api\/equipment\/(\d+)\/maintenance$/, (copy, id) => (copy.equipment.has(Number(id)) ? copy.data.maintenance[id] || { schedules: [], records: [] } : undefined)],
-  [/^\/api\/equipment\/(\d+)\/issues$/, (copy, id) => (copy.equipment.has(Number(id)) ? copy.data.issues[id] || [] : undefined)],
-  [/^\/api\/boxes\/number\/(.+)$/, (copy, number) => copy.boxByNumber(decode(number))],
-  [/^\/api\/boxes\/(\d+)$/, (copy, id) => copy.boxes.get(Number(id))],
-  [/^\/api\/lookup$/, (copy, query) => copy.lookup(query.get('code') || '')],
-]
-
-/** Handlers get the parts of the path in brackets, then the query (?code=...). */
-function routeFor(url) {
-  for (const [pattern, handler] of ROUTES) {
-    const match = url.pathname.match(pattern)
-    if (match) return (copy) => handler(copy, ...match.slice(1), url.searchParams)
-  }
-  return null
 }
 
 function loadSnapshot() {
@@ -213,78 +230,10 @@ function loadSnapshot() {
   return snapshot
 }
 
-/** Lookups as the server does them (MySQL compares case-insensitively and ignores trailing spaces). */
-const loose = (text) => String(text).trimEnd().toLowerCase()
-
 async function readSnapshot() {
   const cache = await caches.open(DATA)
   const response = await cache.match(SNAPSHOT_KEY)
-  if (!response) return null
-  const data = await response.json()
-
-  const equipment = new Map(data.equipment.map((e) => [e.id, e]))
-  const boxes = new Map(data.boxes.map((b) => [b.id, b]))
-  const serials = new Map(Object.entries(data.serials))
-  const looseSerials = new Map()
-  for (const [serial, id] of serials) if (!looseSerials.has(loose(serial))) looseSerials.set(loose(serial), id)
-  const boxNumbers = new Map()
-  for (const box of data.boxes) if (!boxNumbers.has(loose(box.number))) boxNumbers.set(loose(box.number), box)
-
-  // Main equipment before accessories, as a scanned label does
-  const ordered = [...data.equipment].sort((a, b) => (a.parent ? 1 : 0) - (b.parent ? 1 : 0) || a.id - b.id)
-
-  return {
-    data,
-    equipment,
-    boxes,
-    equipmentBySerial: (serial) => equipment.get(serials.get(serial) ?? looseSerials.get(loose(serial))),
-    boxByNumber: (number) => boxNumbers.get(loose(number)),
-    lookup: (code) => lookup(ordered, data.boxes, code),
-  }
+  return response ? openCopy(await response.json()) : null
 }
 
-/** At most this many equipment and this many boxes; shorter codes are only looked up exactly. Same as the server. */
-const LOOKUP_LIMIT = 30
-const MIN_CONTAINS = 3
-
-/**
- * What a scanned code that is not one of the system's labels belongs to (a maker's Data Matrix...):
- * as LookupController on the server. Equipment whose serial number or any field is the code, and
- * boxes whose number or name is; only when there are none, those that contain it.
- */
-function lookup(equipment, boxes, raw) {
-  const code = raw.trim()
-  if (!code) return { code: '', matches: [] }
-  const wanted = code.toLowerCase()
-  const exact = (value) => value != null && loose(value) === wanted
-  const contains = (value) => value != null && String(value).toLowerCase().includes(wanted)
-
-  let matches = find(equipment, boxes, exact)
-  if (!matches.length && [...code].length >= MIN_CONTAINS) matches = find(equipment, boxes, contains)
-  return { code, matches }
-}
-
-function find(equipment, boxes, test) {
-  const found = []
-  for (const e of equipment) {
-    if (found.length >= LOOKUP_LIMIT) break
-    const bySerial = test(e.serial_number)
-    const field = bySerial ? null : e.fields.find((f) => test(f.value))
-    if (!bySerial && !field) continue
-    found.push({
-      type: 'equipment',
-      id: e.id,
-      serial_number: e.serial_number,
-      display_name: e.display_name,
-      category: e.category,
-      parent: e.parent,
-      photo_url: e.photo_url,
-      match: field ? { by: 'field', key: field.key } : { by: 'serial', key: null },
-    })
-  }
-  const inBoxes = boxes
-    .filter((b) => test(b.number) || test(b.name))
-    .slice(0, LOOKUP_LIMIT)
-    .map((b) => ({ type: 'box', id: b.id, number: b.number, name: b.name, match: { by: test(b.number) ? 'number' : 'name', key: null } }))
-  return [...found, ...inBoxes]
-}
+/* OFFLINE_DATA */

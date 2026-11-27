@@ -14,7 +14,8 @@ const isOcrFile = (file) => /\.onnx$/.test(file) || /(^|\/)ort-wasm[^/]*\.wasm$/
 
 /**
  * Builds the service worker (src/sw.js) next to the app as sw.js, with the list of app
- * files it saves on the phone. Its version changes whenever a file does (the names carry
+ * files it saves on the phone and the answers it gives from the phone's copy (src/offlineData.js,
+ * included as plain functions). Its version changes whenever a file does (the names carry
  * a hash), so phones pick up each new build.
  */
 function serviceWorker() {
@@ -29,11 +30,13 @@ function serviceWorker() {
         .sort()
       const assets = [...files.filter((file) => !isOcrFile(file)), 'favicon.svg'].map((file) => BASE + file)
       const ocr = files.filter(isOcrFile).map((file) => BASE + file)
+      const offlineData = readFileSync('src/offlineData.js', 'utf8').replace(/^export /gm, '')
       const version = createHash('sha256').update(files.join('\n')).update(readFileSync('index.html')).digest('hex').slice(0, 12)
       const source = readFileSync('src/sw.js', 'utf8')
         .replace("'__VERSION__'", JSON.stringify(version))
         .replace('/* ASSETS */ []', JSON.stringify(assets))
         .replace('/* OCR_ASSETS */ []', JSON.stringify(ocr))
+        .replace('/* OFFLINE_DATA */', () => offlineData)
       this.emitFile({ type: 'asset', fileName: 'sw.js', source })
     },
   }

@@ -5,7 +5,9 @@ import { AppstoreOutlined, CloudDownloadOutlined, DeleteOutlined, GlobalOutlined
 import dayjs from 'dayjs'
 import { useLang } from '../i18n'
 import { useSettings } from '../settings'
-import { clearOffline, downloadOffline, offlineSupported, readOfflineMeta } from '../offline'
+import { useAuth } from '../auth'
+import { tokenStore } from '../api'
+import { OfflineNeedsPin, clearOffline, downloadOffline, offlineSupported, readOfflineMeta } from '../offline'
 
 const PHOTOS_KEY = 'offline_with_photos'
 
@@ -64,10 +66,11 @@ function NeedsHttps() {
   )
 }
 
-/** Saves everything on this phone so scanned labels open without a connection. */
+/** Saves everything on this phone so the system's pages open without a connection. */
 export default function OfflinePage() {
   const { t, toggle } = useLang()
   const { settings } = useSettings()
+  const { user, requirePin } = useAuth()
   const { message } = App.useApp()
   const [meta, setMeta] = useState(undefined)
   const [withPhotos, setWithPhotos] = useState(readPhotosChoice)
@@ -90,14 +93,19 @@ export default function OfflinePage() {
   }
 
   const download = async () => {
+    // The copy holds vouchers and recipients
+    if (!(await requirePin())) return
     setProgress({ step: 'app' })
     try {
-      const saved = await downloadOffline({ withPhotos, onProgress: setProgress })
+      const saved = await downloadOffline({ token: tokenStore.get(), withPhotos, onProgress: setProgress })
       setMeta(saved)
       message.success(t('offline_saved'))
       if (saved.photos_failed) message.warning(t('offline_photos_failed', { n: saved.photos_failed }))
-    } catch {
-      message.error(t('offline_download_failed'))
+    } catch (e) {
+      if (e instanceof OfflineNeedsPin) {
+        window.dispatchEvent(new Event('auth:expired'))
+        message.error(t('offline_pin_again'))
+      } else message.error(t('offline_download_failed'))
     } finally {
       setProgress(null)
     }
@@ -158,6 +166,16 @@ export default function OfflinePage() {
                     <dd>{meta.equipment}</dd>
                     <dt>{t('boxes')}</dt>
                     <dd>{meta.boxes}</dd>
+                    {meta.version >= 2 && (
+                      <>
+                        <dt>{t('groups')}</dt>
+                        <dd>{meta.groups}</dd>
+                        <dt>{t('vouchers')}</dt>
+                        <dd>{meta.vouchers}</dd>
+                        <dt>{t('scan_docs')}</dt>
+                        <dd>{meta.scan_documents}</dd>
+                      </>
+                    )}
                     <dt>{t('offline_photos')}</dt>
                     <dd>{meta.with_photos ? meta.photos : t('offline_no_photos')}</dd>
                     <dt>{t('offline_size')}</dt>
@@ -168,6 +186,7 @@ export default function OfflinePage() {
                 ) : (
                   meta === null && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('offline_nothing_saved')} />
                 )}
+                {meta && !(meta.version >= 2) && <Alert type="warning" showIcon title={t('offline_old_copy')} style={{ marginTop: 12 }} />}
 
                 <Checkbox checked={withPhotos} onChange={(e) => choosePhotos(e.target.checked)} disabled={!!progress} style={{ margin: '16px 0' }}>
                   {t('offline_with_photos')}
@@ -175,6 +194,11 @@ export default function OfflinePage() {
                 <Button type="primary" size="large" block icon={<CloudDownloadOutlined />} loading={!!progress} onClick={download}>
                   {t(meta ? 'offline_update' : 'offline_download')}
                 </Button>
+                {!user && !progress && (
+                  <Typography.Paragraph type="secondary" className="offline-hint">
+                    {t('offline_download_pin')}
+                  </Typography.Paragraph>
+                )}
                 {progress && (
                   <div style={{ marginTop: 12 }}>
                     {progress.step === 'photos' && progress.total > 0 && <Progress percent={Math.round((progress.done / progress.total) * 100)} />}
@@ -195,6 +219,7 @@ export default function OfflinePage() {
                   <li>{t('offline_tip_test')}</li>
                   <li>{t('offline_tip_refresh')}</li>
                   <li>{t('offline_tip_view_only')}</li>
+                  <li>{t('offline_tip_pin')}</li>
                   <li>{t('offline_tip_iphone')}</li>
                 </ul>
               </Card>

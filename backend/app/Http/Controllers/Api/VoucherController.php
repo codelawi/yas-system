@@ -15,6 +15,7 @@ use App\Models\VoucherTemplate;
 use App\Support\PinConfirmation;
 use App\Support\PrintStation;
 use App\Support\VoucherRows;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +30,9 @@ class VoucherController extends Controller
 {
     private const STATUSES = [Voucher::DRAFT, Voucher::ISSUED, Voucher::RETURNED];
 
+    /** Most vouchers the list shows. */
+    public const LIST_LIMIT = 300;
+
     /** Most copies one print can ask for. */
     private const MAX_COPIES = 20;
 
@@ -37,16 +41,12 @@ class VoucherController extends Controller
         $status = $request->query('status');
         $q = trim((string) $request->query('q', ''));
 
-        $vouchers = Voucher::with(['creator:id,name', 'issuer:id,name', 'replaces:id,number'])
-            ->withCount(['items', 'items as held_count' => fn ($query) => $query->whereHas('custody', fn ($c) => $c->whereNull('returned_at'))])
+        $vouchers = self::listed()
             ->when(in_array($status, self::STATUSES, true), fn ($query) => $query->where('status', $status))
             ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w
                 ->where('recipient', 'like', '%'.str_replace(['%', '_'], ['\%', '\_'], $q).'%')
                 ->when(ctype_digit($q), fn ($n) => $n->orWhere('number', (int) $q))))
-            ->orderByRaw("case when status = 'draft' then 0 else 1 end")
-            ->orderByDesc('number')
-            ->orderByDesc('id')
-            ->limit(300)
+            ->limit(self::LIST_LIMIT)
             ->get();
 
         return [
@@ -54,6 +54,20 @@ class VoucherController extends Controller
             'counts' => Voucher::selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status'),
             'next_number' => Voucher::nextNumber(),
         ];
+    }
+
+    /**
+     * Vouchers as the list shows them, in its order (also saved on phones for working offline).
+     *
+     * @return Builder<Voucher>
+     */
+    public static function listed(): Builder
+    {
+        return Voucher::with(['creator:id,name', 'issuer:id,name', 'replaces:id,number'])
+            ->withCount(['items', 'items as held_count' => fn ($query) => $query->whereHas('custody', fn ($c) => $c->whereNull('returned_at'))])
+            ->orderByRaw("case when status = 'draft' then 0 else 1 end")
+            ->orderByDesc('number')
+            ->orderByDesc('id');
     }
 
     /** A new, empty draft; the template's fields start with what was typed on the last voucher. */
