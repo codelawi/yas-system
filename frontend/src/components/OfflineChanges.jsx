@@ -29,7 +29,18 @@ export function changeText(t, change) {
   if ((kind === 'group_updated' || kind === 'box_updated' || kind === 'scan_folder_updated') && change.from) key = `${key}_from`
   // A row typed by hand has no scanned text
   if ((kind === 'scan_row_updated' || kind === 'scan_row_deleted') && !change.code) key = `${key}_blank`
+  if (kind.startsWith('voucher_')) return voucherChangeText(t, change, key)
   return t(key, change)
+}
+
+/** A voucher change: a draft with no recipient has no name yet; an issue says the copies printed at sync. */
+function voucherChangeText(t, change, key) {
+  const { kind } = change
+  if (kind === 'voucher_unit_returned') return t(change.voucher ? key : `${key}_plain`, change)
+  const named = { ...change, label: change.label || t('chg_voucher_draft') }
+  if (kind !== 'voucher_issued') return t(key, named)
+  const text = t(change.replaces ? `${key}_replaces` : key, named)
+  return change.copies > 0 ? `${text} · ${t('chg_voucher_copies', { n: change.copies })}` : text
 }
 
 function ChangeItem({ change, onUndo }) {

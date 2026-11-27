@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\ActivityLog;
 use App\Models\Box;
+use App\Models\Custody;
 use App\Models\Equipment;
 use App\Models\OfflineChange;
 use App\Models\ScanDocument;
 use App\Models\ScanFolder;
 use App\Models\User;
+use App\Models\Voucher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -264,6 +266,35 @@ class OfflineSyncTest extends TestCase
         $row = $document->rows()->sole();
         $this->assertTrue($row->scanned_at->equalTo($at));
         $this->assertSame($worker->id, $row->scanned_by);
+    }
+
+    public function test_a_voucher_issued_and_taken_back_on_a_phone_keeps_its_times_and_is_numbered_at_sync(): void
+    {
+        $worker = User::factory()->create(['name' => 'على الهاتف']);
+        Equipment::create(['serial_number' => 'OF-V1']);
+        Equipment::create(['serial_number' => 'OF-V2']);
+        $issuedAt = now()->subHours(3)->startOfSecond();
+        $returnedAt = now()->subHour()->startOfSecond();
+        $this->putJson('/api/vouchers/next-number', ['number' => 40])->assertOk();
+
+        $id = $this->postJson('/api/vouchers', [], $this->offline($worker, $issuedAt->toIso8601String()))->json('voucher.id');
+        $this->postJson("/api/vouchers/{$id}/items", ['code' => 'OF-V1'], $this->offline($worker, $issuedAt->toIso8601String()))->assertOk();
+        $this->postJson("/api/vouchers/{$id}/items", ['code' => 'OF-V2'], $this->offline($worker, $issuedAt->toIso8601String()))->assertOk();
+        $this->postJson("/api/vouchers/{$id}/issue", ['recipient' => 'سالم', 'move' => true, 'copies' => 0], $this->offline($worker, $issuedAt->toIso8601String()))
+            ->assertOk()
+            ->assertJsonPath('voucher.number', 40);
+        $this->postJson("/api/vouchers/{$id}/return", ['code' => 'OF-V1'], $this->offline($worker, $returnedAt->toIso8601String()))->assertOk()->assertJsonPath('status', 'returned');
+        $this->postJson("/api/vouchers/{$id}/return-all", [], $this->offline($worker, $returnedAt->toIso8601String()))->assertOk()->assertJsonPath('returned', 1);
+
+        $voucher = Voucher::find($id);
+        $this->assertSame('returned', $voucher->status);
+        $this->assertTrue($voucher->issued_at->equalTo($issuedAt));
+        $this->assertTrue($voucher->returned_at->equalTo($returnedAt));
+        $this->assertSame($worker->id, $voucher->issued_by);
+        foreach (Custody::where('voucher_id', $id)->get() as $custody) {
+            $this->assertTrue($custody->handed_at->equalTo($issuedAt));
+            $this->assertTrue($custody->returned_at->equalTo($returnedAt));
+        }
     }
 
     public function test_reports_without_a_sync_are_still_limited(): void

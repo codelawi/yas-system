@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Box;
+use App\Models\Custody;
 use App\Models\Equipment;
 use App\Models\EquipmentGroup;
 use App\Models\OfflineChange;
@@ -12,6 +13,8 @@ use App\Models\ScanFolder;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\Voucher;
+use App\Models\VoucherItem;
+use App\Models\VoucherTemplate;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 
@@ -91,7 +94,10 @@ class OfflineController extends Controller
      * Every voucher as the list shows it (the phone filters it), each voucher's page, and what
      * the voucher page asks for besides.
      *
-     * @return array{list: Collection<int, Voucher>, next_number: int, pages: object, recipients: mixed, templates: mixed}
+     * The rows themselves come too: a phone that issues or takes back without a connection makes
+     * the pages again from them (frontend/src/offlineEdit.js).
+     *
+     * @return array{list: Collection<int, Voucher>, next_number: int, pages: object, recipients: mixed, templates: mixed, records: array<string, mixed>, layouts: object, default_template: int, last_fields: object, copies: int, number_from: int}
      */
     private function vouchers(): array
     {
@@ -100,13 +106,28 @@ class OfflineController extends Controller
         foreach (Voucher::orderBy('id')->get() as $voucher) {
             $pages[$voucher->id] = $controller->show($voucher);
         }
+        $templates = app(VoucherTemplateController::class)->index();
+        $layouts = [];
+        foreach (VoucherTemplate::orderBy('id')->get() as $template) {
+            $layouts[$template->id] = $template->layout();
+        }
 
         return [
             'list' => VoucherController::listed()->get(),
             'next_number' => Voucher::nextNumber(),
             'pages' => (object) $pages,
             'recipients' => $controller->recipients(),
-            'templates' => app(VoucherTemplateController::class)->index(),
+            'templates' => $templates,
+            'records' => [
+                'vouchers' => Voucher::orderBy('id')->get()->each->makeVisible('layout'),
+                'items' => VoucherItem::orderBy('id')->get(['id', 'voucher_id', 'equipment_id', 'custody_id', 'added_by', 'created_at']),
+                'custodies' => Custody::orderBy('id')->get(['id', 'equipment_id', 'voucher_id', 'holder', 'handed_at', 'returned_at', 'return_notes']),
+            ],
+            'layouts' => (object) $layouts,
+            'default_template' => VoucherTemplate::current()->id,
+            'last_fields' => (object) VoucherController::lastFields(),
+            'copies' => max(1, (int) Setting::get('voucher_last_copies')),
+            'number_from' => (int) Setting::get('voucher_next_number'),
         ];
     }
 

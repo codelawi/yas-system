@@ -13,7 +13,7 @@
  * or what the phone added already exists on the server, the person decides at the end: the
  * rest goes on meanwhile, and what depends on an open question waits for the answer.
  */
-import { applyChange, boxState, equipmentLabel, equipmentState, groupState, isTempId, scanDocumentState, scanFolderState, scanRowFrom, scanRowState, toModel } from './offlineEdit'
+import { applyChange, boxState, equipmentLabel, equipmentState, groupState, isTempId, openCustodies, scanDocumentState, scanFolderState, scanRowFrom, scanRowState, toModel, voucherState } from './offlineEdit'
 import { readSavedChanges, readSavedCopy, readSavedFile } from './offline'
 
 /** The sync stopped (no connection, or the server refused): what was sent stays sent, the rest can be sent again. */
@@ -106,6 +106,10 @@ function stateOf(m, type, id) {
     const r = m.scanRows.get(id)
     return r ? scanRowState(r) : null
   }
+  if (type === 'voucher') {
+    const v = m.vouchers?.get(id)
+    return v ? voucherState(m, v) : null
+  }
   return null
 }
 
@@ -117,6 +121,8 @@ function stampOf(m, type, id) {
     return f ? JSON.stringify([f.name, f.revision, documents.sort((a, b) => a[0] - b[0])]) : null
   }
   if (type === 'scan_document') return m.scanDocuments.has(id) ? String(m.scanDocuments.get(id).revision) : null
+  // A voucher's revision goes up with every change to it (units added, issued, taken back)
+  if (type === 'voucher') return m.vouchers?.has(id) ? String(m.vouchers.get(id).revision) : null
   if (type === 'scan_row') {
     const r = m.scanRows.get(id)
     return r ? JSON.stringify([r.code, r.cells, r.updated_at]) : null
@@ -136,6 +142,7 @@ function replay(saved, changes) {
   for (const type of ['scan_folder', 'scan_document', 'scan_row']) {
     for (const id of m[SCAN_MAPS[type]].keys()) current.set(keyOf(type, id), stateOf(m, type, id))
   }
+  for (const id of m.vouchers?.keys() || []) current.set(keyOf('voucher', id), stateOf(m, 'voucher', id))
   const records = changes.map((change) => {
     const result = applyChange(m, change, { replay: true })
     const before = new Map()
@@ -230,6 +237,11 @@ const scanDocumentBody = (state) => ({ title: state.title, duplicate_scope: stat
 
 const equipmentBody = (state) => ({ serial_number: state.serial_number, name: state.name, row_no: state.row_no, category: state.category, group_id: state.group_id, fields: state.fields })
 
+/** What a draft's page edits: the recipient and template, and the template's fields (merged one by one). */
+const VOUCHER_ATTRS = ['recipient', 'template_id']
+const voucherFields = (state) => Object.fromEntries(state.fields.map((f) => [f.key, f.value ?? null]))
+const sameFields = (a, b) => JSON.stringify(Object.entries(a || {}).sort()) === JSON.stringify(Object.entries(b || {}).sort())
+
 /* ---------- The sync */
 
 /** Which change goes where; bulk changes list the equipment they change in ids. */
@@ -266,7 +278,26 @@ const ROUTES = [
   ['POST', /^\/api\/scan-documents\/(\d+)\/rows$/, 'addScanRow'],
   ['PUT', /^\/api\/scan-documents\/(\d+)\/rows\/(\d+)$/, 'updateScanRow'],
   ['DELETE', /^\/api\/scan-documents\/(\d+)\/rows\/(\d+)$/, 'deleteScanRow'],
+  ['POST', /^\/api\/vouchers$/, 'voucherCreate'],
+  ['PUT', /^\/api\/vouchers\/(\d+)$/, 'voucherUpdate'],
+  ['DELETE', /^\/api\/vouchers\/(\d+)$/, 'voucherDelete'],
+  ['POST', /^\/api\/vouchers\/(\d+)\/replace$/, 'voucherReplace'],
+  ['POST', /^\/api\/vouchers\/(\d+)\/items$/, 'voucherAdd'],
+  ['DELETE', /^\/api\/vouchers\/(\d+)\/items\/(\d+)$/, 'voucherRemove'],
+  ['POST', /^\/api\/vouchers\/(\d+)\/issue$/, 'voucherIssue'],
+  ['POST', /^\/api\/vouchers\/(\d+)\/print$/, 'voucherPrint'],
+  ['POST', /^\/api\/vouchers\/(\d+)\/return$/, 'voucherReturn'],
+  ['POST', /^\/api\/vouchers\/(\d+)\/return-all$/, 'voucherReturnAll'],
+  ['POST', /^\/api\/vouchers\/return$/, 'voucherReturnAny'],
 ]
+
+/** Vouchers go after everything else, in the order they were made: issued ones are numbered in that order. */
+const isVoucherChange = (record) => routeOf(record.change)[2].startsWith('voucher')
+/** «Return all» sent unit by unit (the server had more out than the phone knew of): a key per unit, by the phone's ids. */
+const unitKey = (record, custody) => `${record.change.key}:u${custody.equipment_id}`
+const unitKeys = (record) => (routeOf(record.change)?.[2] === 'voucherReturnAll' ? (record.result.info?.custodies || []).map((c) => unitKey(record, c)) : [])
+
+const isIssue = (record) => routeOf(record.change)[2] === 'voucherIssue'
 
 const routeOf = (change) => ROUTES.find(([method, pattern]) => method === change.method && pattern.test(change.path))
 const pathIds = (change) => change.path.match(routeOf(change)[1]).slice(1).filter((part) => /^\d+$/.test(part)).map(Number)
@@ -284,7 +315,7 @@ export async function syncChanges({ token, ask, onProgress = () => {} }) {
 
 /** The same, for these changes made on this copy. */
 export async function syncFrom({ token, ask, onProgress = () => {}, saved, changes }) {
-  if (!saved || !changes.length) return { sent: 0, skipped: 0, merged: 0, dropped: [], failed: [] }
+  if (!saved || !changes.length) return { sent: 0, skipped: 0, merged: 0, dropped: [], failed: [], notes: [], prints: null }
   const sync = new Sync(token, saved, changes, onProgress)
   await sync.run(ask)
   return sync.report
@@ -315,7 +346,14 @@ class Sync {
     this.merged = new Set()
     /** Rows added and deleted again on the phone: never sent, nor what was done to them. */
     this.vanished = new Set()
-    this.report = { sent: 0, skipped: 0, merged: 0, dropped: [], failed: [] }
+    /** Prints asked for on the phone: sent at the very end, once every voucher has its number. */
+    this.prints = []
+    /** Units someone else holds now, by `${phone voucher}:${server equipment}`: 'move' or 'keep'. */
+    this.heldAnswers = new Map()
+    this.asking = new Set()
+    /** Issues waiting for an answer (change ids): later issues wait for them, to keep the numbers in order. */
+    this.issuesWaiting = new Set()
+    this.report = { sent: 0, skipped: 0, merged: 0, dropped: [], failed: [], notes: [], prints: null }
     this.done = 0
   }
 
@@ -323,10 +361,10 @@ class Sync {
     this.onProgress({ step: 'server' })
     this.serverAtStart = toModel(await this.loadServer())
     // A sync cut off before: what already went through is not asked about again
-    const done = await call('POST', '/api/offline/done', { token: this.token, body: { keys: this.records.map((r) => r.change.key) } })
+    const done = await call('POST', '/api/offline/done', { token: this.token, body: { keys: this.records.flatMap((r) => [r.change.key, ...unitKeys(r)]) } })
     if (!ok(done)) throw new SyncStopped('sync_server_error', errorOf(done))
     this.saved = new Set(done.json.done)
-    for (const record of this.records) {
+    for (const record of [...this.records.filter((r) => !isVoucherChange(r)), ...this.records.filter(isVoucherChange)]) {
       this.onProgress({ step: 'send', done: this.done, total: this.records.length })
       await this.process(record)
       this.done++
@@ -348,6 +386,7 @@ class Sync {
       for (const record of deferred) await this.process(record)
     }
     for (const record of this.deferred) this.drop(record, 'sync_depends_on_dropped')
+    await this.sendPrints()
     this.onProgress({ step: 'send', done: this.records.length, total: this.records.length })
   }
 
@@ -356,6 +395,8 @@ class Sync {
     const res = await call('GET', '/api/offline/snapshot', { token: this.token })
     if (!ok(res)) throw new SyncStopped('sync_server_error', errorOf(res))
     this.server = toModel(res.json)
+    // Issued vouchers are numbered here as the server numbers them
+    this.server.numbered = true
     return res.json
   }
 
@@ -372,11 +413,13 @@ class Sync {
     if (type === 'schedule') return [...this.server.maintenance.values()].some((m) => m.schedules.some((s) => s.id === id))
     if (type === 'issue') return [...this.server.issues.values()].some((list) => list.some((i) => i.id === id))
     if (SCAN_MAPS[type]) return this.server[SCAN_MAPS[type]].has(id)
+    if (type === 'voucher') return !!this.server.vouchers?.has(id)
     return false
   }
 
   /** What must be settled before a change can go (must), and the items of a bulk change (items: one gone is left out). */
   deps(record) {
+    if (isVoucherChange(record)) return this.voucherDeps(record)
     const { change, result } = record
     const bulk = routeOf(change)[3]
     const must = new Set()
@@ -394,12 +437,15 @@ class Sync {
   async process(record) {
     // What it adds itself waited with it, not for it
     for (const id of record.change.ids || []) this.waiting.delete(`t:${id}`)
+    this.issuesWaiting.delete(record.change.id)
     const { must, items } = this.deps(record)
     if (record.result.status >= 400) return this.drop(record, 'sync_no_longer_applies')
     if ([...must].some((key) => this.vanished.has(key))) return this.skip()
     if ([...must].some((key) => this.dropped.has(key))) return this.drop(record, 'sync_depends_on_dropped')
     if ([...must, ...items].some((key) => this.waiting.has(key))) return this.defer(record)
     if (this.saved.has(record.change.key)) return this.again(record)
+    // Issued vouchers are numbered in the order they were issued on the phone: one waits for an earlier one
+    if (isIssue(record) && [...this.issuesWaiting].some((id) => id < record.change.id)) return this.defer(record)
     await this[routeOf(record.change)[2]](record, ...pathIds(record.change))
   }
 
@@ -410,6 +456,7 @@ class Sync {
     const res = await this.send(record, change.method, path, change.method === 'DELETE' ? undefined : this.mapBody(change.body))
     if (!ok(res)) return
     if (routeOf(change)[2] === 'scanCode') return this.scanned(res, this.serverId(pathIds(change)[0]), change.ids?.[0])
+    if (isVoucherChange(record)) return this.voucherAgain(record, res)
     this.created(record, res)
   }
 
@@ -421,6 +468,7 @@ class Sync {
   defer(record) {
     this.deferred.push(record)
     for (const id of record.change.ids || []) this.waiting.add(`t:${id}`)
+    if (isIssue(record)) this.issuesWaiting.add(record.change.id)
   }
 
   skip() {
@@ -463,6 +511,10 @@ class Sync {
   }
 
   createdIds(path, res) {
+    // A voucher (a correction comes with its units), the units added to one
+    if (/^\/api\/vouchers(\/\d+\/replace)?$/.test(path)) return res.json?.voucher ? [res.json.voucher.id, ...(path.endsWith('/replace') ? res.json.items.map((i) => i.id) : [])] : []
+    if (/^\/api\/vouchers\/\d+\/items$/.test(path)) return res.json?.added || []
+    if (path.startsWith('/api/vouchers')) return []
     const id = res.json?.record?.id ?? res.json?.id
     return id == null ? [] : [id]
   }
@@ -518,6 +570,7 @@ class Sync {
   }
 
   label(type, id, phoneId = id) {
+    if (type === 'voucher') return this.voucherLabel(phoneId, id)
     if (type === 'equipment') {
       for (const [m, key] of [[this.final, phoneId], [this.server, id], [this.base, phoneId]]) {
         const e = m.equipment.get(key)
@@ -545,7 +598,8 @@ class Sync {
   conflictsOn(record, type, id, phoneId, conflicts) {
     for (const c of conflicts) {
       const same = this.conflicts.find((x) => x.kind === 'field' && x.type === type && x.id === id && x.attr === c.attr)
-      const shown = (value) => (value === ABSENT ? null : c.attr === 'group_id' ? this.groupName(this.server, value) : value)
+      const template = (value) => this.server.voucherSettings?.templates.find((x) => x.id === Number(value))?.name ?? value
+      const shown = (value) => (value === ABSENT ? null : c.attr === 'group_id' ? this.groupName(this.server, value) : c.attr === 'template_id' && value != null ? template(value) : value)
       const show = { type, attr: c.attr, attrName: this.attrName(type, id, phoneId, c.attr), phone: shown(c.phone), server: shown(c.server), removedOnPhone: c.phone === ABSENT, removedOnServer: c.server === ABSENT, user: record.change.user?.name ?? null }
       if (same) {
         Object.assign(same, { phone: c.phone, record })
@@ -563,11 +617,22 @@ class Sync {
       return columnOf(doc, key) ?? key
     }
     if (type === 'scan_document' && attr.startsWith('field:')) return columnOf(this.final.scanDocuments.get(phoneId), attr.slice(6)) ?? columnOf(this.server.scanDocuments.get(id), attr.slice(6)) ?? attr.slice(6)
+    // A voucher's field, as its template names it
+    if (type === 'voucher' && attr.startsWith('field:')) {
+      const key = attr.slice(6)
+      for (const m of [this.final, this.server]) {
+        const page = m.data.vouchers?.pages?.[m === this.final ? phoneId : id]
+        const field = page?.layout?.fields?.find((f) => f.key === key)
+        if (field) return field.label
+      }
+      return key
+    }
     return null
   }
 
   /** Where an item's edit is sent, and what with. */
   pathOf(type, id) {
+    if (type === 'voucher') return `/api/vouchers/${id}`
     if (type === 'scan_row') return `/api/scan-documents/${this.server.scanRows.get(id)?.scan_document_id}/rows/${id}`
     return `${{ equipment: '/api/equipment', box: '/api/boxes', group: '/api/groups', scan_folder: '/api/scan-folders', scan_document: '/api/scan-documents' }[type]}/${id}`
   }
@@ -578,6 +643,7 @@ class Sync {
     if (type === 'group') return groupState(state)
     if (type === 'scan_folder') return { name: state.name }
     if (type === 'scan_document') return scanDocumentBody(state)
+    if (type === 'voucher') return this.voucherBody(state)
     return scanRowBody(state, [server])
   }
 
@@ -987,6 +1053,369 @@ class Sync {
     return true
   }
 
+  /* --- Vouchers */
+
+  /** A voucher is waited for and dropped by this key (its phone id, as for anything the phone added). */
+  voucherKey(phoneId) {
+    return depKey('voucher', phoneId)
+  }
+
+  voucherLabel(phoneId, id = this.serverId(phoneId)) {
+    const v = this.final.vouchers?.get(phoneId) || this.server.vouchers?.get(id) || this.base.vouchers?.get(phoneId)
+    // A draft with no recipient yet, made on the phone: the question names it as a draft
+    const fallback = id != null && !isTempId(id) ? `#${id}` : ''
+    return v ? [v.number, v.recipient].filter(Boolean).join(' · ') || fallback : fallback
+  }
+
+  /** The phone's voucher before and after a change. */
+  voucherStates(record, phoneId) {
+    const key = keyOf('voucher', phoneId)
+    return [record.before.get(key), record.after.get(key)]
+  }
+
+  /** The equipment (phone ids) a voucher change is about. */
+  voucherUnits(record) {
+    const name = routeOf(record.change)[2]
+    const [phoneId] = pathIds(record.change)
+    if (name === 'voucherAdd' || name === 'voucherRemove') {
+      const [before, after] = this.voucherStates(record, phoneId)
+      const [from, to] = name === 'voucherAdd' ? [before, after] : [after, before]
+      return (to?.items || []).filter((e) => !(from?.items || []).includes(e))
+    }
+    if (name === 'voucherIssue') return this.voucherStates(record, phoneId)[0]?.items || []
+    return (record.result.info?.custodies || []).map((c) => c.equipment_id)
+  }
+
+  /** It needs its voucher (and the unit it takes off); the equipment it is about only waits for questions about it. */
+  voucherDeps(record) {
+    const must = new Set()
+    const items = new Set()
+    const [voucher, item] = pathIds(record.change)
+    if (voucher != null) must.add(this.voucherKey(voucher))
+    if (item != null && isTempId(item)) must.add(`t:${item}`)
+    for (const e of this.voucherUnits(record)) items.add(depKey('equipment', e))
+    return { must, items }
+  }
+
+  /**
+   * The server's draft for this phone draft. Deleted on the server, or issued there meanwhile: the
+   * person decides at the end (the phone's becomes a voucher of its own, or not), and it waits.
+   */
+  draftOf(record, phoneId) {
+    const id = this.serverId(phoneId)
+    const v = id != null ? this.server.vouchers?.get(id) : null
+    if (v?.status === 'draft') return id
+    if (id == null) {
+      this.drop(record, 'sync_depends_on_dropped')
+      return null
+    }
+    // Deleted on the phone later as well: nothing to ask
+    if (!this.final.vouchers?.has(phoneId)) {
+      this.skip()
+      return null
+    }
+    const key = this.voucherKey(phoneId)
+    if (!this.waiting.has(key)) {
+      this.waiting.add(key)
+      const phone = this.final.vouchers.get(phoneId)
+      this.ask({
+        kind: v ? 'voucher_issued_both' : 'voucher_deleted',
+        type: 'voucher',
+        id: phoneId,
+        record,
+        state: this.voucherStates(record, phoneId)[0],
+        label: this.voucherLabel(phoneId),
+        show: { number: v?.number ?? null, phoneIssued: phone.status !== 'draft' },
+      })
+    }
+    this.defer(record)
+    return null
+  }
+
+  /** The template on the server, or none (the default) when it is gone there. */
+  voucherBody(state) {
+    const template = state.template_id != null && this.server.voucherSettings?.templates.some((t) => t.id === Number(state.template_id)) ? Number(state.template_id) : null
+    return { recipient: state.recipient ?? null, template_id: template, fields: voucherFields(state) }
+  }
+
+  /**
+   * The server's ids of these units. One deleted on the server is asked about (brought back, or
+   * left out) and the change waits; one the phone added and could not send is left out.
+   */
+  unitsOnServer(record, phoneIds) {
+    const out = []
+    let asked = false
+    for (const e of phoneIds) {
+      const id = this.serverId(e)
+      if (this.exists('equipment', id)) {
+        out.push(id)
+        continue
+      }
+      const key = keyOf('equipment', e)
+      if (isTempId(e) || id == null || this.dropped.has(key) || !this.final.equipment.has(e)) continue
+      if (!this.waiting.has(key)) {
+        this.waiting.add(key)
+        this.ask({ kind: 'equipment_deleted', type: 'equipment', id: e, record, label: this.label('equipment', e) })
+      }
+      asked = true
+    }
+    if (!asked) return out
+    this.defer(record)
+    return null
+  }
+
+  async voucherCreate(record) {
+    const res = await this.send(record, 'POST', '/api/vouchers', this.mapBody(record.change.body))
+    if (!ok(res)) return this.fail(record, res)
+    const phoneId = record.change.ids[0]
+    const id = res.json.voucher.id
+    this.ids.set(phoneId, id)
+    // Its fields start as the phone had them (what was typed last on the phone)
+    const fields = voucherFields(this.voucherStates(record, phoneId)[1])
+    if (!sameFields(fields, res.json.voucher.fields)) {
+      const put = await this.send(record, 'PUT', `/api/vouchers/${id}`, { fields }, ':fields')
+      if (!ok(put)) this.fail(record, put)
+    }
+  }
+
+  async voucherUpdate(record, phoneId) {
+    const id = this.draftOf(record, phoneId)
+    if (id == null) return
+    const [before, after] = this.voucherStates(record, phoneId)
+    const server = stateOf(this.server, 'voucher', id)
+    const { state, conflicts } = merge(before, after, server, VOUCHER_ATTRS)
+    this.conflictsOn(record, 'voucher', id, phoneId, conflicts)
+    if (sameState(state, server, VOUCHER_ATTRS)) return this.skip()
+    const res = await this.send(record, 'PUT', `/api/vouchers/${id}`, this.voucherBody(state))
+    if (!ok(res)) this.fail(record, res)
+  }
+
+  /** Units scanned on the phone join what the server's draft has (held by someone else or not: that is asked when it is issued). */
+  async voucherAdd(record, phoneId) {
+    const id = this.draftOf(record, phoneId)
+    if (id == null) return
+    const units = this.unitsOnServer(record, this.voucherUnits(record))
+    if (units == null) return
+    const missing = units.filter((e) => ![...this.server.voucherItems.values()].some((i) => i.voucher_id === id && i.equipment_id === e))
+    if (!missing.length) return this.skip()
+    const res = await this.send(record, 'POST', `/api/vouchers/${id}/items`, { equipment_ids: missing, move: true })
+    if (!ok(res)) this.fail(record, res)
+  }
+
+  /** Taken off on the phone: the same equipment comes off the server's draft. */
+  async voucherRemove(record, phoneId) {
+    const id = this.draftOf(record, phoneId)
+    if (id == null) return
+    const [unit] = this.voucherUnits(record)
+    const equipment = this.serverId(unit)
+    const item = [...this.server.voucherItems.values()].find((i) => i.voucher_id === id && i.equipment_id === equipment)
+    if (!item) return this.skip()
+    const res = await this.send(record, 'DELETE', `/api/vouchers/${id}/items/${item.id}`)
+    if (!ok(res)) this.fail(record, res)
+  }
+
+  /**
+   * Issued as the phone issued it (who, when). A unit someone else got on the server meanwhile is
+   * asked about, unit by unit: it moves to this recipient, or stays and comes off the voucher. The
+   * prints go at the end.
+   */
+  async voucherIssue(record, phoneId) {
+    const id = this.draftOf(record, phoneId)
+    if (id == null) return
+    const v = this.server.vouchers.get(id)
+    const known = record.result.info?.held || []
+    const own = [id, v.replaces_id].filter((x) => x != null)
+    const items = [...this.server.voucherItems.values()].filter((i) => i.voucher_id === id).sort((a, b) => a.id - b.id)
+    const keep = []
+    let asked = false
+    for (const item of items) {
+      for (const c of openCustodies(this.server, item.equipment_id).filter((x) => x.voucher_id == null || !own.includes(x.voucher_id))) {
+        const knew = known.some((h) => this.serverId(h.equipment_id) === item.equipment_id && ((!isTempId(h.id) && h.id === c.id) || (h.voucher_id != null && this.serverId(h.voucher_id) === c.voucher_id)))
+        if (knew) continue
+        const answerKey = `${phoneId}:${item.equipment_id}`
+        const answer = this.heldAnswers.get(answerKey)
+        if (answer === 'keep') keep.push(item)
+        if (answer) continue
+        asked = true
+        if (this.asking.has(answerKey)) continue
+        this.asking.add(answerKey)
+        const holder = c.voucher_id != null ? this.server.vouchers.get(c.voucher_id) : null
+        this.ask({
+          kind: 'voucher_unit_held',
+          type: 'voucher',
+          id: phoneId,
+          answerKey,
+          record,
+          label: this.label('equipment', item.equipment_id),
+          show: { holder: c.holder, number: holder?.number ?? null, voucher: this.voucherLabel(phoneId), recipient: record.change.body.recipient || this.final.vouchers?.get(phoneId)?.recipient || '' },
+        })
+      }
+    }
+    if (asked) {
+      this.waiting.add(this.voucherKey(phoneId))
+      return this.defer(record)
+    }
+    for (const item of new Set(keep)) {
+      const res = await this.send(record, 'DELETE', `/api/vouchers/${id}/items/${item.id}`, undefined, `:keep:${item.equipment_id}`)
+      if (!ok(res)) this.fail(record, res)
+    }
+    const { recipient = null, copies = 1 } = record.change.body
+    const res = await this.send(record, 'POST', `/api/vouchers/${id}/issue`, { recipient, move: true, copies: 0 })
+    if (!ok(res)) return this.fail(record, res)
+    this.server.vouchers.get(id).number = res.json.voucher.number
+    if (Number(copies ?? 1) >= 1) this.prints.push({ record, phoneId, copies: Number(copies ?? 1) })
+  }
+
+  voucherPrint(record, phoneId) {
+    this.prints.push({ record, phoneId, copies: Number(record.change.body.copies) })
+  }
+
+  /** Sent before by a sync that was cut off: the ids it gave, and the print it still owes. */
+  voucherAgain(record, res) {
+    const name = routeOf(record.change)[2]
+    if ((name === 'voucherCreate' || name === 'voucherReplace') && res.json?.voucher) this.ids.set(record.change.ids[0], res.json.voucher.id)
+    // Kept on the phone after the server issued it with its print (its answer came too late), or sent by the sync without one
+    const copies = Number(record.change.body.copies ?? 1)
+    if (name === 'voucherIssue' && !res.json?.print?.job && copies >= 1) this.prints.push({ record, phoneId: pathIds(record.change)[0], copies })
+    // What the server had taken back before: its answer says how many it took back then
+    if (name === 'voucherReturnAll') {
+      const infos = record.result.info?.custodies || []
+      const n = infos.length - Number(res.json?.returned ?? 0) - infos.filter((c) => this.saved.has(unitKey(record, c))).length
+      if (n > 0) this.note(record, 'sync_returned_on_server', n)
+    }
+  }
+
+  /** Every print asked for on the phone, once all vouchers have their numbers: the print station prints them in that order. */
+  async sendPrints() {
+    const vouchers = new Set()
+    let station = null
+    for (const { record, phoneId, copies } of this.prints) {
+      const id = this.serverId(phoneId)
+      if (!this.exists('voucher', id) || this.server.vouchers.get(id).status === 'draft') continue
+      const res = await this.send(record, 'POST', `/api/vouchers/${id}/print`, { copies }, ':print', { emulate: false })
+      if (!ok(res)) {
+        this.fail(record, res)
+        continue
+      }
+      vouchers.add(id)
+      station = res.json.print?.station ?? station
+    }
+    if (vouchers.size) this.report.prints = { n: vouchers.size, online: !!station?.online }
+  }
+
+  /** A custody the phone ended that is still open on the server (the server did not take it back or hand it to someone else). */
+  stillOpen(custody) {
+    const equipment = this.serverId(custody.equipment_id)
+    return openCustodies(this.server, equipment).find((c) => (!isTempId(custody.id) && c.id === custody.id) || (custody.voucher_id != null && c.voucher_id != null && this.serverId(custody.voucher_id) === c.voucher_id)) ?? null
+  }
+
+  /** Left as the server has it: listed after the sync. */
+  note(record, reason, n = 1) {
+    this.report.notes.push({ id: record.change.id, effect: record.result.effect, reason, n })
+  }
+
+  /** Taken back on the phone: only what the server still has out to the same holder (by its serial: the phone's scan). */
+  async voucherTakeBack(record, path) {
+    const [custody] = record.result.info?.custodies || []
+    const open = custody && this.stillOpen(custody)
+    const serial = open && this.server.equipment.get(open.equipment_id)?.serial_number
+    if (!serial) {
+      this.note(record, 'sync_returned_on_server')
+      return this.skip()
+    }
+    const res = await this.send(record, 'POST', path(open), { code: serial })
+    if (!ok(res)) this.fail(record, res)
+  }
+
+  voucherReturn(record) {
+    return this.voucherTakeBack(record, (c) => `/api/vouchers/${c.voucher_id}/return`)
+  }
+
+  voucherReturnAny(record) {
+    return this.voucherTakeBack(record, () => '/api/vouchers/return')
+  }
+
+  /** Everything it had out, of what the server still has out on it. */
+  async voucherReturnAll(record, phoneId) {
+    const id = this.serverId(phoneId)
+    const infos = record.result.info?.custodies || []
+    // Taken back one by one by a sync that was cut off: not "returned on the server"
+    const ours = infos.filter((c) => this.saved.has(unitKey(record, c)))
+    const still = infos.map((c) => !ours.includes(c) && this.stillOpen(c)).filter(Boolean)
+    const gone = infos.length - ours.length - still.length
+    if (gone > 0) this.note(record, 'sync_returned_on_server', gone)
+    if (!still.length) return this.skip()
+    const open = id != null && this.exists('voucher', id) ? [...this.server.custodies.values()].filter((c) => c.voucher_id === id && c.returned_at == null) : []
+    if (open.length && open.every((c) => still.includes(c))) {
+      const res = await this.send(record, 'POST', `/api/vouchers/${id}/return-all`, {})
+      if (!ok(res)) this.fail(record, res)
+      return
+    }
+    // More is out on the server than the phone knew of: only what the phone took back
+    for (const info of infos) {
+      const c = !ours.includes(info) && this.stillOpen(info)
+      const serial = c && this.server.equipment.get(c.equipment_id)?.serial_number
+      if (!serial) continue
+      const res = await this.send(record, 'POST', `/api/vouchers/${c.voucher_id}/return`, { code: serial }, '', { key: unitKey(record, info) })
+      if (!ok(res)) this.fail(record, res)
+    }
+  }
+
+  /** Deleted on the phone; asked about when someone changed it on the server meanwhile. */
+  async voucherDelete(record, phoneId) {
+    const id = this.serverId(phoneId)
+    if (!this.exists('voucher', id)) return this.skip()
+    const path = `/api/vouchers/${id}`
+    if (!isTempId(phoneId) && this.changedOnServer('voucher', id)) return this.ask({ kind: 'changed_deleted', type: 'voucher', paths: [path], record, label: this.voucherLabel(phoneId), show: { type: 'voucher' } })
+    const res = await this.send(record, 'DELETE', path)
+    if (!ok(res)) this.fail(record, res)
+  }
+
+  /**
+   * A correction: the server makes the draft with what it still has out. The voucher deleted on the
+   * server meanwhile: asked about (the phone's draft becomes a voucher of its own, or not).
+   */
+  async voucherReplace(record, phoneId) {
+    const draft = record.change.ids[0]
+    const id = this.serverId(phoneId)
+    if (!this.exists('voucher', id)) {
+      if (!this.final.vouchers?.has(draft)) return this.skip()
+      const key = this.voucherKey(draft)
+      this.waiting.add(key)
+      return this.ask({ kind: 'voucher_deleted', type: 'voucher', id: draft, record, state: this.voucherStates(record, draft)[1], label: this.voucherLabel(phoneId), show: { replaces: true, phoneIssued: this.final.vouchers.get(draft).status !== 'draft' } })
+    }
+    const res = await this.send(record, 'POST', `/api/vouchers/${id}/replace`, {})
+    if (!ok(res)) return this.fail(record, res)
+    this.ids.set(draft, res.json.voucher.id)
+  }
+
+  /** The phone's draft, deleted or issued on the server meanwhile: made again as a voucher of its own, or left out. */
+  async resolveVoucher(conflict, answer) {
+    const { id: phoneId, record, state } = conflict
+    const key = this.voucherKey(phoneId)
+    this.waiting.delete(key)
+    if (answer.choice !== (conflict.kind === 'voucher_deleted' ? 'restore' : 'separate')) {
+      this.dropped.add(key)
+      this.report.dropped.push({ id: record.change.id, effect: record.result.effect, reason: 'sync_dropped_by_choice' })
+      return
+    }
+    const restore = this.restoreKey('voucher', phoneId)
+    const made = await this.send(record, 'POST', '/api/vouchers', { recipient: state.recipient ?? null }, '', { key: restore })
+    if (!ok(made)) {
+      this.dropped.add(key)
+      return this.fail(record, made)
+    }
+    const id = made.json.voucher.id
+    this.ids.set(phoneId, id)
+    const put = await this.send(record, 'PUT', `/api/vouchers/${id}`, this.voucherBody(state), '', { key: `${restore}:fields` })
+    if (!ok(put)) this.fail(record, put)
+    const units = state.items.map((e) => this.serverId(e)).filter((e) => this.exists('equipment', e))
+    if (units.length) {
+      const add = await this.send(record, 'POST', `/api/vouchers/${id}/items`, { equipment_ids: units, move: true }, '', { key: `${restore}:items` })
+      if (!ok(add)) this.fail(record, add)
+    }
+  }
+
   /* --- The answers */
 
   async resolve(conflicts, answers) {
@@ -1010,6 +1439,11 @@ class Sync {
         }
       } else if (kind.endsWith('_taken')) {
         await this.resolveTaken(conflict, answer)
+      } else if (kind === 'voucher_unit_held') {
+        this.heldAnswers.set(conflict.answerKey, answer.choice === 'keep' ? 'keep' : 'move')
+        this.waiting.delete(depKey('voucher', conflict.id))
+      } else if (kind === 'voucher_deleted' || kind === 'voucher_issued_both') {
+        await this.resolveVoucher(conflict, answer)
       } else if (kind.endsWith('_deleted')) {
         await this.resolveDeleted(conflict, answer)
       }
@@ -1072,7 +1506,7 @@ class Sync {
    * since: asked about again, and made anew.
    */
   async restoredBefore(conflicts) {
-    const restorable = (c) => c.kind === `${c.type}_deleted` && c.type !== 'equipment'
+    const restorable = (c) => (c.kind === `${c.type}_deleted` && c.type !== 'equipment') || c.kind === 'voucher_issued_both'
     const keys = conflicts.filter(restorable).map((c) => this.restoreKey(c.type, c.id))
     if (!keys.length) return conflicts
     const res = await call('POST', '/api/offline/done', { token: this.token, body: { keys } })
@@ -1083,9 +1517,10 @@ class Sync {
       const key = restorable(conflict) && this.restoreKey(conflict.type, conflict.id)
       if (key && done.has(key)) {
         const before = await call('POST', '/api/offline/done', { token: this.token, headers: { 'X-Offline-Change': key } })
-        const made = before.json?.row?.id ?? before.json?.id
+        const made = before.json?.row?.id ?? before.json?.voucher?.id ?? before.json?.id
         if (ok(before) && before.replayed && this.exists(conflict.type, made)) {
-          await this.resolveDeleted(conflict, { choice: 'restore' })
+          if (conflict.type === 'voucher') await this.resolveVoucher(conflict, { choice: conflict.kind === 'voucher_deleted' ? 'restore' : 'separate' })
+          else await this.resolveDeleted(conflict, { choice: 'restore' })
           continue
         }
         this.anew.add(keyOf(conflict.type, conflict.id))
