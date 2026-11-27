@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\ApplyOfflineChange;
 use App\Http\Middleware\EnsureAdmin;
+use App\Http\Middleware\MarkDataChanged;
 use App\Http\Middleware\TrackDevice;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,6 +24,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // API only: never redirect guests to a login page, just answer 401
         $middleware->redirectGuestsTo(fn () => null);
         $middleware->appendToGroup('api', TrackDevice::class);
+        // Phones are told when the copy they downloaded is out of date
+        $middleware->appendToGroup('api', MarkDataChanged::class);
         // The Vite dev server (and a local web server) forward the real device IP
         $middleware->trustProxies(at: ['127.0.0.1', '::1']);
         // Custody form designs keep their spaces (e.g. a prefix like «المكان: »)

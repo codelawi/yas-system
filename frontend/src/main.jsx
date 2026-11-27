@@ -11,6 +11,9 @@ import '@fontsource-variable/jetbrains-mono/wght.css'
 import './index.css'
 import { LangProvider } from './i18n'
 import App from './App'
+import { followVisibleArea } from './visibleArea'
+
+followVisibleArea()
 
 // In production the app is served by Laravel under "/", assets under "/app/"
 createRoot(document.getElementById('root')).render(

@@ -1,24 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Alert, App, Button, Card, Checkbox, Empty, Layout, Popconfirm, Progress, Typography } from 'antd'
+import { Alert, App, Button, Card, Checkbox, Empty, Layout, Popconfirm, Typography } from 'antd'
 import { AppstoreOutlined, CloudDownloadOutlined, DeleteOutlined, GlobalOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { useLang } from '../i18n'
 import { useSettings } from '../settings'
 import { useAuth } from '../auth'
-import { tokenStore } from '../api'
-import { OfflineNeedsPin, clearOffline, downloadOffline, offlineSupported, readOfflineMeta } from '../offline'
+import { clearOffline, offlineSupported, readOfflineMeta, readPhotosChoice, savePhotosChoice } from '../offline'
 import { PendingChanges } from '../components/OfflineChanges'
-
-const PHOTOS_KEY = 'offline_with_photos'
-
-function readPhotosChoice() {
-  try {
-    return localStorage.getItem(PHOTOS_KEY) !== '0'
-  } catch {
-    return true
-  }
-}
+import { DownloadProgress, useOfflineDownload } from '../components/OfflineDownload'
 
 function formatSize(bytes) {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
@@ -71,11 +61,11 @@ function NeedsHttps() {
 export default function OfflinePage() {
   const { t, toggle } = useLang()
   const { settings } = useSettings()
-  const { user, requirePin } = useAuth()
+  const { user } = useAuth()
   const { message } = App.useApp()
   const [meta, setMeta] = useState(undefined)
   const [withPhotos, setWithPhotos] = useState(readPhotosChoice)
-  const [progress, setProgress] = useState(null)
+  const { progress, download: save } = useOfflineDownload()
   // Changes waiting on the phone: a new copy would lose them, they are synced first
   const [pending, setPending] = useState(0)
   const supported = offlineSupported()
@@ -88,31 +78,12 @@ export default function OfflinePage() {
 
   const choosePhotos = (value) => {
     setWithPhotos(value)
-    try {
-      localStorage.setItem(PHOTOS_KEY, value ? '1' : '0')
-    } catch {
-      /* not remembered */
-    }
+    savePhotosChoice(value)
   }
 
   const download = async () => {
-    // The copy holds vouchers and recipients
-    const who = await requirePin()
-    if (!who) return
-    setProgress({ step: 'app' })
-    try {
-      const saved = await downloadOffline({ token: tokenStore.get(), user: who, withPhotos, onProgress: setProgress })
-      setMeta(saved)
-      message.success(t('offline_saved'))
-      if (saved.photos_failed) message.warning(t('offline_photos_failed', { n: saved.photos_failed }))
-    } catch (e) {
-      if (e instanceof OfflineNeedsPin) {
-        window.dispatchEvent(new Event('auth:expired'))
-        message.error(t('offline_pin_again'))
-      } else message.error(t('offline_download_failed'))
-    } finally {
-      setProgress(null)
-    }
+    const saved = await save(withPhotos)
+    if (saved) setMeta(saved)
   }
 
   const remove = async () => {
@@ -120,8 +91,6 @@ export default function OfflinePage() {
     setMeta(null)
     message.success(t('offline_removed'))
   }
-
-  const progressText = progress && (progress.step === 'photos' ? t('offline_progress_photos', { done: progress.done, total: progress.total }) : t(`offline_progress_${progress.step}`))
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -210,12 +179,7 @@ export default function OfflinePage() {
                     {t('offline_download_pin')}
                   </Typography.Paragraph>
                 )}
-                {progress && (
-                  <div style={{ marginTop: 12 }}>
-                    {progress.step === 'photos' && progress.total > 0 && <Progress percent={Math.round((progress.done / progress.total) * 100)} />}
-                    <Typography.Text type="secondary">{progressText}</Typography.Text>
-                  </div>
-                )}
+                <DownloadProgress progress={progress} />
                 {meta && (
                   <Popconfirm title={pending > 0 ? t('offline_remove_pending', { n: pending }) : t('offline_remove_confirm')} okText={t('delete')} cancelText={t('cancel')} okButtonProps={{ danger: true }} onConfirm={remove}>
                     <Button danger type="text" icon={<DeleteOutlined />} block style={{ marginTop: 8 }} disabled={!!progress}>

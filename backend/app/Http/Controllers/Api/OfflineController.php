@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherItem;
 use App\Models\VoucherTemplate;
+use App\Support\DataRevision;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 
@@ -35,6 +36,8 @@ class OfflineController extends Controller
 
     public function snapshot(): array
     {
+        // Read first: a change made while the copy is put together makes it out of date
+        $revision = DataRevision::current();
         $equipment = Equipment::with([
             ...EquipmentController::DETAIL_RELATIONS,
             'schedules',
@@ -57,6 +60,7 @@ class OfflineController extends Controller
         return [
             'version' => 2,
             'generated_at' => now()->toIso8601String(),
+            'revision' => $revision,
             'settings' => Setting::allValues(),
             'equipment' => $equipment->map(fn (Equipment $e) => EquipmentController::present($e))->all(),
             'serials' => (object) $this->serialIndex($equipment),
@@ -159,6 +163,16 @@ class OfflineController extends Controller
             'folder_revisions' => (object) $folderRevisions,
             'documents' => (object) $documents,
         ];
+    }
+
+    /**
+     * What the system's data is at now: a phone whose copy was made with another value updates it.
+     *
+     * @return array{revision: string}
+     */
+    public function revision(): array
+    {
+        return ['revision' => DataRevision::current()];
     }
 
     /**

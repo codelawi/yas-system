@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\DataRevision;
 use App\Support\OfflinePin;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -46,6 +47,8 @@ class User extends Authenticatable
     {
         if (! OfflinePin::matches($pin, $this->offline_pin)) {
             $this->forceFill(['offline_pin' => OfflinePin::make($pin)])->saveQuietly();
+            // The phones' copies cannot unlock this person with the new PIN until they are updated
+            DataRevision::bump();
         }
     }
 }

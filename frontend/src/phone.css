@@ -2259,11 +2259,14 @@
     font-size: 16px !important;
   }
 
-  /* Dialogs come up from the bottom, as a sheet */
+  /* Dialogs come up from the bottom, as a sheet: of the part the keyboard leaves visible (visibleArea.js) */
   .ant-modal-wrap {
     display: flex;
     flex-direction: column;
     padding-top: 8vh;
+    top: var(--visible-top, 0px) !important;
+    bottom: auto !important;
+    height: var(--visible-height, 100%);
   }
 
   .ant-modal-wrap.ant-modal-centered::before {
@@ -2276,6 +2279,8 @@
     max-width: 100% !important;
     margin: auto 0 0 !important;
     padding: 0;
+    /* A centered dialog grows to fill the screen: its card would stay at the top */
+    flex: none !important;
   }
 
   .ant-modal-wrap .ant-modal-container {
