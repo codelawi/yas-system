@@ -14,8 +14,8 @@
  * Laravel serves it at /sw.js so it can answer every page.
  */
 
-const VERSION = "3d8832b97c4a"
-const ASSETS = ["/app/assets/dist-CjWoxUJ5.js","/app/assets/es-BkxMLVLq.js","/app/assets/html2canvas-Dlhqv_g4.js","/app/assets/ibm-plex-sans-arabic-arabic-400-normal-CyU-ddYS.woff2","/app/assets/ibm-plex-sans-arabic-arabic-500-normal-C4MQITzh.woff2","/app/assets/ibm-plex-sans-arabic-arabic-600-normal-0pRdybE_.woff2","/app/assets/ibm-plex-sans-arabic-arabic-700-normal-DrtBj6UE.woff2","/app/assets/index-BC636b4A.css","/app/assets/index-DKGCjj7V.js","/app/assets/index.es-C_ufJ2e3.js","/app/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2","/app/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2","/app/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2","/app/assets/inter-greek-wght-normal-CkhJZR-_.woff2","/app/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2","/app/assets/inter-latin-wght-normal-Dx4kXJAl.woff2","/app/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2","/app/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2","/app/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2","/app/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2","/app/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2","/app/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2","/app/assets/jspdf.es.min-Ckx-ZXfe.js","/app/assets/ocr.worker-CU1LH8SP.js","/app/assets/purify.es-Dqk5qvad.js","/app/assets/zxing_reader-EOacYbLr.wasm","/app/favicon.svg"]
+const VERSION = "081650de668d"
+const ASSETS = ["/app/assets/dist-CjWoxUJ5.js","/app/assets/es-BkxMLVLq.js","/app/assets/html2canvas-BXXf6LuR.js","/app/assets/ibm-plex-sans-arabic-arabic-400-normal-CyU-ddYS.woff2","/app/assets/ibm-plex-sans-arabic-arabic-500-normal-C4MQITzh.woff2","/app/assets/ibm-plex-sans-arabic-arabic-600-normal-0pRdybE_.woff2","/app/assets/ibm-plex-sans-arabic-arabic-700-normal-DrtBj6UE.woff2","/app/assets/index-BBea4Dwr.css","/app/assets/index-BqGVyWd3.js","/app/assets/index.es-FiTPEs2O.js","/app/assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2","/app/assets/inter-cyrillic-wght-normal-DqGufNeO.woff2","/app/assets/inter-greek-ext-wght-normal-DlzME5K_.woff2","/app/assets/inter-greek-wght-normal-CkhJZR-_.woff2","/app/assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2","/app/assets/inter-latin-wght-normal-Dx4kXJAl.woff2","/app/assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2","/app/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2","/app/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2","/app/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2","/app/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2","/app/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2","/app/assets/jspdf.es.min-HCnqS4VO.js","/app/assets/ocr.worker-CU1LH8SP.js","/app/assets/purify.es-Dqk5qvad.js","/app/assets/zxing_reader-EOacYbLr.wasm","/app/favicon.svg"]
 /** The text reader's files (about 30 MB): kept once used or saved for offline, not with every app update. */
 const OCR_ASSETS = ["/app/assets/ch_ppocr_mobile_v2.0_cls_infer-CZsrcDcs.onnx","/app/assets/ort-wasm-simd-threaded-qh98TCA_.wasm","/app/assets/ppocr_det-BNVJyGmD.onnx","/app/assets/rec_en_PP-OCRv3_infer-ihNOzo5x.onnx"]
 
@@ -242,10 +242,16 @@ async function change(request, path) {
   if (!(await onCopy())) {
     if (!offlineEdit) return fetch(request)
     const kept = request.clone()
+    // Saved on the server with this key (App\Http\Middleware\ApplyOfflineChange): when its answer
+    // comes too late, the phone keeps the change too, and the sync does not make it twice
+    const key = crypto.randomUUID()
+    const headers = new Headers(request.headers)
+    headers.set('X-Offline-Change', key)
+    headers.set('X-Offline-Live', '1')
     try {
-      return await fromNetwork(request, { cancel: true })
+      return await fromNetwork(new Request(request, { headers }), { cancel: true })
     } catch {
-      return keep(kept, path)
+      return keep(kept, path, key)
     }
   }
   if (!offlineEdit) {
@@ -262,8 +268,11 @@ const inTurn = (work) => {
   return turn
 }
 
-/** The change applied to the copy and saved with the others, as the server would answer it. */
-function keep(request, path) {
+/**
+ * The change applied to the copy and saved with the others, as the server would answer it (`key`:
+ * the one it was sent to the server with, when that got no answer in time).
+ */
+function keep(request, path, key = crypto.randomUUID()) {
   return inTurn(async () => {
     const current = await loadState()
     if (!current) return json(503, { message: 'offline_no_data' })
@@ -287,7 +296,7 @@ function keep(request, path) {
 
     const entry = {
       id: changes.reduce((max, c) => Math.max(max, c.id), 0) + 1,
-      key: crypto.randomUUID(),
+      key,
       at: OfflineEdit.laravelTime(Date.now()),
       user: { id: user.id, name: user.name },
       method: request.method,
@@ -295,8 +304,8 @@ function keep(request, path) {
       body,
     }
     const result = OfflineEdit.applyChange(model, entry)
-    if (result.status >= 400) {
-      // Refused, as the server would: nothing is kept
+    if (result.status >= 400 || !result.effect) {
+      // Refused as the server would, or nothing changed (a code already scanned): nothing is kept
       await dropFiles(files)
       return json(result.status, result.body)
     }
@@ -319,6 +328,14 @@ function pageAfter(copy, entry, result) {
   if (/^\/api\/boxes(\/\d+)?$/.test(path) && method !== 'DELETE') return page(`/api/boxes/${body.id}`)
   if (/^\/api\/boxes\/\d+\/equipment$/.test(path)) return { ...body, box: page(`/api/boxes/${body.box.id}`) }
   if (/^\/api\/boxes\/\d+\/equipment\//.test(path) && body?.id) return page(`/api/boxes/${body.id}`)
+  if (/^\/api\/scan-documents\/\d+$/.test(path) && method === 'PUT') return page(path)
+  // A row of a scan document, with its mark
+  const row = /^\/api\/scan-documents\/(\d+)\/(scan|rows)/.exec(path) && (body?.row ?? body)
+  if (row?.id && method !== 'DELETE') {
+    const shown = page(`/api/scan-documents/${row.scan_document_id}`)?.rows?.find((r) => r.id === row.id)
+    const marked = shown?.offline ? { ...row, offline: shown.offline } : row
+    return body?.row ? { ...body, row: marked } : marked
+  }
   return body
 }
 
@@ -1339,6 +1356,7 @@ function toModel(data) {
     boxItems,
     maintenance,
     issues,
+    ...scanRecords(data.scan),
     nextId: TEMP_ID,
   }
 }
@@ -1478,7 +1496,11 @@ function notesFor(notes, type, id) {
 function fromModel(m, notes = null) {
   const byId = (a, b) => a.id - b.id
   const equipment = [...m.equipment.values()].sort(byId)
-  m.index = { children: new Map(), boxes: new Map() }
+  m.index = { children: new Map(), boxes: new Map(), rows: new Map() }
+  for (const r of [...m.scanRows.values()].sort(byPosition)) {
+    if (!m.index.rows.has(r.scan_document_id)) m.index.rows.set(r.scan_document_id, [])
+    m.index.rows.get(r.scan_document_id).push(r)
+  }
   for (const e of equipment) {
     if (e.parent_id == null) continue
     if (!m.index.children.has(e.parent_id)) m.index.children.set(e.parent_id, [])
@@ -1516,6 +1538,7 @@ function pages(m, notes, equipment, byId) {
     groups: [...m.groups.values()].sort(byId).map((g) => ({ ...g, ...markOf(notes, 'group', g.id) })),
   }
   if (notes) data.stats = dashboard(m, notes.now)
+  if (m.data.scan) data.scan = scanPages(m, notes)
   return data
 }
 
@@ -2175,6 +2198,412 @@ function detachManyFromBox(m, input, ctx, id) {
   return takeOut(m, box, [...m.equipment.values()].sort((a, b) => a.id - b.id).filter((e) => ids.has(e.id)), ctx)
 }
 
+/* Scan documents (ScanFolderController, ScanDocumentController) */
+
+/** ScanDocument::BUILT_IN_COLUMNS, DUPLICATE_SCOPES, defaultColumns */
+const SCAN_BUILT_IN = ['no', 'code', 'scanned_at', 'notes']
+const SCAN_SCOPES = ['document', 'folder']
+const SCAN_DEFAULT_COLUMNS = [
+  { key: 'no', label: 'ت' },
+  { key: 'code', label: 'النص الممسوح' },
+  { key: 'scanned_at', label: 'وقت المسح' },
+  { key: 'notes', label: 'ملاحظات' },
+]
+/** The photo of a line read by the camera's text mode ('photo' => 'max:4096', 'mimes:jpg,jpeg,png,webp') */
+const SCAN_PHOTO_TYPES = /^image\/(jpe?g|png|webp)$/
+const SCAN_PHOTO_NAMES = /\.(jpe?g|png|webp)$/i
+const MAX_SCAN_PHOTO = 4096 * 1024
+
+/** A row of the copy (ScanDocumentController::full) as the records keep it. */
+function scanRowFrom(r) {
+  return {
+    id: r.id,
+    scan_document_id: r.scan_document_id,
+    position: r.position,
+    code: r.code ?? null,
+    cells: Array.isArray(r.cells) || !r.cells ? [] : { ...r.cells },
+    scanned_at: r.scanned_at ?? null,
+    scanned_by: typeof r.scanned_by === 'object' ? (r.scanned_by?.id ?? null) : (r.scanned_by ?? null),
+    scanner: typeof r.scanned_by === 'object' ? (r.scanned_by ?? null) : null,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    photo_url: r.photo_url ?? null,
+  }
+}
+
+function scanRecords(scan) {
+  const folders = new Map()
+  const documents = new Map()
+  const rows = new Map()
+  for (const { folder: f } of Object.values(scan?.folder_pages || {})) {
+    folders.set(f.id, { id: f.id, name: f.name, revision: f.revision, creator: f.created_by ?? null, updated_by: f.updated_by, created_at: f.created_at, updated_at: f.updated_at })
+  }
+  for (const { document: d, rows: list } of Object.values(scan?.documents || {})) {
+    documents.set(d.id, {
+      id: d.id,
+      scan_folder_id: d.scan_folder_id,
+      title: d.title,
+      columns: (d.columns || []).map((c) => ({ ...c })),
+      duplicate_scope: d.duplicate_scope,
+      revision: d.revision,
+      creator: d.created_by ?? null,
+      updated_by: d.updated_by,
+      created_at: d.created_at,
+      updated_at: d.updated_at,
+    })
+    for (const r of list) rows.set(r.id, scanRowFrom(r))
+  }
+  return { scanFolders: folders, scanDocuments: documents, scanRows: rows }
+}
+
+const byPosition = (a, b) => a.position - b.position || a.id - b.id
+/** A document's rows, in the table's order (ScanDocument::rows). */
+const rowsOf = (m, d) => (m.index?.rows ? m.index.rows.get(d.id) || [] : [...m.scanRows.values()].filter((r) => r.scan_document_id === d.id).sort(byPosition))
+const documentsOf = (m, f) => [...m.scanDocuments.values()].filter((d) => d.scan_folder_id === f.id)
+const who = (user) => (user ? { id: user.id, name: user.name } : null)
+/** A database time (withMax): Y-m-d H:i:s */
+const dbTime = (time) => time.slice(0, 19).replace('T', ' ')
+
+const presentScanFolder = (f) => ({ id: f.id, name: f.name, revision: f.revision, created_by: f.creator, updated_by: f.updated_by, created_at: f.created_at, updated_at: f.updated_at })
+const presentScanDocument = (d) => ({
+  id: d.id,
+  scan_folder_id: d.scan_folder_id,
+  title: d.title,
+  columns: d.columns.map((c) => ({ ...c })),
+  duplicate_scope: d.duplicate_scope,
+  revision: d.revision,
+  created_by: d.creator,
+  updated_by: d.updated_by,
+  created_at: d.created_at,
+  updated_at: d.updated_at,
+})
+/** A row as a page lists it (scannedBy loaded), or as the model itself answers (scanned_by an id). */
+function presentScanRow(r, notes, loaded = true) {
+  return {
+    id: r.id,
+    scan_document_id: r.scan_document_id,
+    position: r.position,
+    code: r.code,
+    cells: Array.isArray(r.cells) ? [] : { ...r.cells },
+    scanned_at: r.scanned_at,
+    scanned_by: loaded ? r.scanner : r.scanned_by,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    photo_url: r.photo_url,
+    ...markOf(notes, 'scan_row', r.id),
+  }
+}
+
+/** ScanDocumentController::full */
+function scanDocumentPage(m, d, notes) {
+  const folder = m.scanFolders.get(d.scan_folder_id)
+  return {
+    document: { ...presentScanDocument(d), folder: folder ? { id: folder.id, name: folder.name } : null, ...notesFor(notes, 'scan_document', d.id) },
+    rows: rowsOf(m, d).map((r) => presentScanRow(r, notes)),
+  }
+}
+
+/** A folder is marked when a document in it is. */
+function folderMark(notes, m, f) {
+  const own = markOf(notes, 'scan_folder', f.id)
+  if (own.offline || !notes) return own
+  return documentsOf(m, f).some((d) => notes.marks.has(`scan_document:${d.id}`)) ? { offline: 'changed' } : {}
+}
+
+const revisionOf = (list) => `${list.length}:${list.reduce((sum, x) => sum + x.revision, 0)}:${list.reduce((max, x) => Math.max(max, x.id), 0)}`
+
+/** The scan documents part of the copy (OfflineController::scanDocuments). */
+function scanPages(m, notes) {
+  const folders = [...m.scanFolders.values()].sort((a, b) => a.id - b.id)
+  const documents = [...m.scanDocuments.values()].sort((a, b) => a.id - b.id)
+  const folderPages = {}
+  const folderRevisions = {}
+  const listed = []
+  for (const f of folders) {
+    const docs = documentsOf(m, f)
+    const newest = [...docs].sort((a, b) => (b.updated_at > a.updated_at) - (b.updated_at < a.updated_at) || b.id - a.id)
+    folderPages[f.id] = {
+      folder: { ...presentScanFolder(f), ...folderMark(notes, m, f) },
+      documents: newest.map((d) => ({ ...presentScanDocument(d), rows_count: rowsOf(m, d).length, ...markOf(notes, 'scan_document', d.id) })),
+    }
+    folderRevisions[f.id] = `${f.revision}/${revisionOf(docs)}`
+    const changed = docs.reduce((max, d) => (max == null || d.updated_at > max ? d.updated_at : max), null)
+    listed.push({
+      ...presentScanFolder(f),
+      documents_count: docs.length,
+      rows_count: docs.reduce((sum, d) => sum + rowsOf(m, d).length, 0),
+      documents_max_updated_at: changed && dbTime(changed),
+      last_change_at: laravelTime(changed && changed > f.updated_at ? changed : f.updated_at),
+      ...folderMark(notes, m, f),
+    })
+  }
+  const pages = {}
+  for (const d of documents) pages[d.id] = scanDocumentPage(m, d, notes)
+  return {
+    // The most recently used first (sortByDesc keeps the database's order between equals)
+    folders: listed.sort((a, b) => (b.last_change_at > a.last_change_at) - (b.last_change_at < a.last_change_at)),
+    revision: `${revisionOf(folders)}/${revisionOf(documents)}`,
+    folder_pages: folderPages,
+    folder_revisions: folderRevisions,
+    documents: pages,
+  }
+}
+
+function scanFolderOr404(m, id) {
+  return m.scanFolders.get(Number(id)) ?? notFound()
+}
+
+function scanDocumentOr404(m, id) {
+  return m.scanDocuments.get(Number(id)) ?? notFound()
+}
+
+/** ScanDocumentController::validColumns */
+function validColumns(columns) {
+  const clean = new Map()
+  for (const column of columns) {
+    const isMap = !!column && typeof column === 'object' && !Array.isArray(column)
+    const key = isMap ? String(column.key ?? '') : ''
+    const label = isMap ? phpTrim(String(column.label ?? '')) : ''
+    const known = SCAN_BUILT_IN.includes(key) || /^c_[a-z0-9]{1,20}$/.test(key)
+    if (!known || label === '' || length(label) > 100 || clean.has(key)) invalid('columns', 'scan_doc_bad_columns')
+    clean.set(key, { key, label })
+  }
+  if (!clean.has('code') || clean.size > 30) invalid('columns', 'scan_doc_bad_columns')
+  return [...clean.values()]
+}
+
+/** ScanDocument::cellKeys: the columns typed by hand */
+const cellKeys = (d) => d.columns.map((c) => c.key).filter((key) => !['no', 'code', 'scanned_at'].includes(key))
+
+/** ScanDocument::duplicateCandidates: the rows a scanned code must not repeat in. */
+function scanCandidates(m, d) {
+  if (d.duplicate_scope === 'folder' && d.scan_folder_id) {
+    const inFolder = new Set(documentsOf(m, m.scanFolders.get(d.scan_folder_id) || { id: d.scan_folder_id }).map((x) => x.id))
+    return [...m.scanRows.values()].filter((r) => inFolder.has(r.scan_document_id)).sort((a, b) => a.id - b.id)
+  }
+  return rowsOf(m, d)
+}
+
+const nextPosition = (m, d) => rowsOf(m, d).reduce((max, r) => Math.max(max, r.position), 0) + 1
+/** The row's number (ت) as the table shows it. */
+const rowNumber = (m, d, row) => rowsOf(m, d).filter((r) => r.position < row.position || (r.position === row.position && r.id <= row.id)).length
+
+/** The address a line photo taken on the phone is known by (the pages do not show it). */
+const localScanPhotoUrl = (documentId, rowId, file) => `/api/scan-documents/${documentId}/rows/${rowId}/photo?v=${file.slice(0, 8)}`
+
+function scanFolderName(input) {
+  check('name', input.name, { required: true, max: 191 })
+  return phpTrim(input.name)
+}
+
+/** What a folder, document and row hold that their pages edit: compared before and after (sync). */
+const scanFolderState = (f) => ({ name: f.name })
+const scanDocumentState = (d) => ({ title: d.title, duplicate_scope: d.duplicate_scope, scan_folder_id: d.scan_folder_id, fields: d.columns.map((c) => ({ key: c.key, value: c.label })) })
+/** A row's cells as fields (an empty cell is no field). */
+const scanRowState = (r) => ({
+  code: r.code,
+  scan_document_id: r.scan_document_id,
+  fields: Object.entries(Array.isArray(r.cells) ? {} : r.cells)
+    .filter(([, value]) => value != null && value !== '')
+    .map(([key, value]) => ({ key, value }))
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+})
+
+function storeScanFolder(m, input, ctx) {
+  const name = scanFolderName(input)
+  const f = { id: ctx.newId(), name, revision: 0, creator: who(ctx.user), updated_by: ctx.user?.id ?? null, created_at: ctx.at, updated_at: ctx.at }
+  m.scanFolders.set(f.id, f)
+  ctx.mark('scan_folder', f.id, 'new')
+  // The server's answer has no revision: the database fills it in
+  const { revision, ...shown } = presentScanFolder(f)
+  void revision
+  return { status: 201, body: { ...shown, documents_count: 0, rows_count: 0 }, effect: { kind: 'scan_folder_created', label: name } }
+}
+
+function updateScanFolder(m, input, ctx, id) {
+  const f = scanFolderOr404(m, id)
+  const name = scanFolderName(input)
+  const before = f.name
+  Object.assign(f, { name, updated_by: ctx.user?.id ?? null, revision: f.revision + 1, updated_at: ctx.at })
+  ctx.mark('scan_folder', f.id)
+  return { body: presentScanFolder(f), effect: { kind: 'scan_folder_updated', label: name, from: before !== name ? before : undefined } }
+}
+
+function deleteScanFolder(m, input, ctx, id) {
+  const f = scanFolderOr404(m, id)
+  const docs = documentsOf(m, f)
+  for (const d of docs) {
+    for (const r of rowsOf(m, d)) m.scanRows.delete(r.id)
+    m.scanDocuments.delete(d.id)
+  }
+  m.scanFolders.delete(f.id)
+  ctx.mark('scan_folder', f.id)
+  return { status: 204, effect: { kind: 'scan_folder_deleted', label: f.name, n: docs.length } }
+}
+
+function storeScanDocument(m, input, ctx) {
+  check('scan_folder_id', input.scan_folder_id, { required: true, integer: true })
+  const folder = m.scanFolders.get(Number(input.scan_folder_id)) ?? invalid('scan_folder_id')
+  check('title', input.title, { required: true, max: 191 })
+  if (input.columns != null && !Array.isArray(input.columns)) invalid('columns')
+  if ('duplicate_scope' in input && !SCAN_SCOPES.includes(input.duplicate_scope)) invalid('duplicate_scope')
+  const d = {
+    id: ctx.newId(),
+    scan_folder_id: folder.id,
+    title: input.title,
+    columns: input.columns != null ? validColumns(input.columns) : SCAN_DEFAULT_COLUMNS.map((c) => ({ ...c })),
+    duplicate_scope: input.duplicate_scope ?? 'document',
+    revision: 0,
+    creator: who(ctx.user),
+    updated_by: ctx.user?.id ?? null,
+    created_at: ctx.at,
+    updated_at: ctx.at,
+  }
+  m.scanDocuments.set(d.id, d)
+  ctx.mark('scan_document', d.id, 'new')
+  const { revision, ...shown } = presentScanDocument(d)
+  void revision
+  return { status: 201, body: { ...shown, rows_count: 0 }, effect: { kind: 'scan_document_created', label: d.title, folder: folder.name } }
+}
+
+function updateScanDocument(m, input, ctx, id) {
+  const d = scanDocumentOr404(m, id)
+  if ('title' in input) check('title', input.title, { required: true, max: 191 })
+  if ('columns' in input && !Array.isArray(input.columns)) invalid('columns')
+  if ('duplicate_scope' in input && !SCAN_SCOPES.includes(input.duplicate_scope)) invalid('duplicate_scope')
+  const columns = 'columns' in input ? validColumns(input.columns) : d.columns
+  const before = { title: d.title, columns: JSON.stringify(d.columns), scope: d.duplicate_scope }
+  if ('title' in input) d.title = input.title
+  d.columns = columns
+  if ('duplicate_scope' in input) d.duplicate_scope = input.duplicate_scope
+  Object.assign(d, { updated_by: ctx.user?.id ?? null, revision: d.revision + 1, updated_at: ctx.at })
+  ctx.mark('scan_document', d.id)
+  const kind =
+    before.title !== d.title ? 'scan_document_renamed' : before.columns !== JSON.stringify(d.columns) ? 'scan_columns_changed' : before.scope !== d.duplicate_scope ? 'scan_scope_changed' : 'scan_document_updated'
+  return { body: scanDocumentPage(m, d), effect: { kind, label: d.title, from: before.title, scope: d.duplicate_scope } }
+}
+
+function deleteScanDocument(m, input, ctx, id) {
+  const d = scanDocumentOr404(m, id)
+  const rows = rowsOf(m, d)
+  for (const r of rows) m.scanRows.delete(r.id)
+  m.scanDocuments.delete(d.id)
+  ctx.mark('scan_document', d.id)
+  if (m.scanFolders.has(d.scan_folder_id)) ctx.mark('scan_folder', d.scan_folder_id)
+  return { status: 204, effect: { kind: 'scan_document_deleted', label: d.title, n: rows.length } }
+}
+
+function scanPhoto(photo) {
+  if (!photo?.file) invalid('photo')
+  if (photo.size > MAX_SCAN_PHOTO || !(SCAN_PHOTO_TYPES.test(photo.type || '') || SCAN_PHOTO_NAMES.test(photo.name || ''))) invalid('photo')
+}
+
+/** The answer's row: the model itself, without its scannedBy (ScanDocumentController::scan). */
+const createdRow = (r) => ({
+  position: r.position,
+  code: r.code,
+  cells: [],
+  scanned_at: r.scanned_at,
+  scanned_by: r.scanned_by,
+  scan_document_id: r.scan_document_id,
+  updated_at: r.updated_at,
+  created_at: r.created_at,
+  id: r.id,
+  photo_url: r.photo_url,
+})
+
+function scanCode(m, input, ctx, id) {
+  const d = scanDocumentOr404(m, id)
+  check('code', input.code, { required: true, max: 500 })
+  if (input.photo != null) scanPhoto(input.photo)
+  const code = phpTrim(input.code)
+  if (code === '') invalid('code', 'scan_empty')
+  const existing = scanCandidates(m, d).find((r) => same(r.code, code))
+  if (existing) {
+    // Kept on the phone it was new: made again after an undo, it no longer is
+    if (ctx.replay) throw new Refusal(409, { message: 'scan_duplicate' })
+    const where = m.scanDocuments.get(existing.scan_document_id)
+    const row = presentScanRow(existing, null, false)
+    // In another document of the folder: the server loaded it on the row
+    if (where.id !== d.id) row.document = { ...presentScanDocument(where), created_by: where.creator?.id ?? null }
+    return { body: { status: 'duplicate', row, row_number: rowNumber(m, where, existing), document: { id: where.id, title: where.title } }, effect: null }
+  }
+  const rowId = ctx.newId()
+  const row = {
+    id: rowId,
+    scan_document_id: d.id,
+    position: nextPosition(m, d),
+    code,
+    cells: [],
+    scanned_at: ctx.at,
+    scanned_by: ctx.user?.id ?? null,
+    scanner: who(ctx.user),
+    created_at: ctx.at,
+    updated_at: ctx.at,
+    photo_url: input.photo ? localScanPhotoUrl(d.id, rowId, input.photo.file) : null,
+  }
+  m.scanRows.set(row.id, row)
+  Object.assign(d, { revision: d.revision + 1, updated_at: ctx.at })
+  ctx.mark('scan_row', row.id, 'new')
+  ctx.mark('scan_document', d.id)
+  return { body: { status: 'added', row: createdRow(row), row_number: rowNumber(m, d, row), document: { id: d.id, title: d.title } }, effect: { kind: 'scan_code_added', label: d.title, code } }
+}
+
+function addScanRow(m, input, ctx, id) {
+  const d = scanDocumentOr404(m, id)
+  const row = { id: ctx.newId(), scan_document_id: d.id, position: nextPosition(m, d), code: null, cells: [], scanned_at: null, scanned_by: null, scanner: null, created_at: ctx.at, updated_at: ctx.at, photo_url: null }
+  m.scanRows.set(row.id, row)
+  Object.assign(d, { revision: d.revision + 1, updated_at: ctx.at })
+  ctx.mark('scan_row', row.id, 'new')
+  ctx.mark('scan_document', d.id)
+  const { position, cells, scan_document_id, updated_at, created_at, id: rowId, photo_url } = row
+  return { status: 201, body: { position, cells, scan_document_id, updated_at, created_at, id: rowId, photo_url }, effect: { kind: 'scan_row_added', label: d.title } }
+}
+
+function scanRowOr404(m, d, rowId) {
+  const row = m.scanRows.get(Number(rowId))
+  if (!row || row.scan_document_id !== d.id) notFound()
+  return row
+}
+
+function updateScanRow(m, input, ctx, id, rowId) {
+  const d = scanDocumentOr404(m, id)
+  const row = scanRowOr404(m, d, rowId)
+  if ('code' in input) check('code', input.code, { max: 500 })
+  if ('cells' in input) {
+    if (!input.cells || typeof input.cells !== 'object' || input.cells.file) invalid('cells')
+    for (const [key, value] of Object.entries(input.cells)) check(`cells.${key}`, value, { max: 2000 })
+  }
+  const before = JSON.stringify([row.code, row.cells])
+  const label = row.code
+  if ('code' in input) {
+    const code = phpTrim(String(input.code ?? '')) || null
+    if (code !== null && scanCandidates(m, d).some((r) => r.id !== row.id && same(r.code, code))) invalid('code', d.duplicate_scope === 'folder' ? 'scan_duplicate_folder' : 'scan_duplicate')
+    row.code = code
+  }
+  if ('cells' in input && !Array.isArray(input.cells)) {
+    const allowed = cellKeys(d)
+    const cells = Array.isArray(row.cells) ? {} : { ...row.cells }
+    for (const [key, value] of Object.entries(input.cells)) if (allowed.includes(key)) cells[key] = value
+    row.cells = Object.keys(cells).length ? cells : []
+  }
+  if (JSON.stringify([row.code, row.cells]) !== before) row.updated_at = ctx.at
+  Object.assign(d, { revision: d.revision + 1, updated_at: ctx.at })
+  ctx.mark('scan_row', row.id)
+  ctx.mark('scan_document', d.id)
+  return { body: presentScanRow(row, null, false), effect: { kind: 'scan_row_updated', label: d.title, code: row.code ?? label } }
+}
+
+function deleteScanRow(m, input, ctx, id, rowId) {
+  const d = scanDocumentOr404(m, id)
+  const row = scanRowOr404(m, d, rowId)
+  m.scanRows.delete(row.id)
+  Object.assign(d, { revision: d.revision + 1, updated_at: ctx.at })
+  ctx.mark('scan_row', row.id)
+  ctx.mark('scan_document', d.id)
+  return { status: 204, effect: { kind: 'scan_row_deleted', label: d.title, code: row.code } }
+}
+
 /** The changes a phone can make without a connection; anything else waits for the server. */
 const CHANGES = [
   ['POST', /^\/api\/equipment$/, storeEquipment],
@@ -2201,6 +2630,16 @@ const CHANGES = [
   ['POST', /^\/api\/boxes\/(\d+)\/equipment$/, attachToBox],
   ['DELETE', /^\/api\/boxes\/(\d+)\/equipment\/(\d+)$/, detachFromBox],
   ['POST', /^\/api\/boxes\/(\d+)\/equipment\/remove$/, detachManyFromBox],
+  ['POST', /^\/api\/scan-folders$/, storeScanFolder],
+  ['PUT', /^\/api\/scan-folders\/(\d+)$/, updateScanFolder],
+  ['DELETE', /^\/api\/scan-folders\/(\d+)$/, deleteScanFolder],
+  ['POST', /^\/api\/scan-documents$/, storeScanDocument],
+  ['PUT', /^\/api\/scan-documents\/(\d+)$/, updateScanDocument],
+  ['DELETE', /^\/api\/scan-documents\/(\d+)$/, deleteScanDocument],
+  ['POST', /^\/api\/scan-documents\/(\d+)\/scan$/, scanCode],
+  ['POST', /^\/api\/scan-documents\/(\d+)\/rows$/, addScanRow],
+  ['PUT', /^\/api\/scan-documents\/(\d+)\/rows\/(\d+)$/, updateScanRow],
+  ['DELETE', /^\/api\/scan-documents\/(\d+)\/rows\/(\d+)$/, deleteScanRow],
 ]
 
 /** Whether the phone can make this change without the server. */
@@ -2221,6 +2660,7 @@ function applyChange(m, change, { replay = false } = {}) {
   const ctx = {
     at: change.at,
     user: change.user,
+    replay,
     newId: () => {
       const id = replay && given.length ? given.shift() : m.nextId
       m.nextId = Math.max(m.nextId, id + 1)
@@ -2278,5 +2718,5 @@ function undoPlan(saved, changes, id) {
   return [id, ...rest.filter((c, i) => results[i].status >= 400).map((c) => c.id)]
 }
 
-return { TEMP_ID, isTempId, normalizeName, groupNameKey, fieldDiff, laravelTime, toModel, fromModel, equipmentLabel, equipmentState, LARGE_DELETE, deleteCount, localPhotoUrl, localIssuePhotoUrl, groupState, boxState, canChangeOffline, applyChange, notesFrom, applyAll, undoPlan }
+return { TEMP_ID, isTempId, normalizeName, groupNameKey, fieldDiff, laravelTime, toModel, fromModel, equipmentLabel, equipmentState, LARGE_DELETE, deleteCount, localPhotoUrl, localIssuePhotoUrl, groupState, boxState, scanRowFrom, localScanPhotoUrl, scanFolderState, scanDocumentState, scanRowState, canChangeOffline, applyChange, notesFrom, applyAll, undoPlan }
 })()

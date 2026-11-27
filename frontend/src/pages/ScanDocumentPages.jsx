@@ -25,6 +25,7 @@ import { cellText, downloadScanDocDocx } from '../scanDocExport'
 import { usePhone } from '../nav'
 import { Fab, PhoneActions, PhoneHeader, PhoneList, PhoneRow, PhoneSkeleton } from '../components/PhoneUI'
 import useRevisionPoll from '../revisionPoll'
+import { OfflineMark, UnsyncedCard } from '../components/OfflineChanges'
 
 /** How long a row added from another device stays highlighted (ms). */
 const FRESH_MS = 4000
@@ -138,7 +139,11 @@ export function ScanFoldersPage() {
                 to={folderPath(f.id)}
                 icon={<FolderOutlined />}
                 tone="amber"
-                title={f.name}
+                title={
+                  <>
+                    {f.name} <OfflineMark mark={f.offline} />
+                  </>
+                }
                 subtitle={
                   <>
                     <span>{t('docs_n', { n: f.documents_count })}</span>
@@ -186,7 +191,7 @@ export function ScanFoldersPage() {
             dataIndex: 'name',
             render: (v, r) => (
               <Link to={folderPath(r.id)}>
-                <FolderOutlined /> {v}
+                <FolderOutlined /> {v} <OfflineMark mark={r.offline} />
               </Link>
             ),
           },
@@ -326,7 +331,11 @@ export function ScanFolderPage() {
                 key={d.id}
                 to={`/scan-documents/${d.id}`}
                 icon={<FileTextOutlined />}
-                title={d.title}
+                title={
+                  <>
+                    {d.title} <OfflineMark mark={d.offline} />
+                  </>
+                }
                 subtitle={
                   <>
                     <span>{t('rows_n', { n: d.rows_count })}</span>
@@ -382,7 +391,7 @@ export function ScanFolderPage() {
             dataIndex: 'title',
             render: (v, r) => (
               <Link to={`/scan-documents/${r.id}`}>
-                <FileTextOutlined /> {v}
+                <FileTextOutlined /> {v} <OfflineMark mark={r.offline} />
               </Link>
             ),
           },
@@ -743,6 +752,8 @@ export function ScanDocumentPage() {
         </>
       )}
 
+      <UnsyncedCard changes={doc.offline_changes} />
+
       <div className="scan-doc-options">
         <Typography.Text strong>{t('scan_dup_scope')}:</Typography.Text>
         <DuplicateScopeChoice value={doc.duplicate_scope} onChange={saveScope} folderName={doc.folder?.name} />
@@ -751,7 +762,7 @@ export function ScanDocumentPage() {
       <Table
         className="scan-doc-table"
         rowKey="id"
-        rowClassName={(r) => (fresh.includes(r.id) ? 'scan-doc-row-new' : '')}
+        rowClassName={(r) => [fresh.includes(r.id) && 'scan-doc-row-new', r.offline && `scan-doc-row-offline scan-doc-row-offline-${r.offline}`].filter(Boolean).join(' ')}
         size="small"
         bordered
         dataSource={rows}
