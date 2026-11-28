@@ -1994,6 +1994,16 @@ h5,
   margin-top: 6px;
 }
 
+/* Adding the system's icon to the phone's home screen (components/HomeIcon.jsx) */
+.home-icon-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.offline-steps.home-icon-steps li + li {
+  margin-top: 10px;
+}
+
 /* Changes made on the phone, not synced yet (components/OfflineChanges.jsx) */
 .offline-mark {
   margin-inline-start: 6px;

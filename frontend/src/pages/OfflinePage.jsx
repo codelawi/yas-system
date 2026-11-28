@@ -9,6 +9,8 @@ import { useAuth } from '../auth'
 import { clearOffline, offlineSupported, readOfflineMeta, readPhotosChoice, savePhotosChoice } from '../offline'
 import { PendingChanges } from '../components/OfflineChanges'
 import { DownloadProgress, useOfflineDownload } from '../components/OfflineDownload'
+import { HomeIconCard, HomeIconDialog } from '../components/HomeIcon'
+import { isIphone, useOfferHomeIcon } from '../homeIcon'
 
 function formatSize(bytes) {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
@@ -68,6 +70,11 @@ export default function OfflinePage() {
   const { progress, download: save } = useOfflineDownload()
   // Changes waiting on the phone: a new copy would lose them, they are synced first
   const [pending, setPending] = useState(0)
+  // The home screen icon: offered once the data is saved. On the iPhone the icon keeps its own
+  // data, apart from Safari's, so it is offered there before the download.
+  const offerIcon = useOfferHomeIcon()
+  const [iconDialog, setIconDialog] = useState(false)
+  const iphone = isIphone()
   const supported = offlineSupported()
   const labelsOrigin = originOf(settings.base_url)
   const wrongAddress = labelsOrigin && labelsOrigin !== window.location.origin
@@ -83,7 +90,9 @@ export default function OfflinePage() {
 
   const download = async () => {
     const saved = await save(withPhotos)
-    if (saved) setMeta(saved)
+    if (!saved) return
+    setMeta(saved)
+    if (offerIcon) setIconDialog(true)
   }
 
   const remove = async () => {
@@ -127,6 +136,8 @@ export default function OfflinePage() {
                   }
                 />
               )}
+
+              {iphone && <HomeIconCard style={{ marginBottom: 16 }} />}
 
               <PendingChanges onCount={setPending} />
 
@@ -189,6 +200,9 @@ export default function OfflinePage() {
                 )}
               </Card>
 
+              {!iphone && <HomeIconCard style={{ marginTop: 16 }} />}
+              <HomeIconDialog open={iconDialog} onClose={() => setIconDialog(false)} />
+
               <Card title={t('offline_tips_title')} style={{ marginTop: 16 }}>
                 <ul className="offline-tips">
                   <li>{t('offline_tip_test')}</li>
@@ -196,6 +210,7 @@ export default function OfflinePage() {
                   <li>{t('offline_tip_view_only')}</li>
                   <li>{t('offline_tip_pin')}</li>
                   <li>{t('offline_tip_iphone')}</li>
+                  {iphone && <li>{t('offline_tip_iphone_scan')}</li>}
                 </ul>
               </Card>
             </>

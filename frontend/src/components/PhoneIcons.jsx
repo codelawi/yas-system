@@ -35,6 +35,16 @@ export function AppLogo({ size = 30 }) {
   )
 }
 
+/** Safari's share button on the iPhone (a box with an arrow up), for the steps that add the home screen icon. */
+export function ShareIcon() {
+  return (
+    <svg {...svg} width="1.2em" height="1.2em" style={{ verticalAlign: '-0.25em' }}>
+      <path d="M12 3.5v11M8.2 7.2 12 3.5l3.8 3.7" {...line} />
+      <path d="M8.8 10.5H7a1.8 1.8 0 0 0-1.8 1.8v7A1.8 1.8 0 0 0 7 21h10a1.8 1.8 0 0 0 1.8-1.8v-7A1.8 1.8 0 0 0 17 10.5h-1.8" {...line} />
+    </svg>
+  )
+}
+
 export function EquipmentIcon({ active }) {
   const squares = [
     [3.25, 3.25],

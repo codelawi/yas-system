@@ -12,8 +12,11 @@ import './index.css'
 import { LangProvider } from './i18n'
 import App from './App'
 import { followVisibleArea } from './visibleArea'
+import { watchHomeIcon } from './homeIcon'
 
 followVisibleArea()
+// Chrome offers the home screen icon once, as the page opens
+watchHomeIcon()
 
 // In production the app is served by Laravel under "/", assets under "/app/"
 createRoot(document.getElementById('root')).render(
